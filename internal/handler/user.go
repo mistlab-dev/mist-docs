@@ -75,7 +75,7 @@ func Me(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"id":            user.ID,
 		"username":      user.Username,
 		"name":          user.Name,
@@ -84,7 +84,7 @@ func Me(c *gin.Context) {
 		"role":          user.Role,
 		"department_id": user.DepartmentID,
 		"status":        user.Status,
-	})
+	}})
 }
 
 type ChangePasswordReq struct {

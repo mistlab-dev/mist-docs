@@ -14,6 +14,12 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || '')
   const user = ref<User | null>(null)
 
+  // 从 localStorage 恢复用户信息
+  const savedUser = localStorage.getItem('user')
+  if (savedUser && !user.value) {
+    try { user.value = JSON.parse(savedUser) } catch { /* ignore */ }
+  }
+
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.role === 'super_admin' || user.value?.role === 'dept_admin')
 
@@ -22,21 +28,20 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = data.token
     user.value = data.user
     localStorage.setItem('token', data.token)
+    localStorage.setItem('user', JSON.stringify(data.user))
   }
 
   function logout() {
     token.value = ''
     user.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('user')
   }
 
   async function fetchMe() {
-    try {
-      const { data } = await http.get('/auth/me')
-      user.value = data.data
-    } catch {
-      logout()
-    }
+    const { data } = await http.get('/auth/me')
+    user.value = data.data
+    localStorage.setItem('user', JSON.stringify(data.data))
   }
 
   return { token, user, isLoggedIn, isAdmin, login, logout, fetchMe }

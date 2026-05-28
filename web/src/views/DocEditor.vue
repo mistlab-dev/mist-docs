@@ -29,14 +29,14 @@
       </div>
     </div>
 
-    <!-- 在线用户光标 -->
+    <!-- 在线用户 -->
     <div v-if="cursors.length" class="cursors-bar">
       <span v-for="c in cursors" :key="c.id" class="cursor-badge" :style="{ background: c.color }">
         {{ c.name }}
       </span>
     </div>
 
-    <!-- TipTap 工具栏 -->
+    <!-- TipTap 工具栏（仅文档） -->
     <div v-if="editor" class="toolbar">
       <el-button-group>
         <el-button size="small" @click="editor.chain().focus().toggleBold().run()" :type="editor.isActive('bold') ? 'primary' : ''">
@@ -53,31 +53,31 @@
         <el-button size="small" @click="editor.chain().focus().toggleHeading({ level: 1 }).run()" :type="editor.isActive('heading', { level: 1 }) ? 'primary' : ''">H1</el-button>
         <el-button size="small" @click="editor.chain().focus().toggleHeading({ level: 2 }).run()" :type="editor.isActive('heading', { level: 2 }) ? 'primary' : ''">H2</el-button>
         <el-button size="small" @click="editor.chain().focus().toggleBulletList().run()" :type="editor.isActive('bulletList') ? 'primary' : ''">• 列表</el-button>
+        <el-button size="small" @click="editor.chain().focus().toggleOrderedList().run()" :type="editor.isActive('orderedList') ? 'primary' : ''">1. 有序</el-button>
+        <el-button size="small" @click="editor.chain().focus().toggleCodeBlock().run()" :type="editor.isActive('codeBlock') ? 'primary' : ''">代码</el-button>
+        <el-button size="small" @click="editor.chain().focus().toggleBlockquote().run()" :type="editor.isActive('blockquote') ? 'primary' : ''">引用</el-button>
       </el-button-group>
       <el-button-group style="margin-left:8px">
+        <el-button size="small" @click="editor.chain().focus().setHorizontalRule().run()">分割线</el-button>
         <el-button size="small" @click="editor.chain().focus().undo().run()">撤销</el-button>
         <el-button size="small" @click="editor.chain().focus().redo().run()">重做</el-button>
       </el-button-group>
     </div>
 
-    <!-- TipTap 编辑器 -->
-    <div v-if="doc?.type === 'doc'" class="editor-body">
+    <!-- 文档编辑器（TipTap） -->
+    <div v-if="doc?.type === 'doc' && editor" class="editor-body">
       <editor-content :editor="editor" class="tiptap-editor" />
     </div>
 
-    <!-- 表格编辑器 -->
-    <div v-else class="editor-body">
-      <div class="sheet-placeholder">
-        <el-icon :size="48"><Grid /></el-icon>
-        <p>表格编辑器（Univer 集成中）</p>
-        <textarea v-model="sheetContent" class="editor-textarea" placeholder="表格数据 JSON..." />
-      </div>
+    <!-- 表格编辑器（Univer） -->
+    <div v-else-if="doc?.type === 'sheet'" class="editor-body sheet-body">
+      <SheetEditor ref="sheetRef" :initial-data="sheetData" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Editor, EditorContent } from '@tiptap/vue-3'
@@ -88,6 +88,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import http from '@/utils/http'
+import SheetEditor from '@/components/SheetEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -99,7 +100,8 @@ const versions = ref<any[]>([])
 const onlineCount = ref(0)
 const cursors = ref<any[]>([])
 const editor = ref<Editor | null>(null)
-const sheetContent = ref('')
+const sheetData = ref('{}')
+const sheetRef = ref<InstanceType<typeof SheetEditor> | null>(null)
 let ydoc: Y.Doc | null = null
 let wsProvider: WebsocketProvider | null = null
 let saveTimer: any = null
@@ -110,8 +112,12 @@ const userColor = userColors[Math.floor(Math.random() * userColors.length)]
 
 async function loadDoc() {
   const { data } = await http.get(`/docs/documents/${docId}/content`)
-  doc.value = data.data?.document
+  doc.value = data.data
   title.value = doc.value?.title || ''
+  // 表格数据
+  if (doc.value?.type === 'sheet') {
+    sheetData.value = doc.value?.content || '{}'
+  }
 }
 
 async function loadVersions() {
@@ -131,7 +137,6 @@ function initEditor(initialContent?: string) {
     { connect: true }
   )
 
-  // Awareness (presence)
   wsProvider.awareness.setLocalStateField('user', { name: userName, color: userColor })
   wsProvider.awareness.on('change', () => {
     const states = wsProvider!.awareness.getStates()
@@ -159,17 +164,20 @@ function initEditor(initialContent?: string) {
     },
   })
 
-  // Auto-save on changes
   ydoc.on('update', () => {
     clearTimeout(saveTimer)
-    saveTimer = setTimeout(saveContent, 2000)
+    saveTimer = setTimeout(saveContent, 3000)
   })
 }
 
 async function saveContent() {
-  if (!editor.value) return
-  const html = editor.value.getHTML()
-  await http.put(`/docs/documents/${docId}/content`, { content: html })
+  let content = ''
+  if (doc.value?.type === 'sheet') {
+    content = sheetRef.value?.getData() || '{}'
+  } else if (editor.value) {
+    content = editor.value.getHTML()
+  }
+  await http.put(`/docs/documents/${docId}/content`, { content })
   await loadDoc()
   await loadVersions()
 }
@@ -181,27 +189,23 @@ async function saveTitle() {
 }
 
 function handleVersion(ver: number) {
-  // Restore: fetch old version content, set to editor
-  http.get(`/docs/documents/${docId}/versions`).then(({ data }) => {
-    const v = data.data.find((x: any) => x.version === ver)
-    if (v && editor.value) {
-      // Note: actual restore requires server-side support to return content
-      ElMessage.info(`恢复版本 v${ver}（需后端支持返回内容）`)
-    }
-  })
+  ElMessage.info(`恢复版本 v${ver}（需后端支持返回内容）`)
 }
 
 onMounted(async () => {
   await loadDoc()
   await loadVersions()
   if (doc.value?.type === 'doc') {
-    const { data } = await http.get(`/docs/documents/${docId}/content`)
-    const content = data.data?.content || ''
+    const content = doc.value?.content || ''
     initEditor(content)
   }
 })
 
 onUnmounted(() => {
+  if (saveTimer) {
+    // 退出前保存
+    saveContent().catch(() => {})
+  }
   clearTimeout(saveTimer)
   editor.value?.destroy()
   wsProvider?.disconnect()
@@ -231,10 +235,13 @@ onUnmounted(() => {
   padding: 8px 16px;
   border-bottom: 1px solid #e8e8e8;
   background: #fafafa;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 .editor-body { flex: 1; overflow-y: auto; background: #fff; }
+.sheet-body { overflow: hidden; }
 .tiptap-editor { padding: 24px 48px; min-height: 100%; }
-.tiptap-editor :deep(.ProseMirror) { outline: none; }
+.tiptap-editor :deep(.ProseMirror) { outline: none; min-height: 60vh; }
 .tiptap-editor :deep(.ProseMirror p.is-editor-empty:first-child::before) {
   color: #adb5bd;
   content: attr(data-placeholder);
@@ -245,7 +252,12 @@ onUnmounted(() => {
 .tiptap-editor :deep(.ProseMirror h1) { font-size: 2em; margin: 1em 0 0.5em; }
 .tiptap-editor :deep(.ProseMirror h2) { font-size: 1.5em; margin: 1em 0 0.5em; }
 .tiptap-editor :deep(.ProseMirror p) { margin: 0.5em 0; line-height: 1.6; }
-.tiptap-editor :deep(.ProseMirror ul) { padding-left: 1.5em; margin: 0.5em 0; }
+.tiptap-editor :deep(.ProseMirror ul),
+.tiptap-editor :deep(.ProseMirror ol) { padding-left: 1.5em; margin: 0.5em 0; }
+.tiptap-editor :deep(.ProseMirror blockquote) { border-left: 3px solid #ddd; padding-left: 1em; color: #666; }
+.tiptap-editor :deep(.ProseMirror pre) { background: #f5f5f5; padding: 12px 16px; border-radius: 4px; overflow-x: auto; }
+.tiptap-editor :deep(.ProseMirror code) { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+.tiptap-editor :deep(.ProseMirror hr) { border: none; border-top: 2px solid #e8e8e8; margin: 1.5em 0; }
 .tiptap-editor :deep(.ProseMirror strong) { font-weight: bold; }
 .tiptap-editor :deep(.ProseMirror em) { font-style: italic; }
 .tiptap-editor :deep(.collaboration-cursor__caret) {
@@ -262,7 +274,6 @@ onUnmounted(() => {
   top: -1.4em;
   left: -1px;
   font-size: 12px;
-  font-style: normal;
   font-weight: 600;
   line-height: normal;
   user-select: none;
@@ -270,15 +281,5 @@ onUnmounted(() => {
   padding: 0.1em 0.3em;
   border-radius: 3px 3px 3px 0;
   white-space: nowrap;
-}
-.sheet-placeholder { padding: 40px; text-align: center; color: #999; }
-.sheet-placeholder .editor-textarea {
-  width: 100%;
-  height: 400px;
-  border: 1px solid #e8e8e8;
-  border-radius: 4px;
-  margin-top: 16px;
-  padding: 12px;
-  font-family: monospace;
 }
 </style>

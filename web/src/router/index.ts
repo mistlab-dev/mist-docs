@@ -23,6 +23,10 @@ const routes = [
       { path: 'admin/storage', name: 'Storage', component: () => import('@/views/admin/Storage.vue'), meta: { admin: true } },
     ],
   },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/docs',
+  },
 ]
 
 const router = createRouter({
@@ -30,13 +34,33 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const auth = useAuthStore()
+
+  // 未登录 → 登录页
   if (!to.meta.public && !auth.token) {
     next('/login')
-  } else {
-    next()
+    return
   }
+
+  // 已登录 + 用户信息缺失 → 拉取
+  if (auth.token && !auth.user) {
+    try {
+      await auth.fetchMe()
+    } catch {
+      auth.logout()
+      next('/login')
+      return
+    }
+  }
+
+  // admin 页面权限检查
+  if (to.meta.admin && auth.user?.role === 'member') {
+    next('/docs')
+    return
+  }
+
+  next()
 })
 
 export default router
