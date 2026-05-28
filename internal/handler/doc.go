@@ -204,6 +204,7 @@ func SearchDocuments(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if docs == nil { docs = []*model.Document{} }
 	c.JSON(http.StatusOK, gin.H{"data": docs, "total": total, "page": page, "page_size": pageSize})
 }
 
@@ -216,6 +217,7 @@ func RecentDocuments(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if docs == nil { docs = []*model.Document{} }
 	c.JSON(http.StatusOK, gin.H{"data": docs})
 }
 
@@ -249,6 +251,7 @@ func ListFavorites(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if docs == nil { docs = []*model.Document{} }
 	c.JSON(http.StatusOK, gin.H{"data": docs})
 }
 

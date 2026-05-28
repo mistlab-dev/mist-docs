@@ -167,7 +167,7 @@ func ListDocuments(ctx context.Context, folderID, deptID, docType string, page, 
 	args := []interface{}{}
 
 	if folderID != "" {
-		where += " AND d.folder_id = ?"
+		where += " AND IFNULL(d.folder_id,'') = ?"
 		args = append(args, folderID)
 	}
 	if deptID != "" {
@@ -185,12 +185,12 @@ func ListDocuments(ctx context.Context, folderID, deptID, docType string, page, 
 	}
 
 	offset := (page - 1) * pageSize
-	listSQL := `SELECT d.id, d.folder_id, d.department_id, d.title, d.type, d.file_size, d.version, d.status,
-	            d.created_by, d.updated_by, d.created_at, d.updated_at,
+	listSQL := `SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version, d.status,
+	            IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at,
 	            u1.name as creator_name, u2.name as updater_name
 	            FROM md_documents d
-	            LEFT JOIN md_users u1 ON d.created_by = u1.id
-	            LEFT JOIN md_users u2 ON d.updated_by = u2.id ` +
+	            LEFT JOIN md_users u1 ON IFNULL(d.created_by,'') = u1.id
+	            LEFT JOIN md_users u2 ON IFNULL(d.updated_by,'') = u2.id ` +
 		where + " ORDER BY d.updated_at DESC LIMIT ? OFFSET ?"
 	args = append(args, pageSize, offset)
 
@@ -383,8 +383,8 @@ func ListTrash(ctx context.Context, deptID string, page, pageSize int) ([]*model
 	database.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total)
 
 	offset := (page - 1) * pageSize
-	listSQL := `SELECT d.id, d.folder_id, d.department_id, d.title, d.type, d.file_size, d.version,
-	            d.created_by, d.updated_by, d.created_at, d.updated_at
+	listSQL := `SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version,
+	            IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at
 	            FROM md_documents d ` + where + " ORDER BY d.updated_at DESC LIMIT ? OFFSET ?"
 	args = append(args, pageSize, offset)
 
@@ -443,7 +443,7 @@ func SearchDocuments(ctx context.Context, keyword, deptID string, page, pageSize
 	database.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total)
 
 	offset := (page - 1) * pageSize
-	query := `SELECT d.id, d.folder_id, d.department_id, d.title, d.type, d.file_path, d.file_size, d.version, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at
+	query := `SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version, IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at
 		FROM md_documents d ` + where + ` ORDER BY d.updated_at DESC LIMIT ? OFFSET ?`
 	args = append(args, pageSize, offset)
 
@@ -456,7 +456,7 @@ func SearchDocuments(ctx context.Context, keyword, deptID string, page, pageSize
 	var docs []*model.Document
 	for rows.Next() {
 		doc := &model.Document{}
-		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FilePath, &doc.FileSize, &doc.Version, &doc.Status, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FileSize, &doc.Version, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
 			continue
 		}
 		docs = append(docs, doc)
@@ -471,7 +471,7 @@ func RecentDocuments(ctx context.Context, userID string, limit int) ([]*model.Do
 		limit = 10
 	}
 	rows, err := database.DB.QueryContext(ctx, `
-		SELECT d.id, d.folder_id, d.department_id, d.title, d.type, d.file_path, d.file_size, d.version, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at
+		SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version, IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at
 		FROM md_documents d
 		INNER JOIN md_audits a ON a.resource_id = d.id AND a.user_id = ? AND a.action = 'view'
 		WHERE d.status = 1
@@ -487,7 +487,7 @@ func RecentDocuments(ctx context.Context, userID string, limit int) ([]*model.Do
 	var docs []*model.Document
 	for rows.Next() {
 		doc := &model.Document{}
-		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FilePath, &doc.FileSize, &doc.Version, &doc.Status, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FileSize, &doc.Version, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
 			continue
 		}
 		docs = append(docs, doc)
@@ -514,7 +514,7 @@ func RemoveFavorite(ctx context.Context, userID, docID string) error {
 
 func ListFavorites(ctx context.Context, userID string) ([]*model.Document, error) {
 	rows, err := database.DB.QueryContext(ctx, `
-		SELECT d.id, d.folder_id, d.department_id, d.title, d.type, d.file_path, d.file_size, d.version, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at
+		SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version, IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at
 		FROM md_favorites f
 		INNER JOIN md_documents d ON d.id = f.document_id AND d.status = 1
 		WHERE f.user_id = ?
@@ -528,7 +528,7 @@ func ListFavorites(ctx context.Context, userID string) ([]*model.Document, error
 	var docs []*model.Document
 	for rows.Next() {
 		doc := &model.Document{}
-		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FilePath, &doc.FileSize, &doc.Version, &doc.Status, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FileSize, &doc.Version, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
 			continue
 		}
 		docs = append(docs, doc)
