@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -16,8 +17,6 @@ import (
 func DocTree(c *gin.Context) {
 	deptID := c.Query("department_id")
 	role := c.GetString("role")
-
-	// dept_admin 只能看本部门
 	if role == "dept_admin" {
 		deptID = c.GetString("department_id")
 	}
@@ -42,15 +41,18 @@ func CreateFolder(c *gin.Context) {
 	}
 
 	role := c.GetString("role")
+	userID := c.GetString("user_id")
 	if role == "dept_admin" && f.DepartmentID != c.GetString("department_id") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "只能在本部门创建"})
 		return
 	}
 
-	if err := service.CreateFolder(c.Request.Context(), &f, c.GetString("user_id")); err != nil {
+	if err := service.CreateFolder(c.Request.Context(), &f, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	audit(c, "create_folder", "folder", f.ID, f.Name, "")
 	c.JSON(http.StatusOK, gin.H{"data": f})
 }
 
@@ -70,10 +72,19 @@ func UpdateFolder(c *gin.Context) {
 }
 
 func DeleteFolder(c *gin.Context) {
-	if err := service.DeleteFolder(c.Request.Context(), c.Param("id")); err != nil {
+	id := c.Param("id")
+	folder, _ := service.GetFolderByID(c.Request.Context(), id)
+	name := ""
+	if folder != nil {
+		name = folder.Name
+	}
+
+	if err := service.DeleteFolder(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	audit(c, "delete_folder", "folder", id, name, "")
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
@@ -105,7 +116,7 @@ func CreateDocument(c *gin.Context) {
 		Type         string `json:"type"`
 		FolderID     string `json:"folder_id"`
 		DepartmentID string `json:"department_id" binding:"required"`
-		Content      string `json:"content"` // base64 or raw text for initial content
+		Content      string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
@@ -113,6 +124,7 @@ func CreateDocument(c *gin.Context) {
 	}
 
 	role := c.GetString("role")
+	userID := c.GetString("user_id")
 	if role == "dept_admin" && req.DepartmentID != c.GetString("department_id") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "只能在本部门创建"})
 		return
@@ -125,16 +137,17 @@ func CreateDocument(c *gin.Context) {
 		DepartmentID: req.DepartmentID,
 	}
 
-	// Initial content - empty or minimal
 	initialContent := []byte("{}")
 	if req.Content != "" {
 		initialContent = []byte(req.Content)
 	}
 
-	if err := service.CreateDocument(c.Request.Context(), doc, initialContent, c.GetString("user_id")); err != nil {
+	if err := service.CreateDocument(c.Request.Context(), doc, initialContent, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	audit(c, "create_doc", "document", doc.ID, doc.Title, fmt.Sprintf(`{"type":"%s"}`, doc.Type))
 	c.JSON(http.StatusOK, gin.H{"data": doc})
 }
 
@@ -148,12 +161,7 @@ func UpdateDocument(c *gin.Context) {
 		return
 	}
 
-	doc := &model.Document{
-		ID:      c.Param("id"),
-		Title:   req.Title,
-		FolderID: req.FolderID,
-	}
-
+	doc := &model.Document{ID: c.Param("id"), Title: req.Title, FolderID: req.FolderID}
 	if err := service.UpdateDocument(c.Request.Context(), doc); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -162,41 +170,73 @@ func UpdateDocument(c *gin.Context) {
 }
 
 func DeleteDocument(c *gin.Context) {
-	if err := service.DeleteDocument(c.Request.Context(), c.Param("id")); err != nil {
+	id := c.Param("id")
+	doc, _ := service.GetDocumentByID(c.Request.Context(), id)
+	title := ""
+	if doc != nil {
+		title = doc.Title
+	}
+
+	if err := service.DeleteDocument(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	audit(c, "delete_doc", "document", id, title, "")
 	c.JSON(http.StatusOK, gin.H{"message": "已移入回收站"})
 }
 
 func GetDocumentContent(c *gin.Context) {
-	data, doc, err := service.GetDocumentContent(c.Request.Context(), c.Param("id"))
+	id := c.Param("id")
+	userID := c.GetString("user_id")
+	role := c.GetString("role")
+	deptID := c.GetString("department_id")
+
+	if !service.HasPermission(c.Request.Context(), userID, deptID, role, "document", id, "read") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+
+	data, doc, err := service.GetDocumentContent(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
+
+	audit(c, "view", "document", id, doc.Title, "")
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
-		"content":   string(data),
-		"version":   doc.Version,
-		"title":     doc.Title,
-		"type":      doc.Type,
+		"content":    string(data),
+		"version":    doc.Version,
+		"title":      doc.Title,
+		"type":       doc.Type,
 		"updated_at": doc.UpdatedAt,
 	}})
 }
 
 func SaveDocumentContent(c *gin.Context) {
-	// Read body
+	id := c.Param("id")
+	userID := c.GetString("user_id")
+	role := c.GetString("role")
+	deptID := c.GetString("department_id")
+
+	if !service.HasPermission(c.Request.Context(), userID, deptID, role, "document", id, "write") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "读取内容失败"})
 		return
 	}
 
-	doc, err := service.SaveDocumentContent(c.Request.Context(), c.Param("id"), body, c.GetString("user_id"))
+	doc, err := service.SaveDocumentContent(c.Request.Context(), id, body, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	audit(c, "edit_doc", "document", id, doc.Title, fmt.Sprintf(`{"version":%d}`, doc.Version))
 	c.JSON(http.StatusOK, gin.H{"message": "已保存", "version": doc.Version})
 }
 
@@ -218,10 +258,13 @@ func RestoreVersion(c *gin.Context) {
 		return
 	}
 
-	if err := service.RestoreVersion(c.Request.Context(), c.Param("id"), req.Version, c.GetString("user_id")); err != nil {
+	userID := c.GetString("user_id")
+	if err := service.RestoreVersion(c.Request.Context(), c.Param("id"), req.Version, userID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	audit(c, "restore", "document", c.Param("id"), "", fmt.Sprintf(`{"version":%d}`, req.Version))
 	c.JSON(http.StatusOK, gin.H{"message": "已恢复"})
 }
 
@@ -246,89 +289,194 @@ func ListTrash(c *gin.Context) {
 }
 
 func RestoreFromTrash(c *gin.Context) {
-	if err := service.RestoreDocument(c.Request.Context(), c.Param("id")); err != nil {
+	id := c.Param("id")
+	if err := service.RestoreDocument(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "restore_doc", "document", id, "", "")
 	c.JSON(http.StatusOK, gin.H{"message": "已恢复"})
 }
 
 func PurgeFromTrash(c *gin.Context) {
-	if err := service.PurgeDocument(c.Request.Context(), c.Param("id")); err != nil {
+	id := c.Param("id")
+	if err := service.PurgeDocument(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "purge_doc", "document", id, "", "")
 	c.JSON(http.StatusOK, gin.H{"message": "已永久删除"})
 }
 
 // ==================== 权限 ====================
 
 func ListPermissions(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"data": []interface{}{}, "message": "待实现"})
-}
-
-func SetPermission(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "待实现"})
-}
-
-func RemovePermission(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "待实现"})
-}
-
-func CheckPermission(c *gin.Context) {
-	// 简单实现：检查用户对文档的访问权限
-	docID := c.Query("document_id")
-	folderID := c.Query("folder_id")
-
-	role := c.GetString("role")
-	userDeptID := c.GetString("department_id")
-
-	var targetDeptID string
-	if docID != "" {
-		doc, err := service.GetDocumentByID(c.Request.Context(), docID)
-		if err != nil || doc == nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "文档不存在"})
-			return
-		}
-		targetDeptID = doc.DepartmentID
-	} else if folderID != "" {
-		folder, err := service.GetFolderByID(c.Request.Context(), folderID)
-		if err != nil || folder == nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "文件夹不存在"})
-			return
-		}
-		targetDeptID = folder.DepartmentID
-	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定文档或文件夹"})
+	resourceType := c.Query("resource_type")
+	resourceID := c.Query("resource_id")
+	if resourceType == "" || resourceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定 resource_type 和 resource_id"})
 		return
 	}
 
-	perm := "none"
-	if role == "super_admin" {
-		perm = "admin"
-	} else if targetDeptID == userDeptID {
-		perm = "write" // 本部门默认写权限
+	perms, err := service.ListPermissions(c.Request.Context(), resourceType, resourceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": perms})
+}
+
+func SetPermission(c *gin.Context) {
+	role := c.GetString("role")
+	userID := c.GetString("user_id")
+	if role != "super_admin" && role != "dept_admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
 	}
 
-	// TODO: check md_permissions table for explicit permissions
+	var req struct {
+		ResourceType string `json:"resource_type" binding:"required"`
+		ResourceID   string `json:"resource_id" binding:"required"`
+		TargetType   string `json:"target_type" binding:"required"`
+		TargetID     string `json:"target_id" binding:"required"`
+		Permission   string `json:"permission" binding:"required"`
+		Inherit      bool   `json:"inherit"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
 
+	p := &model.DocPermission{
+		ResourceType: req.ResourceType,
+		ResourceID:   req.ResourceID,
+		TargetType:   req.TargetType,
+		TargetID:     req.TargetID,
+		Permission:   req.Permission,
+		Inherit:      req.Inherit,
+	}
+
+	if err := service.SetPermission(c.Request.Context(), p, userID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resourceName, _ := service.GetResourceName(c.Request.Context(), req.ResourceType, req.ResourceID)
+	audit(c, "set_permission", req.ResourceType, req.ResourceID, resourceName,
+		fmt.Sprintf(`{"target_type":"%s","target_id":"%s","permission":"%s"}`, req.TargetType, req.TargetID, req.Permission))
+	c.JSON(http.StatusOK, gin.H{"data": p})
+}
+
+func RemovePermission(c *gin.Context) {
+	role := c.GetString("role")
+	if role != "super_admin" && role != "dept_admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+
+	if err := service.RemovePermission(c.Request.Context(), c.Param("id")); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	audit(c, "remove_permission", "", c.Param("id"), "", "")
+	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+}
+
+func CheckPermission(c *gin.Context) {
+	resourceType := c.DefaultQuery("resource_type", "document")
+	resourceID := c.Query("resource_id")
+	if resourceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定 resource_id"})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	role := c.GetString("role")
+	deptID := c.GetString("department_id")
+
+	perm, err := service.CheckPermission(c.Request.Context(), userID, deptID, resourceType, resourceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if role == "super_admin" {
+		perm = "admin"
+	}
 	c.JSON(http.StatusOK, gin.H{"permission": perm})
 }
 
 // ==================== 审计 ====================
 
 func ListAudits(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"data": []interface{}{}, "total": 0, "message": "待实现"})
+	role := c.GetString("role")
+	if role != "super_admin" && role != "dept_admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+
+	deptID := c.Query("department_id")
+	if role == "dept_admin" {
+		deptID = c.GetString("department_id")
+	}
+
+	audits, total, err := service.ListAudits(c.Request.Context(),
+		c.Query("user_id"), deptID, c.Query("action"), c.Query("resource_id"),
+		c.Query("start_date"), c.Query("end_date"),
+		atoi(c.DefaultQuery("page", "1"), 1),
+		atoi(c.DefaultQuery("page_size", "20"), 20),
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": audits, "total": total})
 }
 
 func ExportAudits(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "待实现"})
+	if c.GetString("role") != "super_admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "仅超级管理员可导出"})
+		return
+	}
+
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=audits.csv")
+	c.Writer.Write([]byte("\xEF\xBB\xBF"))
+
+	if err := service.ExportAuditsCSV(c.Request.Context(),
+		c.Query("user_id"), c.Query("department_id"), c.Query("action"),
+		c.Query("resource_id"), c.Query("start_date"), c.Query("end_date"),
+		c.Writer,
+	); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
 }
 
 func AuditStats(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{}, "message": "待实现"})
+	if c.GetString("role") != "super_admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "仅超级管理员可查看统计"})
+		return
+	}
+
+	stats, err := service.AuditStats(c.Request.Context(), c.Query("start_date"), c.Query("end_date"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": stats})
 }
+
+// ==================== init ====================
 
 func InitStore() error {
 	return store.Init()
+}
+
+func atoi(s string, def int) int {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 {
+		return def
+	}
+	return n
 }
