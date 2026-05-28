@@ -1,0 +1,43 @@
+# MistDocs 配置文件
+
+server:
+  host: "0.0.0.0"
+  port: 8900
+  base_url: "/"
+
+database:
+  host: "127.0.0.1"
+  port: 3306
+  user: "mist_docs"
+  password: "MistDocs@2026"
+  dbname: "mist_docs"
+  max_open_conns: 20
+  max_idle_conns: 10
+
+storage:
+  root: "/var/lib/mist-docs/files"   # 文件存储根目录
+  max_file_size: 52428800             # 单文件最大 50MB
+  version_keep: 20                    # 每个文档保留版本数
+
+jwt:
+  secret: "change-me-in-production"
+  expire_hours: 24
+  issuer: "mist-docs"
+
+websocket:
+  read_buffer_size: 1024
+  write_buffer_size: 1024
+  ping_interval: 30                   # 秒
+  max_message_size: 1048576           # 1MB
+
+audit:
+  retain_days: 180                    # 审计日志保留天数
+
+# 可选：MistTerm 同步
+mistterm:
+  api_url: ""                         # 留空则不同步
+  api_key: ""
+
+log:
+  level: "info"
+  file: "/var/log/mist-docs/app.log"

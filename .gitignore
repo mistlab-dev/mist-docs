@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.exe
+*.log
+.env
+.env.local
+/configs/config.local.yaml
