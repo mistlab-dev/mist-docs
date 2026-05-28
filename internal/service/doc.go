@@ -64,9 +64,15 @@ func DeleteFolder(ctx context.Context, id string) error {
 }
 
 func GetFolderTree(ctx context.Context, deptID string) ([]*model.DocFolder, error) {
-	rows, err := database.DB.QueryContext(ctx,
-		`SELECT id, name, parent_id, department_id, created_by, created_at, updated_at
-		 FROM md_folders WHERE department_id = ? ORDER BY name`, deptID)
+	q := `SELECT id, name, parent_id, department_id, created_by, created_at, updated_at
+		 FROM md_folders `
+	var args []interface{}
+	if deptID != "" {
+		q += ` WHERE department_id = ? `
+		args = append(args, deptID)
+	}
+	q += ` ORDER BY name`
+	rows, err := database.DB.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

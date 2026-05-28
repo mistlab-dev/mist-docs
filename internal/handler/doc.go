@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/service"
 	"github.com/gin-gonic/gin"
@@ -28,20 +29,43 @@ func DocTree(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": tree})
 }
 
+func resolveDeptID(c *gin.Context, folderID string, userDeptID string) string {
+	// 1. 用用户部门
+	if userDeptID != "" {
+		return userDeptID
+	}
+	// 2. 从父文件夹推断
+	if folderID != "" {
+		var deptID string
+		err := database.DB.QueryRow("SELECT department_id FROM md_folders WHERE id = ?", folderID).Scan(&deptID)
+		if err == nil && deptID != "" {
+			return deptID
+		}
+	}
+	// 3. 兜底：第一个部门
+	var fallback string
+	_ = database.DB.QueryRow("SELECT id FROM md_departments WHERE status = 1 ORDER BY created_at LIMIT 1").Scan(&fallback)
+	return fallback
+}
+
 func CreateFolder(c *gin.Context) {
 	var f model.DocFolder
 	if err := c.ShouldBindJSON(&f); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	if f.Name == "" || f.DepartmentID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "名称和部门不能为空"})
+	userDeptID := c.GetString("department_id")
+	if f.DepartmentID == "" {
+		f.DepartmentID = resolveDeptID(c, f.ParentID, userDeptID)
+	}
+	if f.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "名称不能为空"})
 		return
 	}
 
 	role := c.GetString("role")
 	userID := c.GetString("user_id")
-	if role == "dept_admin" && f.DepartmentID != c.GetString("department_id") {
+	if role == "dept_admin" && f.DepartmentID != userDeptID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "只能在本部门创建"})
 		return
 	}
@@ -114,7 +138,7 @@ func CreateDocument(c *gin.Context) {
 		Title        string `json:"title" binding:"required"`
 		Type         string `json:"type"`
 		FolderID     string `json:"folder_id"`
-		DepartmentID string `json:"department_id" binding:"required"`
+		DepartmentID string `json:"department_id"`
 		Content      string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -124,7 +148,14 @@ func CreateDocument(c *gin.Context) {
 
 	role := c.GetString("role")
 	userID := c.GetString("user_id")
-	if role == "dept_admin" && req.DepartmentID != c.GetString("department_id") {
+	userDeptID := c.GetString("department_id")
+
+	// 没传 department_id 时推断
+	if req.DepartmentID == "" {
+		req.DepartmentID = resolveDeptID(c, req.FolderID, userDeptID)
+	}
+
+	if role == "dept_admin" && req.DepartmentID != userDeptID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "只能在本部门创建"})
 		return
 	}
