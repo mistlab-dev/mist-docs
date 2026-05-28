@@ -14,13 +14,43 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+/*
+Yjs WebSocket 同步协议：
+
+客户端 → 服务端消息格式（二进制）：
+  [0, ...]  sync message
+    [0, ...]  sync step 1 (client sends its state vector)
+    [1, ...]  sync step 2 (client sends missing updates)
+    [2, ...]  update (client sends a new update)
+
+客户端 → 服务端消息格式（JSON）：
+  {"type":"awareness","data":{...}}
+
+服务端 → 客户端消息格式（JSON）：
+  {"type":"join","user":{...}}
+  {"type":"leave","user":{...}}
+  {"type":"awareness","user_id":"...","data":{...}}
+  {"type":"clients","users":[...]}   ← 新加入时发送当前在线用户
+*/
+
+// Yjs message types
+const (
+	MsgSync      = 0
+	MsgAwareness = 1
+)
+
+const (
+	SyncStep1 = 0
+	SyncStep2 = 1
+	SyncUpdate = 2
+)
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-// Client represents a connected editor
 type Client struct {
 	Hub    *Hub
 	Conn   *websocket.Conn
@@ -32,22 +62,21 @@ type Client struct {
 	mu     sync.Mutex
 }
 
-// Room represents a document editing session
 type Room struct {
-	DocID   string
-	Clients map[string]*Client
-	State   []byte // persisted Yjs state
-	mu      sync.RWMutex
+	DocID       string
+	Clients     map[string]*Client
+	StateVector []byte   // latest known state vector
+	Updates     [][]byte // buffered updates for persistence
+	mu          sync.RWMutex
+	dirty       int // count of unsaved updates
 }
 
-// Message is a broadcast message
 type Message struct {
 	DocID string
 	Data  []byte
-	From  string // client ID to skip
+	From  string
 }
 
-// Hub manages all rooms
 type Hub struct {
 	rooms      map[string]*Room
 	mu         sync.RWMutex
@@ -59,123 +88,243 @@ type Hub struct {
 func NewHub() *Hub {
 	return &Hub{
 		rooms:      make(map[string]*Room),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		register:   make(chan *Client, 64),
+		unregister: make(chan *Client, 64),
 		broadcast:  make(chan *Message, 256),
 	}
 }
 
 func (h *Hub) Run() {
+	saveTicker := time.NewTicker(10 * time.Second)
+	defer saveTicker.Stop()
+
 	for {
 		select {
 		case client := <-h.register:
-			h.mu.Lock()
-			room, ok := h.rooms[client.DocID]
-			if !ok {
-				room = &Room{
-					DocID:   client.DocID,
-					Clients: make(map[string]*Client),
-				}
-				// Load persisted state from file
-				if data, err := service.GetDocumentYjsState(client.DocID); err == nil && data != nil {
-					room.State = data
-				}
-				h.rooms[client.DocID] = room
-			}
-			room.mu.Lock()
-			room.Clients[client.UserID] = client
-			room.mu.Unlock()
-			h.mu.Unlock()
-
-			// Send current state to new client
-			if len(room.State) > 0 {
-				client.Send <- room.State
-			}
-
-			// Notify others about join
-			h.broadcastPresence(client, "join")
-			log.Printf("[WS] user %s (%s) joined doc %s (room: %d)", client.UserID, client.Name, client.DocID, len(room.Clients))
+			h.handleRegister(client)
 
 		case client := <-h.unregister:
-			h.mu.Lock()
-			room, ok := h.rooms[client.DocID]
-			if ok {
-				room.mu.Lock()
-				delete(room.Clients, client.UserID)
-				size := len(room.Clients)
-				room.mu.Unlock()
-
-				if size == 0 {
-					// Persist state before removing room
-					if len(room.State) > 0 {
-						service.SaveDocumentYjsState(client.DocID, room.State)
-					}
-					delete(h.rooms, client.DocID)
-				}
-			}
-			h.mu.Unlock()
-
-			h.broadcastPresence(client, "leave")
-			close(client.Send)
-			log.Printf("[WS] user %s left doc %s", client.UserID, client.DocID)
+			h.handleUnregister(client)
 
 		case msg := <-h.broadcast:
-			h.mu.RLock()
-			room, ok := h.rooms[msg.DocID]
-			h.mu.RUnlock()
-			if ok {
-				// Update room state
-				room.mu.Lock()
-				room.State = append(room.State, msg.Data...)
-				room.mu.Unlock()
+			h.handleBroadcast(msg)
 
-				// Broadcast to others
-				room.mu.RLock()
-				for id, c := range room.Clients {
-					if id != msg.From {
-						select {
-						case c.Send <- msg.Data:
-						default:
-							log.Printf("[WS] client %s send buffer full, dropping", id)
-						}
-					}
-				}
-				room.mu.RUnlock()
-
-				// Periodically persist (every ~30 messages)
-				if len(room.State)%30 == 0 {
-					go service.SaveDocumentYjsState(msg.DocID, room.State)
-				}
-			}
+		case <-saveTicker.C:
+			h.persistAllDirty()
 		}
 	}
 }
 
-func (h *Hub) broadcastPresence(client *Client, eventType string) {
-	msg, _ := json.Marshal(map[string]interface{}{
-		"type": eventType,
+func (h *Hub) handleRegister(client *Client) {
+	h.mu.Lock()
+	room, ok := h.rooms[client.DocID]
+	if !ok {
+		room = &Room{
+			DocID:   client.DocID,
+			Clients: make(map[string]*Client),
+		}
+		// Load persisted state
+		if data, err := service.GetDocumentYjsState(client.DocID); err == nil && len(data) > 0 {
+			room.Updates = [][]byte{data}
+		}
+		h.rooms[client.DocID] = room
+	}
+	room.mu.Lock()
+	room.Clients[client.UserID] = client
+	room.mu.Unlock()
+	h.mu.Unlock()
+
+	// Send existing state to new client
+	if len(room.Updates) > 0 {
+		// Merge all updates and send as sync step 2
+		merged := mergeBytes(room.Updates)
+		msg := append([]byte{MsgSync, SyncStep2}, merged...)
+		client.Send <- msg
+	}
+
+	// Notify others about join
+	joinMsg, _ := json.Marshal(map[string]interface{}{
+		"type": "join",
 		"user": map[string]string{
 			"id":    client.UserID,
 			"name":  client.Name,
 			"color": client.Color,
 		},
 	})
+	h.sendToRoom(client.DocID, client.UserID, joinMsg)
 
-	h.mu.RLock()
+	// Send current online users to new client
+	room.mu.RLock()
+	users := []map[string]string{}
+	for _, c := range room.Clients {
+		users = append(users, map[string]string{
+			"id":    c.UserID,
+			"name":  c.Name,
+			"color": c.Color,
+		})
+	}
+	room.mu.RUnlock()
+	clientsMsg, _ := json.Marshal(map[string]interface{}{
+		"type":   "clients",
+		"users":  users,
+	})
+	client.Send <- clientsMsg
+
+	log.Printf("[WS] join: user=%s doc=%s room_size=%d", client.UserID, client.DocID, len(room.Clients))
+}
+
+func (h *Hub) handleUnregister(client *Client) {
+	h.mu.Lock()
 	room, ok := h.rooms[client.DocID]
-	h.mu.RUnlock()
 	if ok {
-		room.mu.RLock()
-		for id, c := range room.Clients {
-			if id != client.UserID {
-				select {
-				case c.Send <- msg:
-				default:
-				}
+		room.mu.Lock()
+		delete(room.Clients, client.UserID)
+		size := len(room.Clients)
+		room.mu.Unlock()
+
+		if size == 0 {
+			// Persist before removing
+			h.persistRoom(room)
+			delete(h.rooms, client.DocID)
+		}
+	}
+	h.mu.Unlock()
+
+	// Notify others
+	leaveMsg, _ := json.Marshal(map[string]interface{}{
+		"type": "leave",
+		"user": map[string]string{"id": client.UserID},
+	})
+	h.sendToRoom(client.DocID, "", leaveMsg)
+
+	close(client.Send)
+	log.Printf("[WS] leave: user=%s doc=%s", client.UserID, client.DocID)
+}
+
+func (h *Hub) handleBroadcast(msg *Message) {
+	h.mu.RLock()
+	room, ok := h.rooms[msg.DocID]
+	h.mu.RUnlock()
+	if !ok {
+		return
+	}
+
+	// Parse Yjs message type
+	if len(msg.Data) >= 2 && msg.Data[0] == MsgSync {
+		subType := msg.Data[1]
+		switch subType {
+		case SyncStep1:
+			// Client asks for missing updates → send what we have
+			if len(room.Updates) > 0 {
+				merged := mergeBytes(room.Updates)
+				reply := append([]byte{MsgSync, SyncStep2}, merged...)
+				// Send only to the originating client
+				h.sendToClient(msg.DocID, msg.From, reply)
+			}
+
+		case SyncStep2, SyncUpdate:
+			// Client sends state or update → store + broadcast to others
+			payload := msg.Data[2:]
+			room.mu.Lock()
+			room.Updates = append(room.Updates, payload)
+			room.dirty++
+			// Keep only last 1000 updates in memory, merge periodically
+			if len(room.Updates) > 1000 {
+				room.Updates = [][]byte{mergeBytes(room.Updates)}
+			}
+			room.mu.Unlock()
+
+			// Broadcast to other clients
+			h.sendToRoom(msg.DocID, msg.From, msg.Data)
+		}
+	} else {
+		// Non-sync message (awareness etc), just relay
+		h.sendToRoom(msg.DocID, msg.From, msg.Data)
+	}
+}
+
+func (h *Hub) sendToRoom(docID, skipUserID string, data []byte) {
+	h.mu.RLock()
+	room, ok := h.rooms[docID]
+	h.mu.RUnlock()
+	if !ok {
+		return
+	}
+
+	room.mu.RLock()
+	for id, c := range room.Clients {
+		if id != skipUserID {
+			select {
+			case c.Send <- data:
+			default:
+				log.Printf("[WS] drop: client=%s buffer full", id)
 			}
 		}
-		room.mu.RUnlock()
 	}
+	room.mu.RUnlock()
+}
+
+func (h *Hub) sendToClient(docID, userID string, data []byte) {
+	h.mu.RLock()
+	room, ok := h.rooms[docID]
+	h.mu.RUnlock()
+	if !ok {
+		return
+	}
+
+	room.mu.RLock()
+	if c, ok := room.Clients[userID]; ok {
+		select {
+		case c.Send <- data:
+		default:
+		}
+	}
+	room.mu.RUnlock()
+}
+
+func (h *Hub) persistRoom(room *Room) {
+	room.mu.RLock()
+	if room.dirty == 0 || len(room.Updates) == 0 {
+		room.mu.RUnlock()
+		return
+	}
+	merged := mergeBytes(room.Updates)
+	room.mu.RUnlock()
+
+	if err := service.SaveDocumentYjsState(room.DocID, merged); err != nil {
+		log.Printf("[WS] persist error: doc=%s err=%v", room.DocID, err)
+	} else {
+		room.mu.Lock()
+		room.dirty = 0
+		room.mu.Unlock()
+		log.Printf("[WS] persisted: doc=%s size=%d", room.DocID, len(merged))
+	}
+}
+
+func (h *Hub) persistAllDirty() {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for _, room := range h.rooms {
+		room.mu.RLock()
+		dirty := room.dirty
+		room.mu.RUnlock()
+		if dirty > 0 {
+			h.persistRoom(room)
+		}
+	}
+}
+
+func mergeBytes(slices [][]byte) []byte {
+	total := 0
+	for _, s := range slices {
+		total += len(s)
+	}
+	merged := make([]byte, 0, total)
+	for _, s := range slices {
+		merged = append(merged, s...)
+	}
+	return merged
 }
 
 func (h *Hub) GetRoomSize(docID string) int {
@@ -189,27 +338,25 @@ func (h *Hub) GetRoomSize(docID string) int {
 	return 0
 }
 
+// ==================== WebSocket Handler ====================
+
 func ServeWS(hub *Hub, c *gin.Context) {
 	docID := c.Param("doc_id")
 	token := c.Query("token")
 
-	// Validate JWT
 	claims, err := middleware.ParseToken(token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "认证失败"})
 		return
 	}
 
-	// Check permission
-	perm := "none"
-	if claims.Role == "super_admin" {
-		perm = "write"
-	} else {
-		perm, _ = service.CheckPermissionSimple(c.Request.Context(), claims.UserID, claims.DepartmentID, docID)
-	}
-	if perm == "none" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
-		return
+	// Permission check
+	if claims.Role != "super_admin" {
+		perm, err := service.CheckPermissionSimple(c.Request.Context(), claims.UserID, claims.DepartmentID, docID)
+		if err != nil || perm == "none" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+			return
+		}
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -218,13 +365,11 @@ func ServeWS(hub *Hub, c *gin.Context) {
 		return
 	}
 
-	// Assign color for cursor
-	colors := []string{"#f44336", "#e91e63", "#9c27b0", "#2196f3", "#00bcd4", "#4caf50", "#ff9800", "#ff5722"}
+	colors := []string{"#e06c75", "#e5c07b", "#98c379", "#56b6c2", "#61afef", "#c678dd", "#d19a66", "#be5046"}
 	colorIdx := 0
-	for _, c := range claims.UserID {
-		colorIdx += int(c)
+	for _, ch := range claims.UserID {
+		colorIdx += int(ch)
 	}
-	color := colors[colorIdx%len(colors)]
 
 	client := &Client{
 		Hub:    hub,
@@ -233,7 +378,7 @@ func ServeWS(hub *Hub, c *gin.Context) {
 		DocID:  docID,
 		UserID: claims.UserID,
 		Name:   claims.Username,
-		Color:  color,
+		Color:  colors[colorIdx%len(colors)],
 	}
 
 	hub.register <- client
@@ -248,7 +393,11 @@ func (c *Client) readPump() {
 		c.Conn.Close()
 	}()
 
-	c.Conn.SetReadLimit(config.C.WebSocket.MaxMessageSize)
+	maxSize := config.C.WebSocket.MaxMessageSize
+	if maxSize == 0 {
+		maxSize = 1048576
+	}
+	c.Conn.SetReadLimit(maxSize)
 	c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	c.Conn.SetPongHandler(func(string) error {
 		c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -256,23 +405,31 @@ func (c *Client) readPump() {
 	})
 
 	for {
-		_, message, err := c.Conn.ReadMessage()
+		msgType, data, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				log.Printf("[WS] read error: %v", err)
+				log.Printf("[WS] read error: user=%s err=%v", c.UserID, err)
 			}
 			break
 		}
+
+		// Only handle binary (Yjs sync) and text (awareness JSON)
+		_ = msgType
+
 		c.Hub.broadcast <- &Message{
 			DocID: c.DocID,
-			Data:  message,
+			Data:  data,
 			From:  c.UserID,
 		}
 	}
 }
 
 func (c *Client) writePump() {
-	ticker := time.NewTicker(time.Duration(config.C.WebSocket.PingInterval) * time.Second)
+	pingInterval := config.C.WebSocket.PingInterval
+	if pingInterval == 0 {
+		pingInterval = 30
+	}
+	ticker := time.NewTicker(time.Duration(pingInterval) * time.Second)
 	defer func() {
 		ticker.Stop()
 		c.Conn.Close()
@@ -287,7 +444,7 @@ func (c *Client) writePump() {
 				return
 			}
 			c.mu.Lock()
-			err := c.Conn.WriteMessage(websocket.TextMessage, msg)
+			err := c.Conn.WriteMessage(websocket.BinaryMessage, msg)
 			c.mu.Unlock()
 			if err != nil {
 				return
