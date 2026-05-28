@@ -197,7 +197,7 @@ onMounted(async () => {
   await loadVersions()
   if (doc.value?.type === 'doc') {
     const content = doc.value?.content || ''
-    initEditor(content)
+    initEditor(content === '{}' ? '' : content)
   }
 })
 

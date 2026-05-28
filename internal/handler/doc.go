@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -167,7 +168,7 @@ func CreateDocument(c *gin.Context) {
 		DepartmentID: req.DepartmentID,
 	}
 
-	initialContent := []byte("{}")
+	initialContent := []byte("")
 	if req.Content != "" {
 		initialContent = []byte(req.Content)
 	}
@@ -258,6 +259,14 @@ func SaveDocumentContent(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "读取内容失败"})
 		return
+	}
+
+	// 从 JSON body 提取 content 字段
+	var bodyJSON struct {
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(body, &bodyJSON); err == nil && bodyJSON.Content != "" {
+		body = []byte(bodyJSON.Content)
 	}
 
 	doc, err := service.SaveDocumentContent(c.Request.Context(), id, body, userID)
