@@ -18,7 +18,7 @@
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item v-for="v in versions" :key="v.version" :command="v.version">
-                v{{ v.version }} - {{ v.created_at }}
+                v{{ v.version }} - {{ formatTime(v.created_at) }}
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -83,6 +83,31 @@
     <div v-else-if="doc?.type === 'sheet'" class="editor-body sheet-body">
       <SheetEditor ref="sheetRef" :initial-data="sheetData" @change="onSheetChange" />
     </div>
+
+    <!-- 版本回退确认 -->
+    <el-dialog v-model="versionDialog.show" title="恢复版本" width="480px">
+      <p style="margin-bottom:12px;color:#666">
+        将恢复到 <strong>v{{ versionDialog.version }}</strong>，当前内容将被保存为新版本。
+      </p>
+      <el-timeline>
+        <el-timeline-item
+          v-for="v in versions.slice(0, 10)"
+          :key="v.version"
+          :timestamp="formatTime(v.created_at)"
+          :type="v.version === versionDialog.version ? 'primary' : ''"
+          placement="top"
+        >
+          版本 v{{ v.version }}
+          <span v-if="v.version === doc?.version" style="color:#409eff;font-size:12px">（当前）</span>
+        </el-timeline-item>
+      </el-timeline>
+      <template #footer>
+        <el-button @click="versionDialog.show = false">取消</el-button>
+        <el-button type="primary" @click="confirmRestore" :loading="versionDialog.loading">
+          恢复到 v{{ versionDialog.version }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 链接弹窗 -->
     <el-dialog v-model="linkDialog.show" title="插入链接" width="420px">
@@ -156,6 +181,8 @@ let autoSaveTimer: any = null
 const linkDialog = reactive({ show: false, text: '', url: '' })
 // 代码语言弹窗
 const codeLangDialog = reactive({ show: false, lang: 'plaintext' })
+// 版本回退弹窗
+const versionDialog = reactive({ show: false, version: 0, loading: false })
 const popularLangs = ['plaintext', 'javascript', 'typescript', 'python', 'go', 'java', 'bash', 'sql', 'html', 'css', 'json', 'yaml', 'markdown']
 const otherLangs = ['c', 'cpp', 'csharp', 'rust', 'ruby', 'php', 'swift', 'kotlin', 'scala', 'lua', 'perl', 'r', 'dockerfile', 'nginx', 'xml', 'diff']
 
@@ -319,8 +346,35 @@ async function saveTitle() {
   doc.value.title = title.value
 }
 
+function formatTime(t: string): string {
+  if (!t) return ''
+  const d = new Date(t)
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 function handleVersion(ver: number) {
-  ElMessage.info(`恢复版本 v${ver}（需后端支持返回内容）`)
+  versionDialog.version = ver
+  versionDialog.show = true
+}
+
+async function confirmRestore() {
+  versionDialog.loading = true
+  try {
+    await http.post(`/docs/documents/${docId}/restore`, { version: versionDialog.version })
+    ElMessage.success(`已恢复到 v${versionDialog.version}`)
+    versionDialog.show = false
+    await loadDoc()
+    await loadVersions()
+    if (doc.value?.type === 'doc' && editor.value) {
+      const content = doc.value?.content || ''
+      editor.value.commands.setContent(content === '{}' ? '' : content)
+    } else if (doc.value?.type === 'sheet') {
+      sheetData.value = doc.value?.content || '{}'
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || '恢复失败')
+  }
+  versionDialog.loading = false
 }
 
 function onSheetChange() { scheduleAutoSave() }
@@ -383,4 +437,22 @@ onUnmounted(() => {
 .tiptap-editor :deep(.ProseMirror table th) { background: #f5f7fa; font-weight: 600; text-align: left; }
 .tiptap-editor :deep(.ProseMirror table .selectedCell) { background: #e8f0fe; }
 .tiptap-editor :deep(.ProseMirror hr) { border: none; border-top: 2px solid #e8e8e8; margin: 1.5em 0; }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .editor-header { gap: 6px; padding: 6px 10px; }
+  .title-input { font-size: 15px; }
+  .header-actions .el-tag { display: none; }
+  .header-actions .el-button span { display: none; }
+  .toolbar {
+    padding: 4px 8px;
+    gap: 2px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .toolbar .el-button-group { flex-shrink: 0; }
+  .toolbar .el-button { padding: 4px 8px; font-size: 12px; }
+  .tiptap-editor { padding: 12px 16px; }
+  .editor-body { -webkit-overflow-scrolling: touch; }
+}
 </style>

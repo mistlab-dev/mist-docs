@@ -1,24 +1,27 @@
 <template>
   <div class="docs-page">
     <div class="toolbar">
-      <el-button type="primary" @click="showNewFolder = true">
-        <el-icon><FolderAdd /></el-icon> 新建文件夹
+      <el-button @click="sidebarOpen = !sidebarOpen" class="menu-btn">
+        <el-icon><Operation /></el-icon>
       </el-button>
-      <el-button type="primary" @click="showNewDoc = true">
-        <el-icon><Document /></el-icon> 新建文档
+      <el-button type="primary" size="small" @click="showNewDoc = true">
+        <el-icon><Document /></el-icon><span class="btn-text"> 文档</span>
       </el-button>
-      <el-button type="success" @click="showNewSheet = true">
-        <el-icon><Grid /></el-icon> 新建表格
+      <el-button type="success" size="small" @click="showNewSheet = true">
+        <el-icon><Grid /></el-icon><span class="btn-text"> 表格</span>
       </el-button>
       <div style="flex:1" />
-      <el-input v-model="search" placeholder="搜索文档..." style="width:260px" clearable @keyup.enter="doSearch" @clear="clearSearch">
+      <el-input v-model="search" placeholder="搜索..." style="width:200px" clearable @keyup.enter="doSearch" @clear="clearSearch" size="small">
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
     </div>
 
     <div class="content">
+      <!-- 遮罩层（移动端） -->
+      <div class="sidebar-overlay" :class="{ open: sidebarOpen }" @click="sidebarOpen = false"></div>
       <!-- 左侧：文件夹 + 快捷入口 -->
-      <div class="sidebar">
+      <div class="sidebar" :class="{ open: sidebarOpen }" @click.self="sidebarOpen = false">
+        <div class="sidebar-inner">
         <!-- 快捷入口 -->
         <div class="sidebar-section">
           <div class="section-item" :class="{ active: viewMode === 'all' }" @click="switchView('all')">
@@ -49,6 +52,7 @@
             </span>
           </template>
         </el-tree>
+        </div>
       </div>
 
       <!-- 右侧：文档列表 -->
@@ -149,7 +153,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Star, StarFilled, Clock, Files, MoreFilled } from '@element-plus/icons-vue'
+import { Star, StarFilled, Clock, Files, MoreFilled, Operation } from '@element-plus/icons-vue'
 import http from '@/utils/http'
 
 const router = useRouter()
@@ -160,6 +164,7 @@ const viewMode = ref('all')
 const search = ref('')
 const searchMode = ref(false)
 const favoriteIds = ref<Set<string>>(new Set())
+const sidebarOpen = ref(false)
 
 const showNewFolder = ref(false)
 const showNewDoc = ref(false)
@@ -218,6 +223,7 @@ async function loadFavoriteIds() {
 function switchView(mode: string) {
   viewMode.value = mode
   searchMode.value = false
+  sidebarOpen.value = false
   if (mode === 'recent') loadRecent()
   else if (mode === 'favorites') loadFavorites()
   else loadDocs()
@@ -227,6 +233,7 @@ function onFolderClick(node: any) {
   currentFolder.value = node.id
   viewMode.value = 'all'
   searchMode.value = false
+  sidebarOpen.value = false
   loadDocs(node.id)
 }
 
@@ -327,6 +334,9 @@ onMounted(async () => {
   background: #fafafa;
   flex-shrink: 0;
 }
+.sidebar-overlay {
+  display: none;
+}
 .sidebar-section { padding: 8px 0; border-bottom: 1px solid #e8e8e8; }
 .section-item {
   display: flex; align-items: center; gap: 8px;
@@ -390,4 +400,47 @@ onMounted(async () => {
 .card-actions .el-icon:hover { color: #409eff; background: #f0f5ff; }
 .fav-active { color: #f7ba2a !important; }
 .more-btn { cursor: pointer; }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .btn-text { display: none; }
+  .toolbar { flex-wrap: wrap; gap: 6px; }
+  .toolbar .el-input { width: 100% !important; order: 10; }
+  .menu-btn { display: inline-flex !important; }
+
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 260px; height: 100vh;
+    z-index: 200;
+    border-radius: 0;
+    border: none;
+    border-right: 1px solid #e8e8e8;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    display: flex;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 16px rgba(0,0,0,0.15);
+  }
+  .sidebar-overlay.open {
+    display: block;
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(0,0,0,0.3);
+    z-index: 199;
+  }
+  .sidebar-inner { width: 100%; height: 100%; overflow-y: auto; background: #fafafa; }
+
+  .doc-grid { grid-template-columns: 1fr; }
+  .doc-card { padding: 12px; }
+  .card-icon .el-icon { font-size: 24px; }
+  .card-actions { opacity: 1; }
+}
+
+/* PC端隐藏菜单按钮 */
+@media (min-width: 769px) {
+  .menu-btn { display: none !important; }
+}
 </style>
