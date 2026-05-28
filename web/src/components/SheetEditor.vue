@@ -1,160 +1,156 @@
 <template>
-  <div class="sheet-wrapper">
+  <div class="sheet-container">
     <!-- 公式栏 -->
     <div class="formula-bar">
-      <div class="cell-ref">{{ activeCell }}</div>
+      <div class="cell-ref">{{ currentCellRef }}</div>
+      <div class="formula-divider">fx</div>
       <input
         class="formula-input"
-        :value="activeCellValue"
-        @input="onFormulaInput($event)"
-        @keydown.enter="commitFormula"
+        v-model="formulaValue"
+        @keydown.enter="applyFormula"
         @keydown.escape="cancelFormula"
         placeholder="输入内容..."
       />
     </div>
+
     <!-- 工具栏 -->
     <div class="sheet-toolbar">
       <el-button-group>
-        <el-button size="small" @click="addRowAbove">↑ 插入行</el-button>
-        <el-button size="small" @click="addRowBelow">↓ 插入行</el-button>
-        <el-button size="small" type="danger" @click="deleteRow" :disabled="rows.length <= 1">删除行</el-button>
+        <el-button size="small" @click="addRowAbove" title="上方插入行">
+          <el-icon><Top /></el-icon>
+        </el-button>
+        <el-button size="small" @click="addRowBelow" title="下方插入行">
+          <el-icon><Bottom /></el-icon>
+        </el-button>
+        <el-button size="small" @click="deleteRow" title="删除行">
+          <el-icon><Delete /></el-icon>
+        </el-button>
       </el-button-group>
       <el-button-group style="margin-left:8px">
-        <el-button size="small" @click="addColLeft">← 插入列</el-button>
-        <el-button size="small" @click="addColRight">→ 插入列</el-button>
-        <el-button size="small" type="danger" @click="deleteCol" :disabled="cols <= 1">删除列</el-button>
+        <el-button size="small" @click="addColLeft" title="左侧插入列">
+          <el-icon><Back /></el-icon>
+        </el-button>
+        <el-button size="small" @click="addColRight" title="右侧插入列">
+          <el-icon><Right /></el-icon>
+        </el-button>
+        <el-button size="small" @click="deleteCol" title="删除列">
+          <el-icon><Delete /></el-icon>
+        </el-button>
       </el-button-group>
-      <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
-        <el-button size="small" @click="exportCSV">导出 CSV</el-button>
-        <el-upload :auto-upload="false" :show-file-list="false" accept=".csv" :on-change="importCSV">
-          <el-button size="small">导入 CSV</el-button>
-        </el-upload>
-        <span class="sheet-info">{{ rows.length }} 行 × {{ cols }} 列</span>
-      </div>
+      <span class="sheet-info">{{ rows.length }} 行 × {{ colCount }} 列</span>
     </div>
-    <!-- 表格主体 -->
-    <div class="sheet-body" ref="sheetBody" @keydown="onKeyDown" tabindex="0">
-      <div class="sheet-scroll">
-        <table class="sheet-table" @mousedown.prevent>
-          <colgroup>
-            <col style="width:48px" />
-            <col v-for="c in cols" :key="c" style="width:100px" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th class="corner"></th>
-              <th
-                v-for="c in cols"
-                :key="c"
-                class="col-header"
-                :class="{ selected: isColSelected(c - 1) }"
-                @click="selectCol(c - 1)"
-                @contextmenu.prevent="headerContext($event, 'col', c - 1)"
-              >{{ colName(c - 1) }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, ri) in rows" :key="ri">
-              <td
-                class="row-header"
-                :class="{ selected: isRowSelected(ri) }"
-                @click="selectRow(ri)"
-              >{{ ri + 1 }}</td>
-              <td
-                v-for="c in cols"
-                :key="c"
-                class="cell"
-                :class="{
-                  selected: isActive(ri, c - 1),
-                  inRange: isInRange(ri, c - 1),
-                }"
-                @click="selectCell(ri, c - 1, $event)"
-                @dblclick="startEdit(ri, c - 1)"
-              >
-                <template v-if="editing && editing.r === ri && editing.c === c - 1">
-                  <input
-                    ref="editInput"
-                    class="cell-edit"
-                    v-model="editing.val"
-                    @keydown.enter="commitEdit"
-                    @keydown.tab.prevent="commitAndMove(0, 1)"
-                    @keydown.escape="cancelEdit"
-                    @blur="commitEdit"
-                  />
-                </template>
-                <template v-else>
-                  <div class="cell-display">{{ getCell(ri, c - 1) }}</div>
-                </template>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+
+    <!-- 表格 -->
+    <div class="sheet-scroll" ref="scrollRef" @contextmenu.prevent="showContextMenu">
+      <table class="sheet-table" ref="tableRef">
+        <colgroup>
+          <col style="width: 40px" />
+          <col v-for="c in colCount" :key="c" style="width: 120px" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="corner"></th>
+            <th
+              v-for="c in colCount"
+              :key="c"
+              class="col-header"
+              :class="{ selected: isColSelected(c - 1) }"
+              @click="selectCol(c - 1)"
+              @mousedown.stop="startColResize(c - 1, $event)"
+            >
+              {{ colName(c - 1) }}
+              <div class="col-resize-handle" @mousedown.stop="startColResize(c - 1, $event)"></div>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(row, ri) in rows" :key="ri">
+            <td
+              class="row-header"
+              :class="{ selected: isRowSelected(ri) }"
+              @click="selectRow(ri)"
+            >{{ ri + 1 }}</td>
+            <td
+              v-for="c in colCount"
+              :key="c"
+              class="cell"
+              :class="{
+                selected: isSelected(ri, c - 1),
+                'selected-head': isSelectionHead(ri, c - 1),
+                editing: editingCell?.row === ri && editingCell?.col === c - 1
+              }"
+              @click="selectCell(ri, c - 1, $event)"
+              @dblclick="startEdit(ri, c - 1)"
+            >
+              <template v-if="editingCell?.row === ri && editingCell?.col === c - 1">
+                <input
+                  ref="editInput"
+                  class="cell-edit-input"
+                  v-model="rows[ri][c - 1]"
+                  @keydown.enter.prevent="finishEdit"
+                  @keydown.tab.prevent="finishEdit; moveNext()"
+                  @keydown.escape="cancelEdit"
+                  @keydown="handleEditKey"
+                />
+              </template>
+              <template v-else>
+                <span class="cell-display">{{ getCellDisplay(ri, c - 1) }}</span>
+              </template>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
+
     <!-- 右键菜单 -->
     <div
       v-if="contextMenu.show"
       class="context-menu"
       :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
     >
-      <div class="ctx-item" @click="ctxInsertRowAbove">在上方插入行</div>
-      <div class="ctx-item" @click="ctxInsertRowBelow">在下方插入行</div>
-      <div class="ctx-item" @click="ctxInsertColLeft">在左侧插入列</div>
-      <div class="ctx-item" @click="ctxInsertColRight">在右侧插入列</div>
-      <div class="ctx-sep"></div>
-      <div class="ctx-item danger" @click="ctxDeleteRow">删除行</div>
-      <div class="ctx-item danger" @click="ctxDeleteCol">删除列</div>
-      <div class="ctx-sep"></div>
-      <div class="ctx-item" @click="ctxClearCells">清空内容</div>
+      <div class="menu-item" @click="ctxInsertRowAbove">上方插入行</div>
+      <div class="menu-item" @click="ctxInsertRowBelow">下方插入行</div>
+      <div class="menu-divider"></div>
+      <div class="menu-item" @click="ctxInsertColLeft">左侧插入列</div>
+      <div class="menu-item" @click="ctxInsertColRight">右侧插入列</div>
+      <div class="menu-divider"></div>
+      <div class="menu-item" @click="ctxDeleteRow">删除行</div>
+      <div class="menu-item" @click="ctxDeleteCol">删除列</div>
+      <div class="menu-divider"></div>
+      <div class="menu-item" @click="ctxClearCells">清空单元格</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { Top, Bottom, Back, Right, Delete } from '@element-plus/icons-vue'
 
 const props = defineProps<{ initialData?: string }>()
 const emit = defineEmits<{ (e: 'change', data: string): void }>()
 
-const cols = ref(10)
 const rows = ref<string[][]>([])
-const sheetBody = ref<HTMLElement | null>(null)
+const colCount = ref(10)
+const scrollRef = ref<HTMLElement | null>(null)
+const tableRef = ref<HTMLElement | null>(null)
+const editInput = ref<any[]>([])
 
-// 选区
-const active = ref<{ r: number; c: number }>({ r: 0, c: 0 })
-const rangeEnd = ref<{ r: number; c: number } | null>(null)
-const editing = ref<{ r: number; c: number; val: string } | null>(null)
-const editInput = ref<HTMLInputElement[] | null>(null)
-
-// 右键菜单
-const contextMenu = ref<{ show: boolean; x: number; y: number; r: number; c: number }>({
-  show: false, x: 0, y: 0, r: 0, c: 0
-})
+// 选中状态
+const selection = ref<{ startRow: number; startCol: number; endRow: number; endCol: number } | null>(null)
+const editingCell = ref<{ row: number; col: number } | null>(null)
 
 // 公式栏
-const activeCell = computed(() => `${colName(active.value.c)}${active.value.r + 1}`)
-const activeCellValue = computed({
-  get: () => editing.value ? editing.value.val : getCell(active.value.r, active.value.c),
-  set: (v: string) => { /* handled by onFormulaInput */ }
+const formulaValue = ref('')
+const currentCellRef = computed(() => {
+  if (!selection.value) return ''
+  return `${colName(selection.value.startCol)}${selection.value.startRow + 1}`
 })
 
-function onFormulaInput(e: Event) {
-  const val = (e.target as HTMLInputElement).value
-  if (!editing.value) {
-    startEdit(active.value.r, active.value.c)
-  }
-  if (editing.value) {
-    editing.value.val = val
-  }
-}
-function commitFormula() {
-  commitEdit()
-}
-function cancelFormula() {
-  cancelEdit()
-}
+// 右键菜单
+const contextMenu = ref<{ show: boolean; x: number; y: number; row: number; col: number }>({
+  show: false, x: 0, y: 0, row: -1, col: -1
+})
 
-// Cell helpers
 function colName(i: number): string {
   let name = ''
   i++
@@ -166,430 +162,601 @@ function colName(i: number): string {
   return name
 }
 
-function getCell(r: number, c: number): string {
-  return rows.value[r]?.[c] || ''
+function makeRow(cols: number): string[] {
+  return new Array(cols).fill('')
 }
 
-function setCell(r: number, c: number, val: string) {
-  if (rows.value[r]) rows.value[r][c] = val
-  onChange()
+function initEmpty(numRows = 50, numCols = 10) {
+  colCount.value = numCols
+  rows.value = Array.from({ length: numRows }, () => makeRow(numCols))
 }
 
-function ensureSize(numRows: number, numCols: number) {
-  while (cols.value < numCols) { cols.value++; rows.value.forEach(row => row.push('')) }
-  while (rows.value.length < numRows) rows.value.push(new Array(cols.value).fill(''))
-}
-
-// Selection
-function isActive(r: number, c: number) {
-  return active.value.r === r && active.value.c === c
-}
-
-function isInRange(r: number, c: number) {
-  if (!rangeEnd.value) return false
-  const r1 = Math.min(active.value.r, rangeEnd.value.r)
-  const r2 = Math.max(active.value.r, rangeEnd.value.r)
-  const c1 = Math.min(active.value.c, rangeEnd.value.c)
-  const c2 = Math.max(active.value.c, rangeEnd.value.c)
-  return r >= r1 && r <= r2 && c >= c1 && c <= c2
-}
-
-function isRowSelected(r: number) { return active.value.r === r }
-function isColSelected(c: number) { return active.value.c === c }
-
-function selectCell(r: number, c: number, e?: MouseEvent) {
-  if (e?.shiftKey) {
-    rangeEnd.value = { r, c }
-  } else {
-    rangeEnd.value = null
+// 加载数据
+function loadData() {
+  if (props.initialData && props.initialData !== '{}') {
+    try {
+      const parsed = JSON.parse(props.initialData)
+      if (parsed.rows && parsed.rows.length) {
+        rows.value = parsed.rows
+        colCount.value = parsed.cols || parsed.rows[0]?.length || 10
+        return
+      }
+    } catch { /* ignore */ }
   }
-  if (editing.value) commitEdit()
-  active.value = { r, c }
-  nextTick(() => sheetBody.value?.focus())
+  initEmpty()
 }
 
-function selectRow(r: number) {
-  if (editing.value) commitEdit()
-  active.value = { r, c: 0 }
-  rangeEnd.value = { r, c: cols.value - 1 }
+// 选中
+function selectCell(row: number, col: number, e?: MouseEvent) {
+  if (e?.shiftKey && selection.value) {
+    selection.value = {
+      ...selection.value,
+      endRow: row,
+      endCol: col,
+    }
+  } else {
+    selection.value = { startRow: row, startCol: col, endRow: row, endCol: col }
+  }
+  editingCell.value = null
+  updateFormula()
 }
 
-function selectCol(c: number) {
-  if (editing.value) commitEdit()
-  active.value = { r: 0, c }
-  rangeEnd.value = { r: rows.value.length - 1, c }
+function selectRow(row: number) {
+  selection.value = { startRow: row, startCol: 0, endRow: row, endCol: colCount.value - 1 }
+  editingCell.value = null
 }
 
-// Editing
-function startEdit(r: number, c: number) {
-  if (editing.value) commitEdit()
-  editing.value = { r, c, val: getCell(r, c) }
+function selectCol(col: number) {
+  selection.value = { startRow: 0, startCol: col, endRow: rows.value.length - 1, endCol: col }
+  editingCell.value = null
+}
+
+function isSelected(row: number, col: number): boolean {
+  if (!selection.value) return false
+  const { startRow, startCol, endRow, endCol } = selection.value
+  const r1 = Math.min(startRow, endRow), r2 = Math.max(startRow, endRow)
+  const c1 = Math.min(startCol, endCol), c2 = Math.max(startCol, endCol)
+  return row >= r1 && row <= r2 && col >= c1 && col <= c2
+}
+
+function isSelectionHead(row: number, col: number): boolean {
+  if (!selection.value) return false
+  return selection.value.startRow === row && selection.value.startCol === col
+}
+
+function isRowSelected(row: number): boolean {
+  if (!selection.value) return false
+  const r1 = Math.min(selection.value.startRow, selection.value.endRow)
+  const r2 = Math.max(selection.value.startRow, selection.value.endRow)
+  return row >= r1 && row <= r2
+}
+
+function isColSelected(col: number): boolean {
+  if (!selection.value) return false
+  const c1 = Math.min(selection.value.startCol, selection.value.endCol)
+  const c2 = Math.max(selection.value.startCol, selection.value.endCol)
+  return col >= c1 && col <= c2
+}
+
+// 编辑
+function startEdit(row: number, col: number) {
+  editingCell.value = { row, col }
+  formulaValue.value = rows.value[row]?.[col] || ''
   nextTick(() => {
     const inputs = editInput.value
-    if (inputs && inputs.length > 0) inputs[0]?.focus()
+    if (inputs && inputs.length) {
+      const el = inputs[0]?.$el || inputs[0]
+      el?.focus()
+    }
   })
 }
 
-function commitEdit() {
-  if (!editing.value) return
-  setCell(editing.value.r, editing.value.c, editing.value.val)
-  editing.value = null
+function finishEdit() {
+  if (!editingCell.value) return
+  const { row, col } = editingCell.value
+  rows.value[row][col] = formulaValue.value
+  editingCell.value = null
+  emitChange()
 }
 
 function cancelEdit() {
-  editing.value = null
+  editingCell.value = null
+  updateFormula()
 }
 
-function commitAndMove(dr: number, dc: number) {
-  commitEdit()
-  const nr = Math.max(0, Math.min(rows.value.length - 1, active.value.r + dr))
-  const nc = Math.max(0, Math.min(cols.value - 1, active.value.c + dc))
-  active.value = { r: nr, c: nc }
-  nextTick(() => sheetBody.value?.focus())
+function moveNext() {
+  if (!selection.value) return
+  const { startRow, startCol } = selection.value
+  const nextCol = startCol + 1
+  if (nextCol < colCount.value) {
+    selectCell(startRow, nextCol)
+  } else if (startRow + 1 < rows.value.length) {
+    selectCell(startRow + 1, 0)
+  }
 }
 
-// Keyboard navigation
-function onKeyDown(e: KeyboardEvent) {
-  if (editing.value) return
+function updateFormula() {
+  if (!selection.value) { formulaValue.value = ''; return }
+  const { startRow, startCol } = selection.value
+  formulaValue.value = rows.value[startRow]?.[startCol] || ''
+}
 
-  const { r, c } = active.value
-  switch (e.key) {
-    case 'ArrowUp': e.preventDefault(); active.value = { r: Math.max(0, r - 1), c }; break
-    case 'ArrowDown': e.preventDefault(); active.value = { r: Math.min(rows.value.length - 1, r + 1), c }; break
-    case 'ArrowLeft': e.preventDefault(); active.value = { r, c: Math.max(0, c - 1) }; break
-    case 'ArrowRight': e.preventDefault(); active.value = { r, c: Math.min(cols.value - 1, c + 1) }; break
-    case 'Tab': e.preventDefault(); commitAndMove(0, e.shiftKey ? -1 : 1); break
-    case 'Enter': e.preventDefault(); startEdit(r, c); break
-    case 'Delete':
-    case 'Backspace':
-      e.preventDefault()
-      clearSelection()
-      break
-    default:
-      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-        startEdit(r, c)
-        editing.value!.val = e.key
-        nextTick(() => {
-          const inputs = editInput.value
-          if (inputs && inputs.length > 0) inputs[0]?.focus()
-        })
+function applyFormula() {
+  if (!selection.value) return
+  const { startRow, startCol } = selection.value
+  rows.value[startRow][startCol] = formulaValue.value
+  editingCell.value = null
+  emitChange()
+}
+
+function cancelFormula() {
+  updateFormula()
+}
+
+function getCellDisplay(row: number, col: number): string {
+  const val = rows.value[row]?.[col] || ''
+  // 简单公式求值
+  if (val.startsWith('=')) {
+    return evaluateFormula(val)
+  }
+  return val
+}
+
+function evaluateFormula(formula: string): string {
+  try {
+    const expr = formula.substring(1).toUpperCase()
+    // SUM(A1:B3)
+    const sumMatch = expr.match(/^SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/)
+    if (sumMatch) {
+      const c1 = colIndex(sumMatch[1]), r1 = parseInt(sumMatch[2]) - 1
+      const c2 = colIndex(sumMatch[3]), r2 = parseInt(sumMatch[4]) - 1
+      let sum = 0
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          sum += parseFloat(rows.value[r]?.[c]) || 0
+        }
       }
+      return String(sum)
+    }
+    // AVG
+    const avgMatch = expr.match(/^AVG\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/)
+    if (avgMatch) {
+      const c1 = colIndex(avgMatch[1]), r1 = parseInt(avgMatch[2]) - 1
+      const c2 = colIndex(avgMatch[3]), r2 = parseInt(avgMatch[4]) - 1
+      let sum = 0, count = 0
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          const v = parseFloat(rows.value[r]?.[c])
+          if (!isNaN(v)) { sum += v; count++ }
+        }
+      }
+      return count ? String(Math.round(sum / count * 100) / 100) : '0'
+    }
+    // COUNT
+    const countMatch = expr.match(/^COUNT\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/)
+    if (countMatch) {
+      const c1 = colIndex(countMatch[1]), r1 = parseInt(countMatch[2]) - 1
+      const c2 = colIndex(countMatch[3]), r2 = parseInt(countMatch[4]) - 1
+      let count = 0
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          const v = rows.value[r]?.[c]
+          if (v && v.trim()) count++
+        }
+      }
+      return String(count)
+    }
+    // 简单四则运算
+    const calcMatch = expr.match(/^([\d+\-*/(). ]+)$/)
+    if (calcMatch) {
+      // 安全计算：只允许数字和运算符
+      const safe = expr.replace(/[^0-9+\-*/().]/g, '')
+      if (safe === expr) {
+        const result = Function('"use strict"; return (' + expr + ')')()
+        return String(result)
+      }
+    }
+    // 单元格引用 A1
+    const cellMatch = expr.match(/^([A-Z]+)(\d+)$/)
+    if (cellMatch) {
+      const c = colIndex(cellMatch[1]), r = parseInt(cellMatch[2]) - 1
+      return rows.value[r]?.[c] || ''
+    }
+    return formula
+  } catch {
+    return formula
   }
 }
 
-function clearSelection() {
-  if (rangeEnd.value) {
-    const r1 = Math.min(active.value.r, rangeEnd.value.r)
-    const r2 = Math.max(active.value.r, rangeEnd.value.r)
-    const c1 = Math.min(active.value.c, rangeEnd.value.c)
-    const c2 = Math.max(active.value.c, rangeEnd.value.c)
-    for (let r = r1; r <= r2; r++)
-      for (let c = c1; c <= c2; c++)
-        rows.value[r][c] = ''
-  } else {
-    rows.value[active.value.r][active.value.c] = ''
+function colIndex(name: string): number {
+  let idx = 0
+  for (let i = 0; i < name.length; i++) {
+    idx = idx * 26 + (name.charCodeAt(i) - 64)
   }
-  onChange()
+  return idx - 1
 }
 
-// Row/Col operations
-function addRowAbove() {
-  const r = active.value.r
-  rows.value.splice(r, 0, new Array(cols.value).fill(''))
-  active.value = { r, c: active.value.c }
-  onChange()
+// 行列操作
+function insertRowAt(index: number) {
+  rows.value.splice(index, 0, makeRow(colCount.value))
+  adjustSelection()
+  emitChange()
 }
-function addRowBelow() {
-  const r = active.value.r + 1
-  rows.value.splice(r, 0, new Array(cols.value).fill(''))
-  active.value = { r, c: active.value.c }
-  onChange()
-}
-function addColLeft() {
-  const c = active.value.c
-  cols.value++
-  rows.value.forEach(row => row.splice(c, 0, ''))
-  onChange()
-}
-function addColRight() {
-  const c = active.value.c + 1
-  cols.value++
-  rows.value.forEach(row => row.splice(c, 0, ''))
-  onChange()
-}
-function deleteRow() {
+
+function deleteRowAt(index: number) {
   if (rows.value.length <= 1) return
-  rows.value.splice(active.value.r, 1)
-  active.value = { r: Math.min(active.value.r, rows.value.length - 1), c: active.value.c }
-  onChange()
+  rows.value.splice(index, 1)
+  adjustSelection()
+  emitChange()
 }
+
+function insertColAt(index: number) {
+  colCount.value++
+  rows.value.forEach(row => row.splice(index, 0, ''))
+  adjustSelection()
+  emitChange()
+}
+
+function deleteColAt(index: number) {
+  if (colCount.value <= 1) return
+  colCount.value--
+  rows.value.forEach(row => row.splice(index, 1))
+  adjustSelection()
+  emitChange()
+}
+
+function adjustSelection() {
+  if (!selection.value) return
+  selection.value.endRow = Math.min(selection.value.endRow, rows.value.length - 1)
+  selection.value.endCol = Math.min(selection.value.endCol, colCount.value - 1)
+}
+
+// 工具栏按钮
+function addRowAbove() {
+  const row = selection.value?.startRow ?? 0
+  insertRowAt(row)
+}
+
+function addRowBelow() {
+  const row = selection.value?.startRow ?? rows.value.length - 1
+  insertRowAt(row + 1)
+}
+
+function addColLeft() {
+  const col = selection.value?.startCol ?? 0
+  insertColAt(col)
+}
+
+function addColRight() {
+  const col = selection.value?.startCol ?? colCount.value - 1
+  insertColAt(col + 1)
+}
+
+function deleteRow() {
+  const row = selection.value?.startRow ?? 0
+  deleteRowAt(row)
+}
+
 function deleteCol() {
-  if (cols.value <= 1) return
-  cols.value--
-  rows.value.forEach(row => row.splice(active.value.c, 1))
-  active.value = { r: active.value.r, c: Math.min(active.value.c, cols.value - 1) }
-  onChange()
+  const col = selection.value?.startCol ?? 0
+  deleteColAt(col)
 }
 
-// Right-click menu
-function headerContext(e: MouseEvent, type: string, idx: number) {
-  contextMenu.value = { show: true, x: e.clientX, y: e.clientY, r: active.value.r, c: idx }
-}
-function closeContext() { contextMenu.value.show = false }
-function ctxInsertRowAbove() { closeContext(); addRowAbove() }
-function ctxInsertRowBelow() { closeContext(); addRowBelow() }
-function ctxInsertColLeft() { closeContext(); addColLeft() }
-function ctxInsertColRight() { closeContext(); addColRight() }
-function ctxDeleteRow() { closeContext(); deleteRow() }
-function ctxDeleteCol() { closeContext(); deleteCol() }
-function ctxClearCells() {
-  closeContext()
-  clearSelection()
-}
-
-// CSV import/export
-function exportCSV() {
-  const csvRows = rows.value.map(row =>
-    row.map(cell => {
-      const val = cell || ''
-      return val.includes(',') || val.includes('"') || val.includes('\n')
-        ? `"${val.replace(/"/g, '""')}"`
-        : val
-    }).join(',')
-  )
-  const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = 'export.csv'; a.click()
-  URL.revokeObjectURL(url)
-}
-
-function importCSV(file: any) {
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const text = e.target?.result as string
-    const lines = text.split('\n').filter(l => l.trim())
-    const parsed = lines.map(line => parseCSVLine(line))
-    const maxCols = Math.max(...parsed.map(r => r.length), cols.value)
-    ensureSize(parsed.length, maxCols)
-    cols.value = maxCols
-    rows.value = parsed.map(row => {
-      while (row.length < maxCols) row.push('')
-      return row
-    })
-    onChange()
+// 右键菜单
+function showContextMenu(e: MouseEvent) {
+  contextMenu.value = {
+    show: true,
+    x: e.clientX,
+    y: e.clientY,
+    row: selection.value?.startRow ?? 0,
+    col: selection.value?.startCol ?? 0,
   }
-  reader.readAsText(file.raw)
 }
 
-function parseCSVLine(line: string): string[] {
-  const cells: string[] = []
-  let i = 0
-  while (i < line.length) {
-    if (line[i] === '"') {
-      let val = ''
-      i++
-      while (i < line.length) {
-        if (line[i] === '"' && line[i + 1] === '"') { val += '"'; i += 2 }
-        else if (line[i] === '"') { i++; break }
-        else { val += line[i]; i++ }
-      }
-      cells.push(val)
-      if (line[i] === ',') i++
-    } else {
-      const next = line.indexOf(',', i)
-      if (next === -1) { cells.push(line.slice(i)); break }
-      cells.push(line.slice(i, next))
-      i = next + 1
+function hideContextMenu() {
+  contextMenu.value.show = false
+}
+
+function ctxInsertRowAbove() { hideContextMenu(); addRowAbove() }
+function ctxInsertRowBelow() { hideContextMenu(); addRowBelow() }
+function ctxInsertColLeft() { hideContextMenu(); addColLeft() }
+function ctxInsertColRight() { hideContextMenu(); addColRight() }
+function ctxDeleteRow() { hideContextMenu(); deleteRow() }
+function ctxDeleteCol() { hideContextMenu(); deleteCol() }
+function ctxClearCells() {
+  hideContextMenu()
+  if (!selection.value) return
+  const { startRow, startCol, endRow, endCol } = selection.value
+  const r1 = Math.min(startRow, endRow), r2 = Math.max(startRow, endRow)
+  const c1 = Math.min(startCol, endCol), c2 = Math.max(startCol, endCol)
+  for (let r = r1; r <= r2; r++) {
+    for (let c = c1; c <= c2; c++) {
+      rows.value[r][c] = ''
     }
   }
-  return cells
+  emitChange()
 }
 
-// Data
-function onChange() {
-  emit('change', JSON.stringify({ rows: rows.value, cols: cols.value }))
+// 键盘
+function handleEditKey(e: KeyboardEvent) {
+  if (e.key === 'ArrowUp') { e.preventDefault(); finishEdit(); moveUp() }
+  if (e.key === 'ArrowDown') { e.preventDefault(); finishEdit(); moveDown() }
+}
+
+function moveUp() {
+  if (!selection.value || selection.value.startRow <= 0) return
+  selectCell(selection.value.startRow - 1, selection.value.startCol)
+  updateFormula()
+}
+
+function moveDown() {
+  if (!selection.value) return
+  if (selection.value.startRow >= rows.value.length - 1) {
+    // 自动追加行
+    rows.value.push(makeRow(colCount.value))
+  }
+  selectCell(selection.value.startRow + 1, selection.value.startCol)
+  updateFormula()
+}
+
+// 列宽拖拽
+function startColResize(col: number, e: MouseEvent) {
+  // TODO: 列宽调整
+}
+
+function emitChange() {
+  emit('change', JSON.stringify({ rows: rows.value, cols: colCount.value }))
 }
 
 function getData(): string {
-  return JSON.stringify({ rows: rows.value, cols: cols.value })
+  return JSON.stringify({ rows: rows.value, cols: colCount.value })
 }
 
-// Init
-function initData(data?: string) {
-  if (data && data !== '{}') {
-    try {
-      const parsed = JSON.parse(data)
-      if (parsed.rows && Array.isArray(parsed.rows)) {
-        rows.value = parsed.rows
-        cols.value = parsed.cols || parsed.rows[0]?.length || 10
-        return
+// 全局键盘
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (editingCell.value) return
+  if (!selection.value) return
+
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    const { startRow, startCol, endRow, endCol } = selection.value
+    const r1 = Math.min(startRow, endRow), r2 = Math.max(startRow, endRow)
+    const c1 = Math.min(startCol, endCol), c2 = Math.max(startCol, endCol)
+    for (let r = r1; r <= r2; r++) {
+      for (let c = c1; c <= c2; c++) {
+        rows.value[r][c] = ''
       }
-    } catch { /* fallthrough */ }
+    }
+    emitChange()
+    e.preventDefault()
+  } else if (e.key === 'Enter') {
+    startEdit(selection.value.startRow, selection.value.startCol)
+    e.preventDefault()
+  } else if (e.key === 'Tab') {
+    moveNext()
+    e.preventDefault()
+  } else if (e.key === 'ArrowUp') { moveUp() }
+  else if (e.key === 'ArrowDown') { moveDown() }
+  else if (e.key === 'ArrowLeft') {
+    if (selection.value.startCol > 0) {
+      selectCell(selection.value.startRow, selection.value.startCol - 1)
+      updateFormula()
+    }
+  } else if (e.key === 'ArrowRight') {
+    if (selection.value.startCol < colCount.value - 1) {
+      selectCell(selection.value.startRow, selection.value.startCol + 1)
+      updateFormula()
+    }
+  } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+    // 直接输入
+    formulaValue.value = e.key
+    startEdit(selection.value.startRow, selection.value.startCol)
   }
-  // Default: 50 rows x 10 cols
-  cols.value = 10
-  rows.value = Array.from({ length: 50 }, () => new Array(cols.value).fill(''))
 }
 
-initData(props.initialData)
-
-// Click outside to close context menu
-function onDocClick(e: MouseEvent) {
-  if (contextMenu.value.show) closeContext()
+// 点击外部关闭右键菜单
+function onGlobalClick() {
+  hideContextMenu()
 }
-onMounted(() => document.addEventListener('click', onDocClick))
-onUnmounted(() => document.removeEventListener('click', onDocClick))
+
+loadData()
+
+onMounted(() => {
+  document.addEventListener('keydown', onGlobalKeydown)
+  document.addEventListener('click', onGlobalClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', onGlobalKeydown)
+  document.removeEventListener('click', onGlobalClick)
+})
 
 defineExpose({ getData })
 </script>
 
 <style scoped>
-.sheet-wrapper {
+.sheet-container {
   display: flex;
   flex-direction: column;
   height: 100%;
   background: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* 公式栏 */
 .formula-bar {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #e0e0e0;
-  background: #fafafa;
+  border-bottom: 1px solid #d0d3d8;
   height: 32px;
+  font-size: 13px;
 }
 .cell-ref {
-  width: 72px;
+  width: 80px;
   text-align: center;
-  font-weight: 600;
+  border-right: 1px solid #d0d3d8;
+  font-weight: 500;
   color: #333;
-  border-right: 1px solid #e0e0e0;
-  font-size: 12px;
-  line-height: 32px;
-  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+}
+.formula-divider {
+  padding: 0 8px;
+  color: #666;
+  font-style: italic;
+  border-right: 1px solid #d0d3d8;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  background: #f8f9fa;
 }
 .formula-input {
   flex: 1;
   border: none;
   outline: none;
-  padding: 0 10px;
-  font-size: 13px;
+  padding: 0 8px;
   height: 100%;
-  background: transparent;
+  font-size: 13px;
 }
 
 /* 工具栏 */
 .sheet-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border-bottom: 1px solid #e0e0e0;
-  background: #fff;
-  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 12px;
+  border-bottom: 1px solid #d0d3d8;
+  background: #f8f9fa;
 }
 .sheet-info {
+  margin-left: auto;
   color: #999;
   font-size: 12px;
-  white-space: nowrap;
 }
 
-/* 表格主体 */
-.sheet-body {
+/* 表格 */
+.sheet-scroll {
   flex: 1;
   overflow: auto;
-  outline: none;
-  position: relative;
 }
-.sheet-scroll {
-  min-width: 100%;
-  display: inline-block;
-}
-
 .sheet-table {
   border-collapse: collapse;
   table-layout: fixed;
 }
 .sheet-table th,
 .sheet-table td {
-  border: 1px solid #d5d5d5;
+  border: 1px solid #d0d3d8;
   height: 26px;
-  padding: 0;
+  font-size: 13px;
   position: relative;
 }
 
-/* 表头 */
-.col-header, .row-header, .corner {
-  background: #f8f9fa;
-  color: #5f6368;
-  font-weight: 500;
-  font-size: 11px;
-  text-align: center;
-  user-select: none;
-  cursor: pointer;
+/* 行列头 */
+.corner {
+  background: #eef0f4;
+  width: 40px;
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 3;
 }
-.col-header:hover, .row-header:hover { background: #e8f0fe; }
-.col-header.selected, .row-header.selected { background: #d3e3fd; }
-.corner { width: 48px; }
+.col-header {
+  background: #eef0f4;
+  font-weight: 500;
+  color: #555;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  cursor: pointer;
+  user-select: none;
+}
+.col-header:hover { background: #dde0e6; }
+.col-header.selected { background: #c8ddf0; color: #1a73e8; }
+.col-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+}
+.row-header {
+  background: #eef0f4;
+  text-align: center;
+  color: #555;
+  font-weight: 500;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  cursor: pointer;
+  user-select: none;
+}
+.row-header:hover { background: #dde0e6; }
+.row-header.selected { background: #c8ddf0; color: #1a73e8; }
 
 /* 单元格 */
 .cell {
-  cursor: cell;
   padding: 0;
-}
-.cell-display {
-  padding: 2px 6px;
-  white-space: nowrap;
+  cursor: cell;
   overflow: hidden;
-  text-overflow: ellipsis;
-  height: 100%;
-  line-height: 22px;
 }
 .cell.selected {
+  background: #e8f0fe;
+}
+.cell.selected-head {
   outline: 2px solid #1a73e8;
   outline-offset: -1px;
   z-index: 1;
 }
-.cell.inRange {
-  background: #e8f0fe;
+.cell.editing {
+  padding: 0;
 }
-
-/* 编辑状态 */
-.cell-edit {
+.cell-display {
+  display: block;
+  padding: 0 6px;
+  line-height: 26px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cell-edit-input {
   width: 100%;
   height: 100%;
   border: none;
   outline: none;
-  padding: 2px 6px;
+  padding: 0 6px;
   font-size: 13px;
   font-family: inherit;
   background: #fff;
-  box-shadow: inset 0 0 0 2px #1a73e8;
 }
 
 /* 右键菜单 */
 .context-menu {
   position: fixed;
   background: #fff;
-  border: 1px solid #ddd;
+  border: 1px solid #d0d3d8;
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-  padding: 4px 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
   z-index: 1000;
   min-width: 160px;
+  padding: 4px 0;
 }
-.ctx-item {
+.menu-item {
   padding: 6px 16px;
-  cursor: pointer;
   font-size: 13px;
+  cursor: pointer;
   color: #333;
 }
-.ctx-item:hover { background: #f0f0f0; }
-.ctx-item.danger { color: #e53935; }
-.ctx-item.danger:hover { background: #fce8e6; }
-.ctx-sep { height: 1px; background: #e0e0e0; margin: 4px 0; }
+.menu-item:hover {
+  background: #f0f5ff;
+  color: #1a73e8;
+}
+.menu-divider {
+  height: 1px;
+  background: #e8e8e8;
+  margin: 4px 0;
+}
 </style>

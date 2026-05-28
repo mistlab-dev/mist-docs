@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/service"
+	"github.com/c-wind/mist-docs/internal/store"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // ==================== 文件夹 ====================
@@ -93,6 +97,53 @@ func UpdateFolder(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "已更新"})
+}
+
+// ================== 文件上传 ==================
+
+func UploadFile(c *gin.Context) {
+	role := c.GetString("role")
+	if role != "super_admin" && role != "dept_admin" && role != "member" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "未找到文件"})
+		return
+	}
+
+	// 文件大小限制 5MB
+	if file.Size > 5*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件太大，最大5MB"})
+		return
+	}
+
+	// 生成文件名
+	ext := filepath.Ext(file.Filename)
+	filename := uuid.New().String() + ext
+	savePath := filepath.Join(store.RootPath(), "uploads", filename)
+
+	// 确保目录存在
+	os.MkdirAll(filepath.Dir(savePath), 0755)
+
+	// 保存文件
+	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败"})
+		return
+	}
+
+	// 返回URL
+	url := fmt.Sprintf("/api/files/%s", filename)
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"url": url, "filename": filename}})
+}
+
+func GetFile(c *gin.Context) {
+	filename := c.Param("filename")
+	fullPath := filepath.Join(store.RootPath(), "uploads", filename)
+
+	c.File(fullPath)
 }
 
 func DeleteFolder(c *gin.Context) {

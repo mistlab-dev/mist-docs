@@ -120,6 +120,7 @@ func main() {
 	{
 		// 公开
 		api.POST("/auth/login", handler.Login)
+		api.GET("/files/:filename", handler.GetFile)
 
 		// 需认证
 		auth := api.Group("")
@@ -149,6 +150,7 @@ func main() {
 			auth.POST("/docs/folders", handler.CreateFolder)
 			auth.PUT("/docs/folders/:id", handler.UpdateFolder)
 			auth.DELETE("/docs/folders/:id", handler.DeleteFolder)
+			auth.POST("/docs/upload", handler.UploadFile)
 			auth.GET("/docs/documents", handler.ListDocuments)
 			auth.POST("/docs/documents", handler.CreateDocument)
 			auth.PUT("/docs/documents/:id", handler.UpdateDocument)
