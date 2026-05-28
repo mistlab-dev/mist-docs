@@ -28,6 +28,11 @@ func main() {
 	}
 	defer database.Close()
 
+	// 初始化文件存储
+	if err := handler.InitStore(); err != nil {
+		log.Fatalf("文件存储初始化失败: %v", err)
+	}
+
 	// 初始化路由
 	r := gin.Default()
 	r.Use(middleware.CORS())
