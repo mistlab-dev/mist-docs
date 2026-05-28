@@ -1,6 +1,6 @@
--- MistDocs 初始化数据库
+-- MistDocs 初始化（表名前缀 md_ 避免与 mist_team 表冲突）
 
-CREATE TABLE IF NOT EXISTS departments (
+CREATE TABLE IF NOT EXISTS md_departments (
     id VARCHAR(36) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     parent_id VARCHAR(36) DEFAULT NULL,
@@ -9,10 +9,10 @@ CREATE TABLE IF NOT EXISTS departments (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_parent (parent_id),
-    CONSTRAINT fk_dept_parent FOREIGN KEY (parent_id) REFERENCES departments(id) ON DELETE SET NULL
+    CONSTRAINT fk_md_dept_parent FOREIGN KEY (parent_id) REFERENCES md_departments(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS md_users (
     id VARCHAR(36) PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
@@ -27,10 +27,10 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_dept (department_id),
     INDEX idx_username (username),
-    CONSTRAINT fk_user_dept FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
+    CONSTRAINT fk_md_user_dept FOREIGN KEY (department_id) REFERENCES md_departments(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS doc_folders (
+CREATE TABLE IF NOT EXISTS md_folders (
     id VARCHAR(36) PRIMARY KEY,
     name VARCHAR(200) NOT NULL,
     parent_id VARCHAR(36) DEFAULT NULL,
@@ -40,11 +40,11 @@ CREATE TABLE IF NOT EXISTS doc_folders (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_parent (parent_id),
     INDEX idx_dept (department_id),
-    CONSTRAINT fk_folder_parent FOREIGN KEY (parent_id) REFERENCES doc_folders(id) ON DELETE CASCADE,
-    CONSTRAINT fk_folder_dept FOREIGN KEY (department_id) REFERENCES departments(id)
+    CONSTRAINT fk_md_folder_parent FOREIGN KEY (parent_id) REFERENCES md_folders(id) ON DELETE CASCADE,
+    CONSTRAINT fk_md_folder_dept FOREIGN KEY (department_id) REFERENCES md_departments(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS documents (
+CREATE TABLE IF NOT EXISTS md_documents (
     id VARCHAR(36) PRIMARY KEY,
     folder_id VARCHAR(36) DEFAULT NULL,
     department_id VARCHAR(36) NOT NULL,
@@ -62,11 +62,11 @@ CREATE TABLE IF NOT EXISTS documents (
     INDEX idx_dept (department_id),
     INDEX idx_status (status),
     INDEX idx_type (type),
-    CONSTRAINT fk_doc_folder FOREIGN KEY (folder_id) REFERENCES doc_folders(id) ON DELETE SET NULL,
-    CONSTRAINT fk_doc_dept FOREIGN KEY (department_id) REFERENCES departments(id)
+    CONSTRAINT fk_md_doc_folder FOREIGN KEY (folder_id) REFERENCES md_folders(id) ON DELETE SET NULL,
+    CONSTRAINT fk_md_doc_dept FOREIGN KEY (department_id) REFERENCES md_departments(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS doc_versions (
+CREATE TABLE IF NOT EXISTS md_versions (
     id VARCHAR(36) PRIMARY KEY,
     document_id VARCHAR(36) NOT NULL,
     version INT NOT NULL,
@@ -76,10 +76,10 @@ CREATE TABLE IF NOT EXISTS doc_versions (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_doc (document_id),
     UNIQUE KEY uk_doc_version (document_id, version),
-    CONSTRAINT fk_version_doc FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+    CONSTRAINT fk_md_version_doc FOREIGN KEY (document_id) REFERENCES md_documents(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS doc_permissions (
+CREATE TABLE IF NOT EXISTS md_permissions (
     id VARCHAR(36) PRIMARY KEY,
     resource_type VARCHAR(10) NOT NULL,
     resource_id VARCHAR(36) NOT NULL,
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS doc_permissions (
     UNIQUE KEY uk_perm (resource_type, resource_id, target_type, target_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS doc_audits (
+CREATE TABLE IF NOT EXISTS md_audits (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36) NOT NULL,
     user_name VARCHAR(100) DEFAULT NULL,
@@ -114,5 +114,5 @@ CREATE TABLE IF NOT EXISTS doc_audits (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 默认超级管理员（密码: Admin@2026）
-INSERT IGNORE INTO users (id, username, password, name, role) VALUES
+INSERT IGNORE INTO md_users (id, username, password, name, role) VALUES
 ('u_admin', 'admin', '$2a$10$placeholder', '超级管理员', 'super_admin');

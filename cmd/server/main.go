@@ -1,9 +1,12 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
-	"os"
 
+	"github.com/c-wind/mist-docs/internal/config"
+	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/handler"
 	"github.com/c-wind/mist-docs/internal/middleware"
 	"github.com/c-wind/mist-docs/internal/ws"
@@ -11,37 +14,53 @@ import (
 )
 
 func main() {
-	r := gin.Default()
+	configFile := flag.String("c", "configs/config.yaml", "配置文件路径")
+	flag.Parse()
 
-	// Middleware
+	// 加载配置
+	if err := config.Load(*configFile); err != nil {
+		log.Fatalf("加载配置失败: %v", err)
+	}
+
+	// 初始化数据库
+	if err := database.Init(config.C.Database); err != nil {
+		log.Fatalf("数据库连接失败: %v", err)
+	}
+	defer database.Close()
+
+	// 初始化路由
+	r := gin.Default()
 	r.Use(middleware.CORS())
 	r.Use(middleware.Recovery())
 
-	// Static files
+	// 静态文件
 	r.Static("/assets", "./web/dist/assets")
-	r.StaticFile("/", "./web/dist/index.html")
+	r.NoRoute(func(c *gin.Context) {
+		c.File("./web/dist/index.html")
+	})
 
-	// API group
+	// API
 	api := r.Group("/api")
 	{
-		// Public
+		// 公开
 		api.POST("/auth/login", handler.Login)
 
-		// Authenticated
+		// 需认证
 		auth := api.Group("")
 		auth.Use(middleware.JWTAuth())
 		{
 			auth.POST("/auth/logout", handler.Logout)
 			auth.GET("/auth/me", handler.Me)
+			auth.PUT("/auth/password", handler.ChangePassword)
 
-			// Departments
+			// 部门
 			auth.GET("/departments", handler.ListDepartments)
 			auth.POST("/departments", handler.CreateDepartment)
 			auth.PUT("/departments/:id", handler.UpdateDepartment)
 			auth.DELETE("/departments/:id", handler.DeleteDepartment)
 			auth.POST("/departments/import", handler.ImportDepartments)
 
-			// Users
+			// 用户
 			auth.GET("/users", handler.ListUsers)
 			auth.POST("/users", handler.CreateUser)
 			auth.PUT("/users/:id", handler.UpdateUser)
@@ -49,7 +68,7 @@ func main() {
 			auth.PUT("/users/:id/reset-password", handler.ResetPassword)
 			auth.POST("/users/import", handler.ImportUsers)
 
-			// Documents
+			// 文档（stub）
 			auth.GET("/docs/tree", handler.DocTree)
 			auth.POST("/docs/folders", handler.CreateFolder)
 			auth.PUT("/docs/folders/:id", handler.UpdateFolder)
@@ -66,13 +85,13 @@ func main() {
 			auth.POST("/docs/trash/restore/:id", handler.RestoreFromTrash)
 			auth.DELETE("/docs/trash/purge/:id", handler.PurgeFromTrash)
 
-			// Permissions
+			// 权限（stub）
 			auth.GET("/permissions", handler.ListPermissions)
 			auth.POST("/permissions", handler.SetPermission)
 			auth.DELETE("/permissions/:id", handler.RemovePermission)
 			auth.GET("/permissions/check", handler.CheckPermission)
 
-			// Audit
+			// 审计（stub）
 			auth.GET("/audits", handler.ListAudits)
 			auth.GET("/audits/export", handler.ExportAudits)
 			auth.GET("/audits/stats", handler.AuditStats)
@@ -86,10 +105,9 @@ func main() {
 		ws.ServeWS(hub, c)
 	})
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8900"
+	addr := fmt.Sprintf("%s:%d", config.C.Server.Host, config.C.Server.Port)
+	log.Printf("MistDocs 启动: %s", addr)
+	if err := r.Run(addr); err != nil {
+		log.Fatalf("启动失败: %v", err)
 	}
-	log.Printf("MistDocs listening on :%s", port)
-	r.Run(":" + port)
 }

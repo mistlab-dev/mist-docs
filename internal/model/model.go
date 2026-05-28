@@ -7,7 +7,7 @@ import "time"
 type Department struct {
 	ID        string    `json:"id" db:"id"`
 	Name      string    `json:"name" db:"name"`
-	ParentID  *string   `json:"parent_id" db:"parent_id"`
+	ParentID  string    `json:"parent_id" db:"parent_id"`
 	SortOrder int       `json:"sort_order" db:"sort_order"`
 	Status    int       `json:"status" db:"status"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
@@ -43,7 +43,7 @@ type User struct {
 type DocFolder struct {
 	ID           string    `json:"id" db:"id"`
 	Name         string    `json:"name" db:"name"`
-	ParentID     *string   `json:"parent_id" db:"parent_id"`
+	ParentID     string    `json:"parent_id" db:"parent_id"`
 	DepartmentID string    `json:"department_id" db:"department_id"`
 	CreatedBy    string    `json:"created_by" db:"created_by"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`

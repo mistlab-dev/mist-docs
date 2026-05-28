@@ -8,9 +8,9 @@ server:
 database:
   host: "127.0.0.1"
   port: 3306
-  user: "mist_docs"
-  password: "MistDocs@2026"
-  dbname: "mist_docs"
+  user: "mist_team"
+  password: "MistTeam@2026"
+  dbname: "mist_team"
   max_open_conns: 20
   max_idle_conns: 10
 

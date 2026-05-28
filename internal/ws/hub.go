@@ -2,6 +2,7 @@ package ws
 
 import (
 	"log"
+	"net/http"
 	"sync"
 
 	"github.com/gin-gonic/gin"

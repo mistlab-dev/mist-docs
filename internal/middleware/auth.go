@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -35,7 +34,7 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
-		claims, err := parseJWT(token)
+		claims, err := ParseToken(token)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "token 无效"})
 			c.Abort()
@@ -52,20 +51,8 @@ func JWTAuth() gin.HandlerFunc {
 
 func extractToken(c *gin.Context) string {
 	auth := c.GetHeader("Authorization")
-	if strings.HasPrefix(auth, "Bearer ") {
-		return strings.TrimPrefix(auth, "Bearer ")
+	if len(auth) > 7 && auth[:7] == "Bearer " {
+		return auth[7:]
 	}
 	return c.Query("token")
-}
-
-// TODO: implement JWT parse
-func parseJWT(token string) (*UserClaims, error) {
-	return nil, nil
-}
-
-type UserClaims struct {
-	UserID       string
-	Username     string
-	Role         string
-	DepartmentID string
 }
