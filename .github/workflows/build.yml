@@ -26,7 +26,7 @@ jobs:
 
       - name: Build Frontend
         working-directory: web
-        run: ./node_modules/.bin/vite build
+        run: npm run build
 
       - name: Build Backend
         run: |
