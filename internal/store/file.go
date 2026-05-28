@@ -1,12 +1,14 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/c-wind/mist-docs/internal/config"
+	"github.com/c-wind/mist-docs/internal/crypto"
 )
 
 // Init ensures storage root exists
@@ -16,6 +18,25 @@ func Init() error {
 		root = "/var/lib/mist-docs/files"
 	}
 	return os.MkdirAll(root, 0755)
+}
+
+// InitCrypto initializes encryption (must be called before any file operations)
+func InitCrypto() error {
+	if err := crypto.InitKeyTables(context.Background()); err != nil {
+		return fmt.Errorf("init key tables: %w", err)
+	}
+
+	if err := crypto.InitMasterKey(); err != nil {
+		// Allow running without encryption (dev mode)
+		fmt.Println("⚠️  Running without encryption (master key not configured)")
+		return nil
+	}
+
+	if err := crypto.EnsureDEK(context.Background()); err != nil {
+		return fmt.Errorf("ensure DEK: %w", err)
+	}
+
+	return nil
 }
 
 // RootPath returns the storage root
@@ -42,42 +63,62 @@ func CurrentPath(deptID, docID string) string {
 	return filepath.Join(DocPath(deptID, docID), "current.dat")
 }
 
-// WriteVersion writes data as a new version file
+// WriteVersion writes encrypted data as a new version file
 func WriteVersion(deptID, docID string, version int, data []byte) (string, int64, error) {
 	dir := DocPath(deptID, docID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", 0, fmt.Errorf("create doc dir: %w", err)
 	}
 
+	// Encrypt if key is loaded
+	encryptedData, err := crypto.EncryptDocument(data)
+	if err != nil {
+		return "", 0, fmt.Errorf("encrypt: %w", err)
+	}
+
 	path := VersionPath(deptID, docID, version)
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, encryptedData, 0644); err != nil {
 		return "", 0, fmt.Errorf("write version file: %w", err)
 	}
 
 	// Also update current
 	current := CurrentPath(deptID, docID)
-	os.WriteFile(current, data, 0644)
+	os.WriteFile(current, encryptedData, 0644)
 
-	return path, int64(len(data)), nil
+	return path, int64(len(data)), nil // return original size, not encrypted size
 }
 
-// ReadCurrent reads the current version data
+// ReadCurrent reads and decrypts the current version data
 func ReadCurrent(deptID, docID string) ([]byte, error) {
 	path := CurrentPath(deptID, docID)
-	data, err := os.ReadFile(path)
+	encryptedData, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read current: %w", err)
 	}
+
+	// Decrypt if key is loaded
+	data, err := crypto.DecryptDocument(encryptedData)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt: %w", err)
+	}
+
 	return data, nil
 }
 
-// ReadVersion reads a specific version
+// ReadVersion reads and decrypts a specific version
 func ReadVersion(deptID, docID string, version int) ([]byte, error) {
 	path := VersionPath(deptID, docID, version)
-	data, err := os.ReadFile(path)
+	encryptedData, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read version %d: %w", version, err)
 	}
+
+	// Decrypt
+	data, err := crypto.DecryptDocument(encryptedData)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt version %d: %w", version, err)
+	}
+
 	return data, nil
 }
 
@@ -154,4 +195,9 @@ func VersionKeep() int {
 		return 20
 	}
 	return v
+}
+
+// IsEncryptionEnabled checks if encryption is active
+func IsEncryptionEnabled() bool {
+	return crypto.IsMasterKeyLoaded()
 }

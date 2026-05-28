@@ -8,7 +8,6 @@ import (
 
 	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/service"
-	"github.com/c-wind/mist-docs/internal/store"
 	"github.com/gin-gonic/gin"
 )
 
@@ -465,12 +464,6 @@ func AuditStats(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": stats})
-}
-
-// ==================== init ====================
-
-func InitStore() error {
-	return store.Init()
 }
 
 func atoi(s string, def int) int {

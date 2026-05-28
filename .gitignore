@@ -5,3 +5,4 @@ dist/
 .env
 .env.local
 /configs/config.local.yaml
+secrets/master.key
