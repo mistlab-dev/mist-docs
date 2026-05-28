@@ -428,3 +428,118 @@ func cleanOldVersions(docID, deptID string) {
 		}
 	}
 }
+
+// ==================== 搜索 ====================
+
+func SearchDocuments(ctx context.Context, keyword, deptID string, page, pageSize int) ([]*model.Document, int, error) {
+	where := "WHERE d.status = 1 AND d.title LIKE ?"
+	args := []interface{}{"%" + keyword + "%"}
+	if deptID != "" {
+		where += " AND d.department_id = ?"
+		args = append(args, deptID)
+	}
+
+	var total int
+	database.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total)
+
+	offset := (page - 1) * pageSize
+	query := `SELECT d.id, d.folder_id, d.department_id, d.title, d.type, d.file_path, d.file_size, d.version, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at
+		FROM md_documents d ` + where + ` ORDER BY d.updated_at DESC LIMIT ? OFFSET ?`
+	args = append(args, pageSize, offset)
+
+	rows, err := database.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var docs []*model.Document
+	for rows.Next() {
+		doc := &model.Document{}
+		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FilePath, &doc.FileSize, &doc.Version, &doc.Status, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+			continue
+		}
+		docs = append(docs, doc)
+	}
+	return docs, total, nil
+}
+
+// ==================== 最近文档 ====================
+
+func RecentDocuments(ctx context.Context, userID string, limit int) ([]*model.Document, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	rows, err := database.DB.QueryContext(ctx, `
+		SELECT d.id, d.folder_id, d.department_id, d.title, d.type, d.file_path, d.file_size, d.version, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at
+		FROM md_documents d
+		INNER JOIN md_audits a ON a.resource_id = d.id AND a.user_id = ? AND a.action = 'view'
+		WHERE d.status = 1
+		GROUP BY d.id
+		ORDER BY MAX(a.created_at) DESC
+		LIMIT ?
+	`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var docs []*model.Document
+	for rows.Next() {
+		doc := &model.Document{}
+		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FilePath, &doc.FileSize, &doc.Version, &doc.Status, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+			continue
+		}
+		docs = append(docs, doc)
+	}
+	return docs, nil
+}
+
+// ==================== 收藏 ====================
+
+func AddFavorite(ctx context.Context, userID, docID string) error {
+	id := uuid.New().String()
+	_, err := database.DB.ExecContext(ctx,
+		"INSERT IGNORE INTO md_favorites (id, user_id, document_id) VALUES (?, ?, ?)",
+		id, userID, docID)
+	return err
+}
+
+func RemoveFavorite(ctx context.Context, userID, docID string) error {
+	_, err := database.DB.ExecContext(ctx,
+		"DELETE FROM md_favorites WHERE user_id = ? AND document_id = ?",
+		userID, docID)
+	return err
+}
+
+func ListFavorites(ctx context.Context, userID string) ([]*model.Document, error) {
+	rows, err := database.DB.QueryContext(ctx, `
+		SELECT d.id, d.folder_id, d.department_id, d.title, d.type, d.file_path, d.file_size, d.version, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at
+		FROM md_favorites f
+		INNER JOIN md_documents d ON d.id = f.document_id AND d.status = 1
+		WHERE f.user_id = ?
+		ORDER BY f.created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var docs []*model.Document
+	for rows.Next() {
+		doc := &model.Document{}
+		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FilePath, &doc.FileSize, &doc.Version, &doc.Status, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+			continue
+		}
+		docs = append(docs, doc)
+	}
+	return docs, nil
+}
+
+func IsFavorite(ctx context.Context, userID, docID string) bool {
+	var count int
+	database.DB.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM md_favorites WHERE user_id = ? AND document_id = ?",
+		userID, docID).Scan(&count)
+	return count > 0
+}

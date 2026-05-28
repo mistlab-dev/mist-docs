@@ -185,6 +185,73 @@ func ListDocuments(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": docs, "total": total, "page": page, "page_size": pageSize})
 }
 
+func SearchDocuments(c *gin.Context) {
+	keyword := c.Query("q")
+	if keyword == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请输入搜索关键词"})
+		return
+	}
+	deptID := c.Query("department_id")
+	role := c.GetString("role")
+	if role == "dept_admin" {
+		deptID = c.GetString("department_id")
+	}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	docs, total, err := service.SearchDocuments(c.Request.Context(), keyword, deptID, page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": docs, "total": total, "page": page, "page_size": pageSize})
+}
+
+func RecentDocuments(c *gin.Context) {
+	userID := c.GetString("user_id")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+
+	docs, err := service.RecentDocuments(c.Request.Context(), userID, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": docs})
+}
+
+func AddFavorite(c *gin.Context) {
+	userID := c.GetString("user_id")
+	docID := c.Param("id")
+
+	if err := service.AddFavorite(c.Request.Context(), userID, docID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已收藏"})
+}
+
+func RemoveFavorite(c *gin.Context) {
+	userID := c.GetString("user_id")
+	docID := c.Param("id")
+
+	if err := service.RemoveFavorite(c.Request.Context(), userID, docID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已取消收藏"})
+}
+
+func ListFavorites(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	docs, err := service.ListFavorites(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": docs})
+}
+
 func CreateDocument(c *gin.Context) {
 	var req struct {
 		Title        string `json:"title" binding:"required"`

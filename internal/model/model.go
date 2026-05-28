@@ -123,3 +123,17 @@ type DocAudit struct {
 	IP           string    `json:"ip" db:"ip"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 }
+
+// ==================== 收藏 ====================
+
+type DocFavorite struct {
+	ID         string    `json:"id" db:"id"`
+	UserID     string    `json:"user_id" db:"user_id"`
+	DocumentID string    `json:"document_id" db:"document_id"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+
+	// 非数据库字段
+	DocTitle   string `json:"doc_title,omitempty"`
+	DocType    string `json:"doc_type,omitempty"`
+	UpdatedAt  string `json:"updated_at,omitempty"`
+}
