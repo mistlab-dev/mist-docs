@@ -41,6 +41,30 @@ func CreateUser(ctx context.Context, u *model.User, rawPassword string) error {
 	}
 	u.Status = 1
 
+	// 先检查是否有同名用户
+	var existingID string
+	var existingStatus int
+	err = database.DB.QueryRowContext(ctx,
+		`SELECT id, status FROM md_users WHERE username = ?`, u.Username,
+	).Scan(&existingID, &existingStatus)
+	if err == nil && existingID != "" {
+		// 已存在用户，更新密码和状态
+		_, updateErr := database.DB.ExecContext(ctx,
+			`UPDATE md_users SET password=?, name=?, email=?, phone=?, department_id=?, role=?, status=1, updated_at=NOW() WHERE id=?`,
+			u.Password, u.Name, nullStr(u.Email), nullStr(u.Phone), nullStr(u.DepartmentID), u.Role, existingID,
+		)
+		if updateErr != nil {
+			// 外键等约束失败时，只更新密码和状态
+			_, _ = database.DB.ExecContext(ctx,
+				`UPDATE md_users SET password=?, status=1, updated_at=NOW() WHERE id=?`,
+				u.Password, existingID,
+			)
+		}
+		u.ID = existingID
+		return nil
+	}
+
+	// 新用户插入
 	_, err = database.DB.ExecContext(ctx,
 		`INSERT INTO md_users (id, username, password, name, email, phone, department_id, role, status)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
