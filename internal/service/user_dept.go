@@ -172,7 +172,7 @@ func ResetPassword(ctx context.Context, userID, rawPassword string) error {
 		return err
 	}
 	_, err = database.DB.ExecContext(ctx,
-		`UPDATE md_users SET password=?, updated_at=NOW() WHERE id=?`, string(hash), userID)
+		`UPDATE md_users SET password=?, status=1, updated_at=NOW() WHERE id=?`, string(hash), userID)
 	return err
 }
 
