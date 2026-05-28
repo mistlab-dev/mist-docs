@@ -171,6 +171,9 @@ func main() {
 			auth.GET("/audits", handler.ListAudits)
 			auth.GET("/audits/export", handler.ExportAudits)
 			auth.GET("/audits/stats", handler.AuditStats)
+
+			// 存储监控
+			auth.GET("/storage/status", handler.StorageStatus)
 		}
 	}
 
