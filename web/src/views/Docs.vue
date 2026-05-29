@@ -108,6 +108,8 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="openDoc(doc)">打开</el-dropdown-item>
+                    <el-dropdown-item @click="showRename(doc)">重命名</el-dropdown-item>
+                    <el-dropdown-item @click="showMove(doc)">移动到...</el-dropdown-item>
                     <el-dropdown-item @click="deleteDoc(doc)" divided>
                       <span style="color:#f56c6c">删除</span>
                     </el-dropdown-item>
@@ -146,6 +148,37 @@
         <el-button type="primary" @click="createDoc('sheet')">创建</el-button>
       </template>
     </el-dialog>
+
+    <!-- 重命名 -->
+    <el-dialog v-model="renameDialog" title="重命名" width="400">
+      <el-input v-model="renameTitle" placeholder="新标题" />
+      <template #footer>
+        <el-button @click="renameDialog = false">取消</el-button>
+        <el-button type="primary" @click="doRename">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 移动文档 -->
+    <el-dialog v-model="moveDialog" title="移动到文件夹" width="400">
+      <el-tree
+        :data="treeData"
+        :props="{ label: 'name', children: 'children' }"
+        node-key="id"
+        highlight-current
+        default-expand-all
+        @node-click="selectMoveTarget"
+      >
+        <template #default="{ data }">
+          <span style="display:flex;align-items:center;gap:4px">
+            <el-icon><Folder /></el-icon> {{ data.name }}
+          </span>
+        </template>
+      </el-tree>
+      <template #footer>
+        <el-button @click="moveDialog = false">取消</el-button>
+        <el-button type="primary" @click="doMove" :disabled="!moveTargetFolder">移动</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -169,6 +202,12 @@ const sidebarOpen = ref(false)
 const showNewFolder = ref(false)
 const showNewDoc = ref(false)
 const showNewSheet = ref(false)
+const renameDialog = ref(false)
+const renameTitle = ref('')
+const renameDoc = ref<any>(null)
+const moveDialog = ref(false)
+const moveDoc = ref<any>(null)
+const moveTargetFolder = ref('')
 const newFolderName = ref('')
 const newDocTitle = ref('')
 
@@ -289,6 +328,38 @@ async function deleteDoc(row: any) {
   await ElMessageBox.confirm(`确定删除「${row.title}」？`, '删除确认', { type: 'warning' })
   await http.delete(`/docs/documents/${row.id}`)
   ElMessage.success('已删除')
+  switchView(viewMode.value)
+}
+
+function showRename(doc: any) {
+  renameDoc.value = doc
+  renameTitle.value = doc.title
+  renameDialog.value = true
+}
+
+async function doRename() {
+  if (!renameTitle.value.trim()) return ElMessage.warning('标题不能为空')
+  await http.put(`/docs/documents/${renameDoc.value.id}`, { title: renameTitle.value })
+  renameDoc.value.title = renameTitle.value
+  renameDialog.value = false
+  ElMessage.success('已重命名')
+}
+
+function showMove(doc: any) {
+  moveDoc.value = doc
+  moveTargetFolder.value = ''
+  moveDialog.value = true
+}
+
+function selectMoveTarget(data: any) {
+  moveTargetFolder.value = data.id
+}
+
+async function doMove() {
+  if (!moveTargetFolder.value) return
+  await http.put(`/docs/documents/${moveDoc.value.id}`, { folder_id: moveTargetFolder.value })
+  moveDialog.value = false
+  ElMessage.success('已移动')
   switchView(viewMode.value)
 }
 
