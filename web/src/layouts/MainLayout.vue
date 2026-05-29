@@ -1,7 +1,10 @@
 <template>
   <el-container class="main-layout">
+    <!-- 移动端遮罩 -->
+    <div class="sidebar-overlay" :class="{ open: mobileMenu }" @click="mobileMenu = false"></div>
+
     <!-- 侧边栏 -->
-    <el-aside :width="collapsed ? '64px' : '220px'" class="sidebar">
+    <el-aside :width="collapsed ? '64px' : '220px'" class="sidebar" :class="{ open: mobileMenu }">
       <div class="logo" @click="collapsed = !collapsed">
         <span v-if="!collapsed" class="logo-text">MistDocs</span>
         <span v-else class="logo-icon">📄</span>
@@ -13,6 +16,7 @@
         background-color="#1d1e2c"
         text-color="#a0a4b8"
         active-text-color="#409eff"
+        @select="onMenuSelect"
       >
         <el-menu-item index="/docs">
           <el-icon><Folder /></el-icon>
@@ -57,6 +61,9 @@
     <!-- 主内容 -->
     <el-container>
       <el-header class="topbar">
+        <el-button class="menu-btn" @click="mobileMenu = !mobileMenu" text>
+          <el-icon :size="20"><Operation /></el-icon>
+        </el-button>
         <div class="breadcrumb">
           <el-breadcrumb separator="/">
             <el-breadcrumb-item :to="{ path: '/docs' }">文档</el-breadcrumb-item>
@@ -146,6 +153,12 @@ const router = useRouter()
 const auth = useAuthStore()
 const isDark = ref(false)
 const collapsed = ref(false)
+const mobileMenu = ref(false)
+
+function onMenuSelect() {
+  // 移动端点击菜单后自动关闭
+  if (window.innerWidth <= 768) mobileMenu.value = false
+}
 
 const showPasswordDialog = ref(false)
 const passwordForm = ref({ old: '', new_: '' })
@@ -294,4 +307,30 @@ onMounted(() => {
 .notif-time { font-size: 12px; color: #c0c4cc; }
 .notif-actions { margin-top: 4px; display: flex; gap: 8px; }
 .no-data { text-align: center; padding: 40px; color: #c0c4cc; }
+
+/* Mobile */
+.menu-btn { display: none; color: #fff !important; }
+.sidebar-overlay { display: none; }
+
+@media (max-width: 768px) {
+  .menu-btn { display: inline-flex !important; }
+  .sidebar-overlay {
+    display: none;
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(0,0,0,0.4);
+    z-index: 199;
+  }
+  .sidebar-overlay.open { display: block; }
+  .el-aside.sidebar {
+    position: fixed !important;
+    top: 0; left: -260px;
+    height: 100vh;
+    z-index: 200;
+    transition: left 0.3s;
+  }
+  .el-aside.sidebar.open { left: 0; }
+  .breadcrumb { display: none; }
+  .user-name-text { display: none; }
+}
 </style>
