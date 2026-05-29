@@ -65,4 +65,13 @@ html.dark .login-card h2 { color: #e0e0e0; }
 html.dark .el-table { --el-table-bg-color: #1a1a2e; --el-table-tr-bg-color: #1a1a2e; --el-table-header-bg-color: #16213e; --el-table-row-hover-bg-color: #16213e; --el-table-border-color: #363660; }
 html.dark .el-dialog { background: #1a1a2e; }
 html.dark .el-card { background: #1a1a2e; border-color: #363660; }
+
+/* Print */
+@media print {
+  .editor-header, .editor-footer, .el-aside, .topbar, .sidebar,
+  .doc-tags-bar, .card-actions, .batch-bar, .toolbar, .menu-btn { display: none !important; }
+  .editor-page { height: auto !important; }
+  .ProseMirror { padding: 0 !important; overflow: visible !important; }
+  body { background: #fff !important; color: #000 !important; }
+}
 </style>

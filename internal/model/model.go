@@ -137,3 +137,24 @@ type DocFavorite struct {
 	DocType    string `json:"doc_type,omitempty"`
 	UpdatedAt  string `json:"updated_at,omitempty"`
 }
+
+// ==================== 标签 ====================
+
+type DocTag struct {
+	ID        string    `json:"id" db:"id"`
+	Name      string    `json:"name" db:"name"`
+	Color     string    `json:"color" db:"color"` // hex color like #409eff
+	UserID    string    `json:"user_id" db:"user_id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+
+	// 非数据库字段
+	DocCount int `json:"doc_count,omitempty"`
+}
+
+// 文档-标签关联
+type DocTagRelation struct {
+	ID         string    `json:"id" db:"id"`
+	DocumentID string    `json:"document_id" db:"document_id"`
+	TagID      string    `json:"tag_id" db:"tag_id"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+}

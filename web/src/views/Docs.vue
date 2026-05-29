@@ -43,6 +43,15 @@
           </div>
         </div>
 
+        <!-- 标签 -->
+        <div v-if="sidebarTags.length" class="sidebar-section">
+          <div class="tree-header">标签</div>
+          <div v-for="tag in sidebarTags" :key="tag.id" class="section-item" @click="filterByTag(tag.id)">
+            <span class="tag-dot" :style="{ background: tag.color }"></span>
+            {{ tag.name }} <span style="color:#999">({{ tag.doc_count }})</span>
+          </div>
+        </div>
+
         <!-- 文件夹树 -->
         <div class="tree-header">文件夹</div>
         <el-tree
@@ -144,8 +153,37 @@
     </el-dialog>
 
     <!-- 新建文档 -->
-    <el-dialog v-model="showNewDoc" title="新建文档" width="400">
+    <el-dialog v-model="showNewDoc" title="新建文档" width="460">
       <el-input v-model="newDocTitle" placeholder="文档标题" />
+      <div style="margin-top:12px">
+        <p style="color:#999;font-size:13px;margin-bottom:8px">选择模板：</p>
+        <div class="template-grid">
+          <div class="tpl-card" :class="{ active: newDocTemplate === '' }" @click="newDocTemplate = ''">
+            <div class="tpl-icon">📝</div>
+            <div class="tpl-label">空白文档</div>
+          </div>
+          <div class="tpl-card" :class="{ active: newDocTemplate === 'meeting' }" @click="newDocTemplate = 'meeting'">
+            <div class="tpl-icon">📋</div>
+            <div class="tpl-label">会议纪要</div>
+          </div>
+          <div class="tpl-card" :class="{ active: newDocTemplate === 'weekly' }" @click="newDocTemplate = 'weekly'">
+            <div class="tpl-icon">📊</div>
+            <div class="tpl-label">周报</div>
+          </div>
+          <div class="tpl-card" :class="{ active: newDocTemplate === 'requirement' }" @click="newDocTemplate = 'requirement'">
+            <div class="tpl-icon">📐</div>
+            <div class="tpl-label">需求文档</div>
+          </div>
+          <div class="tpl-card" :class="{ active: newDocTemplate === 'api' }" @click="newDocTemplate = 'api'">
+            <div class="tpl-icon">🔌</div>
+            <div class="tpl-label">API 文档</div>
+          </div>
+          <div class="tpl-card" :class="{ active: newDocTemplate === 'readme' }" @click="newDocTemplate = 'readme'">
+            <div class="tpl-icon">📖</div>
+            <div class="tpl-label">README</div>
+          </div>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="showNewDoc = false">取消</el-button>
         <el-button type="primary" @click="createDoc('doc')">创建</el-button>
@@ -224,6 +262,7 @@ const docs = ref<any[]>([])
 const selectedDocs = ref<string[]>([])
 const showBatchMove = ref(false)
 const batchMoveTarget = ref('')
+const sidebarTags = ref<any[]>([])
 const currentFolder = ref<string | null>(null)
 const viewMode = ref('all')
 const search = ref('')
@@ -242,6 +281,15 @@ const moveDoc = ref<any>(null)
 const moveTargetFolder = ref('')
 const newFolderName = ref('')
 const newDocTitle = ref('')
+const newDocTemplate = ref('')
+
+const templates: Record<string, string> = {
+  meeting: '<h2>会议纪要</h2><p><strong>日期：</strong>' + new Date().toLocaleDateString() + '</p><h3>讨论内容</h3><ul><li></li></ul><h3>决议</h3><ul><li></li></ul><h3>待办事项</h3><table><thead><tr><th>任务</th><th>负责人</th><th>截止日期</th><th>状态</th></tr></thead><tbody><tr><td></td><td></td><td></td><td></td></tr></tbody></table>',
+  weekly: '<h2>周报 - ' + new Date().toLocaleDateString() + '</h2><h3>本周完成</h3><ul><li></li></ul><h3>进行中</h3><ul><li></li></ul><h3>下周计划</h3><ul><li></li></ul><h3>风险/问题</h3><ul><li></li></ul>',
+  requirement: '<h2>需求文档</h2><h3>1. 背景与目标</h3><p></p><h3>2. 用户故事</h3><p><strong>作为</strong> ___ <strong>我希望</strong> ___ <strong>以便</strong> ___</p><h3>3. 功能需求</h3><table><thead><tr><th>编号</th><th>功能</th><th>优先级</th><th>描述</th></tr></thead><tbody><tr><td>F-001</td><td></td><td></td><td></td></tr></tbody></table><h3>4. 非功能需求</h3><ul><li>性能：</li><li>安全：</li><li>兼容性：</li></ul><h3>5. 验收标准</h3><ul><li></li></ul>',
+  api: '<h2>API 文档</h2><h3>接口信息</h3><table><thead><tr><th>项目</th><th>内容</th></tr></thead><tbody><tr><td>Method</td><td>GET/POST/PUT/DELETE</td></tr><tr><td>Path</td><td>/api/v1/resource</td></tr><tr><td>认证</td><td>Bearer Token</td></tr></tbody></table><h3>请求参数</h3><table><thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td></td><td></td><td></td><td></td></tr></tbody></table><h3>响应示例</h3><pre><code>{"code":200,"data":{}}</code></pre>',
+  readme: '<h1>项目名称</h1><p>项目简介描述</p><h2>快速开始</h2><pre><code>npm install\nnpm run dev</code></pre><h2>功能特性</h2><ul><li></li></ul><h2>技术栈</h2><ul><li></li></ul><h2>许可证</h2><p>MIT</p>',
+}
 
 function formatTime(t: string): string {
   if (!t) return ''
@@ -345,13 +393,16 @@ async function createFolder() {
 
 async function createDoc(type: string) {
   if (!newDocTitle.value) return
+  const tplContent = type === 'doc' ? (templates[newDocTemplate.value] || '') : ''
   const { data } = await http.post('/docs/documents', {
     title: newDocTitle.value, type, folder_id: currentFolder.value,
+    ...(tplContent ? { content: tplContent } : {}),
   })
   ElMessage.success('已创建')
   showNewDoc.value = false
   showNewSheet.value = false
   newDocTitle.value = ''
+  newDocTemplate.value = ''
   loadDocs()
   router.push(`/docs/${data.data.id}`)
 }
@@ -450,7 +501,23 @@ onMounted(async () => {
   await loadFavoriteIds()
   loadTree()
   loadDocs()
+  loadSidebarTags()
 })
+
+async function loadSidebarTags() {
+  try {
+    const { data } = await http.get('/docs/tags')
+    sidebarTags.value = data || []
+  } catch {}
+}
+
+async function filterByTag(tagId: string) {
+  try {
+    searchMode.value = true
+    const { data } = await http.get(`/docs/tags/${tagId}/documents`)
+    docs.value = data || []
+  } catch {}
+}
 </script>
 
 <style scoped>
@@ -486,6 +553,10 @@ onMounted(async () => {
 .tree-header {
   padding: 10px 16px; font-weight: bold;
   border-bottom: 1px solid #e8e8e8; background: #f5f5f5;
+}
+.tag-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle;
 }
 .tree-node { display: flex; align-items: center; gap: 6px; font-size: 14px; }
 
@@ -591,4 +662,15 @@ onMounted(async () => {
 @media (min-width: 769px) {
   .menu-btn { display: none !important; }
 }
+
+/* Template grid */
+.template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tpl-card {
+  border: 2px solid #e8e8e8; border-radius: 8px; padding: 12px 8px;
+  text-align: center; cursor: pointer; transition: all 0.2s;
+}
+.tpl-card:hover { border-color: #409eff; background: #f5f7fa; }
+.tpl-card.active { border-color: #409eff; background: #ecf5ff; }
+.tpl-icon { font-size: 24px; margin-bottom: 4px; }
+.tpl-label { font-size: 12px; color: #606266; }
 </style>

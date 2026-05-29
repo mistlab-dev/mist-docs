@@ -163,6 +163,13 @@ func main() {
 			auth.GET("/docs/favorites", handler.ListFavorites)
 			auth.POST("/docs/favorites/:id", handler.AddFavorite)
 			auth.DELETE("/docs/favorites/:id", handler.RemoveFavorite)
+			// Tags
+			auth.GET("/docs/tags", handler.ListTags)
+			auth.POST("/docs/tags", handler.CreateTag)
+			auth.DELETE("/docs/tags/:id", handler.DeleteTag)
+			auth.GET("/docs/tags/:id/documents", handler.GetDocsByTag)
+			auth.GET("/docs/documents/:id/tags", handler.GetDocTags)
+			auth.PUT("/docs/documents/:id/tags", handler.SetDocTags)
 			auth.POST("/docs/documents", handler.CreateDocument)
 			auth.PUT("/docs/documents/:id", handler.UpdateDocument)
 			auth.DELETE("/docs/documents/:id", handler.DeleteDocument)

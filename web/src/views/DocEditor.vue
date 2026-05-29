@@ -162,6 +162,39 @@
       </template>
     </el-dialog>
 
+    <!-- 标签 -->
+    <div v-if="docTags.length" class="doc-tags-bar">
+      <el-tag
+        v-for="tag in docTags" :key="tag.id"
+        :color="tag.color" effect="dark" size="small"
+        closable @close="removeTag(tag.id)"
+        style="margin-right:6px"
+      >{{ tag.name }}</el-tag>
+      <el-button size="small" text @click="showTagDialog = true">+ 标签</el-button>
+    </div>
+
+    <!-- 标签管理弹窗 -->
+    <el-dialog v-model="showTagDialog" title="管理标签" width="400px">
+      <div v-if="allTags.length" style="margin-bottom:12px">
+        <p style="color:#999;font-size:13px;margin-bottom:8px">点击添加已有标签：</p>
+        <el-tag
+          v-for="tag in allTags" :key="tag.id"
+          :color="tag.color" effect="dark" size="small"
+          :class="{ 'tag-disabled': docTagIds.includes(tag.id) }"
+          style="margin:0 6px 6px 0;cursor:pointer"
+          @click="addTag(tag.id)"
+        >{{ tag.name }}</el-tag>
+      </div>
+      <div style="display:flex;gap:8px">
+        <el-input v-model="newTagName" placeholder="新标签名" size="small" style="flex:1" />
+        <el-color-picker v-model="newTagColor" size="small" />
+        <el-button size="small" type="primary" @click="createAndAddTag">创建</el-button>
+      </div>
+      <template #footer>
+        <el-button @click="showTagDialog = false">完成</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 移动文档弹窗 -->
     <el-dialog v-model="showMoveDialog" title="移动文档" width="400px">
       <p style="color:#999;margin-bottom:12px">选择目标文件夹：</p>
@@ -339,6 +372,56 @@ let wsProvider: MistWSProvider | null = null
 const showMoveDialog = ref(false)
 const moveTarget = ref('')
 const folderTree = ref<any[]>([])
+
+// 标签
+const docTags = ref<any[]>([])
+const allTags = ref<any[]>([])
+const docTagIds = ref<string[]>([])
+const showTagDialog = ref(false)
+const newTagName = ref('')
+const newTagColor = ref('#409eff')
+
+async function loadDocTags() {
+  try {
+    const { data } = await http.get(`/docs/documents/${docId}/tags`)
+    docTags.value = data || []
+    docTagIds.value = docTags.value.map((t: any) => t.id)
+  } catch {}
+}
+
+async function loadAllTags() {
+  try {
+    const { data } = await http.get('/docs/tags')
+    allTags.value = data || []
+  } catch {}
+}
+
+async function addTag(tagId: string) {
+  if (docTagIds.value.includes(tagId)) return
+  const newIds = [...docTagIds.value, tagId]
+  await http.put(`/docs/documents/${docId}/tags`, { tag_ids: newIds })
+  await loadDocTags()
+}
+
+async function removeTag(tagId: string) {
+  const newIds = docTagIds.value.filter(id => id !== tagId)
+  await http.put(`/docs/documents/${docId}/tags`, { tag_ids: newIds })
+  await loadDocTags()
+}
+
+async function createAndAddTag() {
+  if (!newTagName.value.trim()) return
+  try {
+    await http.post('/docs/tags', { name: newTagName.value, color: newTagColor.value })
+    await loadAllTags()
+    // Find the new tag and add it
+    const created = allTags.value.find((t: any) => t.name === newTagName.value.trim())
+    if (created) await addTag(created.id)
+    newTagName.value = ''
+  } catch {}
+}
+
+watch(showTagDialog, (v) => { if (v) loadAllTags() })
 
 // 链接弹窗
 const linkDialog = reactive({ show: false, text: '', url: '' })
@@ -772,6 +855,7 @@ function getReplies(parentId: string) {
 onMounted(async () => {
   await loadDoc()
   await loadVersions()
+  await loadDocTags()
   // Get current user ID
   try {
     const { data: me } = await http.get('/auth/me')
@@ -833,6 +917,8 @@ document.addEventListener('keydown', handleGlobalKeydown)
 
 <style scoped>
 .editor-page { height: 100%; display: flex; flex-direction: column; }
+.doc-tags-bar { padding: 4px 16px; background: #fafafa; border-bottom: 1px solid #eee; }
+.tag-disabled { opacity: 0.4; cursor: default !important; }
 .editor-header {
   display: flex; align-items: center; gap: 12px;
   padding: 8px 16px; border-bottom: 1px solid #e8e8e8; background: #fff;

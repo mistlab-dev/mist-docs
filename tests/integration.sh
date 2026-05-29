@@ -316,6 +316,40 @@ for i in $(seq 1 20); do
 done
 [ "$RATE_OK" -ge 18 ] && ok "Rate limit allows normal traffic ($RATE_OK/20)" || fail "Rate limit too strict ($RATE_OK/20)"
 
+# ─── Tags ───
+section "Tags"
+
+CREATE_TAG=$($CURL "$BASE/api/docs/tags" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"name":"测试标签","color":"#e6a23c"}')
+CREATE_TAG_ID=$(echo "$CREATE_TAG" | jf 'id')
+[ -n "$CREATE_TAG_ID" ] && ok "Create tag" || fail "Create tag"
+
+LIST_TAGS=$($CURL "$BASE/api/docs/tags" -H "$AUTH")
+LIST_TAGS_OK=$(echo "$LIST_TAGS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',[]); ids=[t['id'] for t in d]; print('ok' if '$CREATE_TAG_ID' in ids else 'fail')" 2>/dev/null)
+[ "$LIST_TAGS_OK" = "ok" ] && ok "List tags" || fail "List tags"
+
+TAG_DOC=$($CURL "$BASE/api/docs/documents" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"title":"标签测试文档","type":"doc"}')
+TAG_DOC_ID=$(echo "$TAG_DOC" | jf 'id')
+[ -n "$TAG_DOC_ID" ] && { ok "Create doc for tagging"; CREATED_DOCS="$CREATED_DOCS $TAG_DOC_ID"; } || fail "Create doc for tagging"
+
+SET_TAGS=$($CURL "$BASE/api/docs/documents/$TAG_DOC_ID/tags" -X PUT -H "$AUTH" -H 'Content-Type: application/json' \
+  -d "{\"tag_ids\":[\"$CREATE_TAG_ID\"]}")
+SET_TAGS_OK=$(echo "$SET_TAGS" | jf 'message')
+[ -n "$SET_TAGS_OK" ] && ok "Set document tags" || fail "Set document tags"
+
+GET_TAGS=$($CURL "$BASE/api/docs/documents/$TAG_DOC_ID/tags" -H "$AUTH")
+GET_TAGS_OK=$(echo "$GET_TAGS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',[]); ids=[t['id'] for t in d]; print('ok' if '$CREATE_TAG_ID' in ids else 'fail')" 2>/dev/null)
+[ "$GET_TAGS_OK" = "ok" ] && ok "Get document tags" || fail "Get document tags"
+
+BY_TAG=$($CURL "$BASE/api/docs/tags/$CREATE_TAG_ID/documents" -H "$AUTH")
+BY_TAG_OK=$(echo "$BY_TAG" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',[]); ids=[x['id'] for x in d]; print('ok' if '$TAG_DOC_ID' in ids else 'fail')" 2>/dev/null)
+[ "$BY_TAG_OK" = "ok" ] && ok "Get docs by tag" || fail "Get docs by tag"
+
+# Cleanup tag
+$CURL "$BASE/api/docs/tags/$CREATE_TAG_ID" -X DELETE -H "$AUTH" > /dev/null
+ok "Delete tag"
+
 # ─── WebSocket ───
 section "WebSocket"
 
