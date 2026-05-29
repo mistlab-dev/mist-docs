@@ -559,11 +559,16 @@ function loadData() {
   try {
     const d = JSON.parse(props.initialData)
     if (Array.isArray(d)) { sheets.value = d; return }
+    const oldRows = d.rows || []
+    const cols = d.cols || d.colCount || 26
+    // 旧数据行数为0时用默认50行
+    const rowCount = oldRows.length > 0 ? oldRows.length : 50
+    const rows = oldRows.length > 0 ? oldRows : Array.from({ length: 50 }, () => Array(cols).fill(''))
     const s: SheetData = {
-      name: 'Sheet1', rows: d.rows || [], colCount: d.cols || 26,
-      colWidths: d.colWidths || Array(d.cols || 26).fill(120),
-      colTypes: d.colTypes || Array(d.cols || 26).fill('auto'),
-      rowHeights: d.rowHeights || Array((d.rows || []).length).fill(26),
+      name: 'Sheet1', rows, colCount: cols,
+      colWidths: d.colWidths || Array(cols).fill(120),
+      colTypes: d.colTypes || Array(cols).fill('auto'),
+      rowHeights: d.rowHeights || Array(rowCount).fill(26),
       cellMeta: {}, merges: d.merges || [],
       frozenRows: d.freezeRows || 0, frozenCols: d.freezeCols || 0, groups: []
     }
