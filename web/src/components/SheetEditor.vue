@@ -3,207 +3,152 @@
     <!-- 公式栏 -->
     <div class="formula-bar">
       <div class="cell-ref">{{ currentCellRef }}</div>
-      <div class="formula-divider">fx</div>
+      <div class="formula-fx">fx</div>
       <input class="formula-input" v-model="formulaValue" @keydown.enter="applyFormula"
         @keydown.escape="cancelFormula" placeholder="输入内容或公式..." />
     </div>
 
     <!-- 工具栏 -->
-    <div class="sheet-toolbar">
-      <!-- 撤销重做 -->
-      <el-button-group>
-        <el-button size="small" :disabled="!canUndo" @click="undo" title="撤销 Ctrl+Z">
-          <el-icon><RefreshLeft /></el-icon>
-        </el-button>
-        <el-button size="small" :disabled="!canRedo" @click="redo" title="重做 Ctrl+Y">
-          <el-icon><RefreshRight /></el-icon>
-        </el-button>
-      </el-button-group>
-
-      <el-divider direction="vertical" />
-
-      <!-- 字体字号 -->
-      <el-select size="small" v-model="cellFontFamily" @change="applyFontFamily" style="width:110px" title="字体">
-        <el-option v-for="f in fontList" :key="f" :label="f" :value="f" :style="{fontFamily:f}" />
-      </el-select>
-      <el-select size="small" v-model="cellFontSize" @change="applyFontSize" style="width:70px" title="字号">
-        <el-option v-for="s in fontSizes" :key="s" :label="s + 'px'" :value="s" />
-      </el-select>
-
-      <el-divider direction="vertical" />
-
-      <!-- 格式 -->
-      <el-button-group>
-        <el-button size="small" :type="getMetaProp('bold') ? 'primary' : ''" @click="toggleFormat('bold')" title="加粗"><b>B</b></el-button>
-        <el-button size="small" :type="getMetaProp('italic') ? 'primary' : ''" @click="toggleFormat('italic')" title="斜体"><i>I</i></el-button>
-        <el-button size="small" :type="getMetaProp('underline') ? 'primary' : ''" @click="toggleFormat('underline')" title="下划线"><u>U</u></el-button>
-        <el-button size="small" :type="getMetaProp('strike') ? 'primary' : ''" @click="toggleFormat('strike')" title="删除线"><s>S</s></el-button>
-      </el-button-group>
-
-      <el-divider direction="vertical" />
-
-      <!-- 颜色 -->
-      <el-color-picker size="small" v-model="cellTextColor" @change="applyTextColor" title="文字颜色" />
-      <el-color-picker size="small" v-model="cellBgColor" @change="applyBgColor" title="背景颜色" />
-
-      <el-divider direction="vertical" />
-
-      <!-- 边框 -->
-      <el-dropdown trigger="click" @command="applyBorder" title="边框">
-        <el-button size="small"><el-icon><Grid /></el-icon></el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="all">全部边框</el-dropdown-item>
-            <el-dropdown-item command="outer">外边框</el-dropdown-item>
-            <el-dropdown-item command="none">无边框</el-dropdown-item>
-            <el-dropdown-item command="top" divided>上边框</el-dropdown-item>
-            <el-dropdown-item command="bottom">下边框</el-dropdown-item>
-            <el-dropdown-item command="left">左边框</el-dropdown-item>
-            <el-dropdown-item command="right">右边框</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-
-      <el-divider direction="vertical" />
-
-      <!-- 对齐 -->
-      <el-button-group>
-        <el-button size="small" :type="getMetaProp('align')==='left'?'primary':''" @click="setAlign('left')" title="左对齐">☰</el-button>
-        <el-button size="small" :type="getMetaProp('align')==='center'?'primary':''" @click="setAlign('center')" title="居中">☱</el-button>
-        <el-button size="small" :type="getMetaProp('align')==='right'?'primary':''" @click="setAlign('right')" title="右对齐">☷</el-button>
-      </el-button-group>
-      <el-button size="small" :type="getMetaProp('wrap')?'primary':''" @click="toggleWrap" title="自动换行">
-        <el-icon><DocumentCopy /></el-icon>
-      </el-button>
-
-      <el-divider direction="vertical" />
-
-      <!-- 数字精度 -->
-      <el-button-group>
-        <el-button size="small" @click="changePrecision(-1)" title="减少小数位">.0→0</el-button>
-        <el-button size="small" @click="changePrecision(1)" title="增加小数位">0→.0</el-button>
-      </el-button-group>
-
-      <el-divider direction="vertical" />
-
-      <!-- 列类型 -->
-      <el-select size="small" v-model="currentColType" @change="setColType" style="width:100px" title="列类型">
-        <el-option label="自动" value="auto" />
-        <el-option label="文本" value="text" />
-        <el-option label="数字" value="number" />
-        <el-option label="百分比" value="percent" />
-        <el-option label="货币 ¥" value="currency" />
-        <el-option label="日期" value="date" />
-      </el-select>
-
-      <el-divider direction="vertical" />
-
-      <!-- 行列操作 -->
-      <el-button-group>
-        <el-button size="small" @click="addRowAbove" title="上方插入行"><el-icon><Top /></el-icon></el-button>
-        <el-button size="small" @click="addRowBelow" title="下方插入行"><el-icon><Bottom /></el-icon></el-button>
-        <el-button size="small" @click="deleteRow" title="删除行"><el-icon><Delete /></el-icon></el-button>
-      </el-button-group>
-      <el-button-group style="margin-left:4px">
-        <el-button size="small" @click="addColLeft" title="左侧插入列"><el-icon><Back /></el-icon></el-button>
-        <el-button size="small" @click="addColRight" title="右侧插入列"><el-icon><Right /></el-icon></el-button>
-        <el-button size="small" @click="deleteCol" title="删除列"><el-icon><Delete /></el-icon></el-button>
-      </el-button-group>
-
-      <el-divider direction="vertical" />
-
-      <!-- 冻结 -->
-      <el-dropdown trigger="click" @command="toggleFreeze">
-        <el-button size="small" title="冻结"><el-icon><Lock /></el-icon></el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="row">{{ freezeRows > 0 ? '✓ ' : '' }}冻结首行</el-dropdown-item>
-            <el-dropdown-item command="col">{{ freezeCols > 0 ? '✓ ' : '' }}冻结首列</el-dropdown-item>
-            <el-dropdown-item command="none" divided>取消冻结</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-
-      <!-- 条件格式 -->
-      <el-button size="small" @click="showCondDialog = true" title="条件格式">
-        <el-icon><MagicStick /></el-icon>
-      </el-button>
-
-      <!-- 图表 -->
-      <el-button size="small" @click="showChart = !showChart" :type="showChart ? 'primary' : ''">
-        <el-icon><TrendCharts /></el-icon>
-      </el-button>
-
-      <!-- 查找替换 -->
-      <el-button size="small" @click="showSearchDialog = !showSearchDialog" title="查找替换 Ctrl+F">
-        <el-icon><Search /></el-icon>
-      </el-button>
-
-      <span class="sheet-info">{{ currentSheetRows.length }} 行 × {{ colCount }} 列</span>
+    <div class="toolbar">
+      <div class="tb-group">
+        <button class="tb-btn" :disabled="!canUndo" @click="undo" title="撤销"><span class="icon-undo" /></button>
+        <button class="tb-btn" :disabled="!canRedo" @click="redo" title="重做"><span class="icon-redo" /></button>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <el-select size="small" v-model="cellFontFamily" @change="applyFontFamily" class="tb-select" style="width:120px" title="字体">
+          <el-option v-for="f in fontList" :key="f" :label="f" :value="f" :style="{fontFamily:f}" />
+        </el-select>
+        <el-select size="small" v-model="cellFontSize" @change="applyFontSize" class="tb-select" style="width:64px" title="字号">
+          <el-option v-for="s in fontSizes" :key="s" :label="s" :value="s" />
+        </el-select>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <button class="tb-btn" :class="{active:getMetaProp('bold')}" @click="toggleFormat('bold')" title="加粗 (Ctrl+B)"><b>B</b></button>
+        <button class="tb-btn" :class="{active:getMetaProp('italic')}" @click="toggleFormat('italic')" title="斜体 (Ctrl+I)"><i style="font-family:serif">I</i></button>
+        <button class="tb-btn" :class="{active:getMetaProp('underline')}" @click="toggleFormat('underline')" title="下划线 (Ctrl+U)"><u>U</u></button>
+        <button class="tb-btn" :class="{active:getMetaProp('strike')}" @click="toggleFormat('strike')" title="删除线"><s>abc</s></button>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <el-color-picker size="small" v-model="cellTextColor" @change="applyTextColor" title="字体颜色" />
+        <el-color-picker size="small" v-model="cellBgColor" @change="applyBgColor" title="填充颜色" />
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <el-dropdown trigger="click" @command="applyBorder" title="边框">
+          <button class="tb-btn"><span class="icon-border" /></button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="all">全部边框</el-dropdown-item>
+              <el-dropdown-item command="outer">外边框</el-dropdown-item>
+              <el-dropdown-item command="none">无边框</el-dropdown-item>
+              <el-dropdown-item command="top" divided>上边框</el-dropdown-item>
+              <el-dropdown-item command="bottom">下边框</el-dropdown-item>
+              <el-dropdown-item command="left">左边框</el-dropdown-item>
+              <el-dropdown-item command="right">右边框</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <button class="tb-btn" :class="{active:getMetaProp('align')==='left'}" @click="setAlign('left')" title="左对齐">≡</button>
+        <button class="tb-btn" :class="{active:getMetaProp('align')==='center'}" @click="setAlign('center')" title="居中对齐">☰</button>
+        <button class="tb-btn" :class="{active:getMetaProp('align')==='right'}" @click="setAlign('right')" title="右对齐">≡</button>
+        <button class="tb-btn" :class="{active:getMetaProp('wrap')}" @click="toggleWrap" title="自动换行">⏎</button>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <button class="tb-btn" @click="changePrecision(-1)" title="减少小数位">.0</button>
+        <button class="tb-btn" @click="changePrecision(1)" title="增加小数位">.00</button>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <el-select size="small" v-model="currentColType" @change="setColType" class="tb-select" style="width:90px" title="数字格式">
+          <el-option label="常规" value="auto" />
+          <el-option label="文本" value="text" />
+          <el-option label="数字" value="number" />
+          <el-option label="百分比" value="percent" />
+          <el-option label="货币 ¥" value="currency" />
+          <el-option label="日期" value="date" />
+        </el-select>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <button class="tb-btn" @click="addRowAbove" title="插入行（上）"><span class="icon-row-add" /></button>
+        <button class="tb-btn" @click="addColRight" title="插入列（右）"><span class="icon-col-add" /></button>
+        <button class="tb-btn" @click="deleteRow" title="删除行"><span class="icon-row-del" /></button>
+        <button class="tb-btn" @click="deleteCol" title="删除列"><span class="icon-col-del" /></button>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <el-dropdown trigger="click" @command="toggleFreeze">
+          <button class="tb-btn" title="冻结窗格"><span class="icon-freeze" /></button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="row">{{ freezeRows > 0 ? '✓ ' : '' }}冻结首行</el-dropdown-item>
+              <el-dropdown-item command="col">{{ freezeCols > 0 ? '✓ ' : '' }}冻结首列</el-dropdown-item>
+              <el-dropdown-item command="none" divided>取消冻结</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <button class="tb-btn" @click="showCondDialog = true" title="条件格式"><span class="icon-cond" /></button>
+        <button class="tb-btn" :class="{active:showChart}" @click="showChart = !showChart" title="插入图表"><span class="icon-chart" /></button>
+        <button class="tb-btn" :class="{active:showSearchDialog}" @click="showSearchDialog = !showSearchDialog" title="查找替换 (Ctrl+F)"><span class="icon-search" /></button>
+      </div>
     </div>
 
     <!-- 表格区域 -->
-    <div class="sheet-scroll" ref="scrollRef" @contextmenu.prevent="showContextMenu" @click="hideContextMenu">
-      <table class="sheet-table" ref="tableRef">
+    <div class="grid-area" ref="scrollRef" @contextmenu.prevent="showContextMenu" @click="hideContextMenu">
+      <table class="grid-table" ref="tableRef">
         <colgroup>
-          <col style="width:40px" />
+          <col style="width:46px" />
           <col v-for="(w, c) in colWidths" :key="c" :style="{ width: w + 'px' }" />
         </colgroup>
         <thead>
           <tr>
-            <th class="corner" :class="{ 'frozen-corner': freezeRows > 0 && freezeCols > 0 }"></th>
+            <th class="corner-cell"></th>
             <th v-for="c in colCount" :key="c"
-              class="col-header"
-              :class="{
-                selected: isColSelected(c - 1),
-                'frozen-col-header': freezeRows > 0,
-                sorted: sortCol === c - 1
-              }"
+              class="col-hdr"
+              :class="{ sel: isColSelected(c - 1), sorted: sortCol === c - 1, 'frozen-col-hdr': freezeRows > 0 }"
               @click="selectCol(c - 1)"
               @dblclick="autoFitCol(c - 1)"
             >
-              <span>{{ colName(c - 1) }}</span>
-              <span v-if="sortCol === c - 1" class="sort-icon">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
-              <span v-if="filterActiveCols.has(c - 1)" class="filter-icon">⦿</span>
+              <span class="col-letter">{{ colName(c - 1) }}</span>
+              <span v-if="sortCol === c - 1" class="sort-arrow">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+              <span v-if="filterActiveCols.has(c - 1)" class="filter-dot">◆</span>
               <el-dropdown trigger="click" @command="(cmd: string) => handleColMenu(cmd, c - 1)" :hide-on-click="false" size="small">
-                <span class="col-menu-trigger" @click.stop>▾</span>
+                <span class="hdr-menu" @click.stop>▾</span>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="sort-asc">↑ 升序排列</el-dropdown-item>
                     <el-dropdown-item command="sort-desc">↓ 降序排列</el-dropdown-item>
                     <el-dropdown-item command="sort-clear" divided>取消排序</el-dropdown-item>
-                    <el-dropdown-item command="filter" divided>
-                      {{ filterActiveCols.has(c - 1) ? '✓ ' : '' }}筛选此列
-                    </el-dropdown-item>
+                    <el-dropdown-item command="filter" divided>{{ filterActiveCols.has(c - 1) ? '✓ ' : '' }}筛选此列</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
-              <div class="col-resize-handle" @mousedown.stop="startColResize(c - 1, $event)"></div>
+              <div class="col-resize" @mousedown.stop="startColResize(c - 1, $event)" />
             </th>
           </tr>
         </thead>
         <tbody>
           <template v-for="(row, ri) in currentSheetRows" :key="ri">
-            <tr v-show="!isRowFiltered(ri)">
-              <td class="row-header"
-                :class="{
-                  selected: isRowSelected(ri),
-                  'frozen-row-header': freezeCols > 0,
-                }"
-                :style="{ height: (rowHeights[ri] || 26) + 'px' }"
-                @click="selectRow(ri)"
-              >
+            <tr v-show="!isRowFiltered(ri)" :style="{ height: (rowHeights[ri] || 26) + 'px' }">
+              <td class="row-hdr" :class="{ sel: isRowSelected(ri) }" @click="selectRow(ri)">
                 {{ ri + 1 }}
-                <div class="row-resize-handle" @mousedown.stop="startRowResize(ri, $event)"></div>
+                <div class="row-resize" @mousedown.stop="startRowResize(ri, $event)" />
               </td>
               <td v-for="c in colCount" :key="c"
                 class="cell"
                 :class="{
-                  selected: isSelected(ri, c - 1),
-                  'selected-head': isSelectionHead(ri, c - 1),
+                  sel: isSelected(ri, c - 1),
+                  'sel-head': isSelectionHead(ri, c - 1),
                   editing: editingCell?.row === ri && editingCell?.col === c - 1,
                   'has-comment': getComment(ri, c - 1),
-                  'has-validation': getValidation(ri, c - 1),
+                  frozen: freezeRows > 0 && ri < freezeRows,
                 }"
                 :style="getCellStyle(ri, c - 1)"
                 :colspan="getColspan(ri, c - 1)"
@@ -215,23 +160,19 @@
                 @mouseleave="hideCellComment()"
               >
                 <template v-if="editingCell?.row === ri && editingCell?.col === c - 1">
-                  <input ref="editInput" class="cell-edit-input" v-model="editingValue"
+                  <input ref="editInput" class="cell-input" v-model="editingValue"
                     @keydown.enter.prevent="finishEdit"
                     @keydown.tab.prevent="finishEdit(); moveNext()"
                     @keydown.escape="cancelEdit"
                     @keydown="handleEditKey" />
                 </template>
                 <template v-else>
-                  <span class="cell-display" :style="getCellTextStyle(ri, c - 1)">{{ getCellDisplay(ri, c - 1) }}</span>
+                  <span class="cell-val" :style="getCellTextStyle(ri, c - 1)">{{ getCellDisplay(ri, c - 1) }}</span>
                 </template>
-                <!-- 拖拽填充柄 -->
-                <div v-if="isSelectionHead(ri, c - 1) && !editingCell" class="fill-handle"
-                  @mousedown.stop="startFill($event)"></div>
-                <!-- 拖拽移动柄 -->
+                <div v-if="isSelectionHead(ri, c - 1) && !editingCell" class="fill-h" @mousedown.stop="startFill($event)" />
                 <div v-if="isSelectionHead(ri, c - 1) && !editingCell && selection && isMultiCellSelection"
-                  class="move-handle" @mousedown.stop="startMove($event)"></div>
-                <!-- 批注标记 -->
-                <div v-if="getComment(ri, c - 1)" class="comment-marker"></div>
+                  class="move-h" @mousedown.stop="startMove($event)" />
+                <div v-if="getComment(ri, c - 1)" class="comment-flag" />
               </td>
             </tr>
           </template>
@@ -240,152 +181,128 @@
     </div>
 
     <!-- 悬浮批注 -->
-    <div v-if="hoverComment.show" class="hover-comment"
-      :style="{ left: hoverComment.x + 'px', top: hoverComment.y + 'px' }">
+    <div v-if="hoverComment.show" class="comment-popup" :style="{ left: hoverComment.x + 'px', top: hoverComment.y + 'px' }">
       {{ hoverComment.text }}
     </div>
 
     <!-- 右键菜单 -->
-    <div v-if="contextMenu.show" class="context-menu"
-      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
-      <div class="menu-item" @click="ctxCut">剪切 Ctrl+X</div>
-      <div class="menu-item" @click="ctxCopy">复制 Ctrl+C</div>
-      <div class="menu-item" @click="ctxPaste">粘贴 Ctrl+V</div>
-      <div class="menu-divider"></div>
-      <div class="menu-item" @click="ctxInsertRowAbove">上方插入行</div>
-      <div class="menu-item" @click="ctxInsertRowBelow">下方插入行</div>
-      <div class="menu-item" @click="ctxInsertColLeft">左侧插入列</div>
-      <div class="menu-item" @click="ctxInsertColRight">右侧插入列</div>
-      <div class="menu-divider"></div>
-      <div class="menu-item" @click="ctxDeleteRow">删除行</div>
-      <div class="menu-item" @click="ctxDeleteCol">删除列</div>
-      <div class="menu-divider"></div>
-      <div class="menu-item" @click="ctxClearCells">清空单元格</div>
-      <div class="menu-item" @click="ctxMergeToggle">{{ hasMerge ? '取消合并' : '合并单元格' }}</div>
-      <div class="menu-divider"></div>
-      <div class="menu-item" @click="ctxAddComment">{{ getComment(ctxRow, ctxCol) ? '编辑批注' : '添加批注' }}</div>
-      <div v-if="getComment(ctxRow, ctxCol)" class="menu-item" @click="ctxDeleteComment">删除批注</div>
-      <div class="menu-divider"></div>
-      <div class="menu-item" @click="ctxSetValidation">数据验证/下拉列表</div>
-      <div class="menu-item" @click="ctxGroupRows">分组折叠行</div>
+    <div v-if="contextMenu.show" class="ctx-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
+      <div class="ctx-item" @click="ctxCut"><span class="ctx-icon">✂</span> 剪切<span class="ctx-key">Ctrl+X</span></div>
+      <div class="ctx-item" @click="ctxCopy"><span class="ctx-icon">📋</span> 复制<span class="ctx-key">Ctrl+C</span></div>
+      <div class="ctx-item" @click="ctxPaste"><span class="ctx-icon">📄</span> 粘贴<span class="ctx-key">Ctrl+V</span></div>
+      <div class="ctx-sep" />
+      <div class="ctx-item" @click="ctxInsertRowAbove">↑ 上方插入行</div>
+      <div class="ctx-item" @click="ctxInsertRowBelow">↓ 下方插入行</div>
+      <div class="ctx-item" @click="ctxInsertColLeft">← 左侧插入列</div>
+      <div class="ctx-item" @click="ctxInsertColRight">→ 右侧插入列</div>
+      <div class="ctx-sep" />
+      <div class="ctx-item" @click="ctxDeleteRow">🗑 删除行</div>
+      <div class="ctx-item" @click="ctxDeleteCol">🗑 删除列</div>
+      <div class="ctx-sep" />
+      <div class="ctx-item" @click="ctxClearCells">清空内容</div>
+      <div class="ctx-item" @click="ctxMergeToggle">{{ hasMerge ? '取消合并' : '合并单元格' }}</div>
+      <div class="ctx-sep" />
+      <div class="ctx-item" @click="ctxAddComment">💬 {{ getComment(ctxRow, ctxCol) ? '编辑批注' : '添加批注' }}</div>
+      <div v-if="getComment(ctxRow, ctxCol)" class="ctx-item" @click="ctxDeleteComment">🗑 删除批注</div>
+      <div class="ctx-sep" />
+      <div class="ctx-item" @click="ctxSetValidation">📝 数据验证</div>
+      <div class="ctx-item" @click="ctxGroupRows">📁 分组折叠</div>
     </div>
 
     <!-- 图表面板 -->
     <div v-if="showChart" class="chart-panel">
-      <div class="chart-header">
+      <div class="chart-bar">
         <el-select v-model="chartType" size="small" style="width:100px">
-          <el-option label="柱状图" value="bar" />
-          <el-option label="折线图" value="line" />
-          <el-option label="饼图" value="pie" />
-          <el-option label="散点图" value="scatter" />
+          <el-option label="柱状图" value="bar" /><el-option label="折线图" value="line" />
+          <el-option label="饼图" value="pie" /><el-option label="散点图" value="scatter" />
           <el-option label="面积图" value="area" />
         </el-select>
-        <el-select v-model="chartDataRange" size="small" style="width:140px" placeholder="数据范围">
-          <el-option label="当前列" value="col" />
-          <el-option label="选中区域" value="selection" />
-          <el-option label="全部数据" value="all" />
+        <el-select v-model="chartDataRange" size="small" style="width:120px">
+          <el-option label="当前列" value="col" /><el-option label="选中区域" value="selection" />
+          <el-option label="全部" value="all" />
         </el-select>
-        <input v-model="chartTitle" placeholder="图表标题" class="chart-title-input" />
-        <el-button size="small" @click="exportChart" title="导出PNG">导出</el-button>
-        <el-button size="small" text @click="showChart = false">✕</el-button>
+        <input v-model="chartTitle" placeholder="图表标题" class="chart-title" />
+        <button class="tb-btn" @click="exportChart">导出PNG</button>
+        <button class="tb-btn" @click="showChart = false">✕</button>
       </div>
-      <div class="chart-body">
-        <canvas ref="chartCanvas" width="700" height="380"
-          @mousemove="onChartHover" @mouseleave="chartTooltip.show = false" />
-        <div v-if="chartTooltip.show" class="chart-tooltip"
-          :style="{ left: chartTooltip.x + 'px', top: chartTooltip.y + 'px' }">
-          {{ chartTooltip.text }}
-        </div>
+      <div class="chart-canvas-wrap">
+        <canvas ref="chartCanvas" width="700" height="360" @mousemove="onChartHover" @mouseleave="chartTooltip.show = false" />
+        <div v-if="chartTooltip.show" class="chart-tip" :style="{ left: chartTooltip.x + 'px', top: chartTooltip.y + 'px' }">{{ chartTooltip.text }}</div>
       </div>
     </div>
 
     <!-- 条件格式对话框 -->
-    <el-dialog v-model="showCondDialog" title="条件格式" width="500px">
+    <el-dialog v-model="showCondDialog" title="条件格式" width="480px">
       <el-tabs>
         <el-tab-pane label="规则">
-          <div v-for="(rule, i) in condRules" :key="i" class="cond-rule-item">
-            <span>当 {{ rule.condition }} {{ rule.value }} 时</span>
+          <div v-for="(rule, i) in condRules" :key="i" style="display:flex;align-items:center;gap:8px;padding:4px 0">
+            <span style="flex:1">当 {{ rule.condition }} {{ rule.value }} 时</span>
             <el-color-picker v-model="rule.bgColor" size="small" />
             <el-button size="small" text @click="condRules.splice(i, 1)">删除</el-button>
           </div>
           <el-divider />
-          <div class="cond-new-rule">
-            <el-select v-model="newCond.condition" size="small" style="width:120px">
-              <el-option label="大于" value=">" />
-              <el-option label="小于" value="<" />
-              <el-option label="等于" value="=" />
-              <el-option label="不等于" value="!=" />
+          <div style="display:flex;align-items:center;gap:8px">
+            <el-select v-model="newCond.condition" size="small" style="width:100px">
+              <el-option label="大于" value=">" /><el-option label="小于" value="<" />
+              <el-option label="等于" value="=" /><el-option label="不等于" value="!=" />
               <el-option label="包含" value="contains" />
             </el-select>
-            <el-input v-model="newCond.value" size="small" style="width:100px" placeholder="值" />
+            <el-input v-model="newCond.value" size="small" style="width:80px" placeholder="值" />
             <el-color-picker v-model="newCond.bgColor" size="small" />
             <el-button size="small" type="primary" @click="addCondRule">添加</el-button>
           </div>
         </el-tab-pane>
         <el-tab-pane label="色阶">
-          <div class="cond-scale-row">
-            <span>2色渐变：</span>
-            <el-color-picker v-model="condScale2Min" size="small" />
-            <span>→</span>
-            <el-color-picker v-model="condScale2Max" size="small" />
-            <el-button size="small" type="primary" @click="applyCondScale2">应用到选区</el-button>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <span>2色：</span><el-color-picker v-model="condScale2Min" size="small" /><span>→</span><el-color-picker v-model="condScale2Max" size="small" />
+            <el-button size="small" type="primary" @click="applyCondScale2">应用</el-button>
           </div>
-          <div class="cond-scale-row" style="margin-top:12px">
-            <span>3色渐变：</span>
-            <el-color-picker v-model="condScale3Min" size="small" />
-            <span>→</span>
-            <el-color-picker v-model="condScale3Mid" size="small" />
-            <span>→</span>
-            <el-color-picker v-model="condScale3Max" size="small" />
-            <el-button size="small" type="primary" @click="applyCondScale">应用到选区</el-button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span>3色：</span><el-color-picker v-model="condScale3Min" size="small" /><span>→</span><el-color-picker v-model="condScale3Mid" size="small" /><span>→</span><el-color-picker v-model="condScale3Max" size="small" />
+            <el-button size="small" type="primary" @click="applyCondScale">应用</el-button>
           </div>
         </el-tab-pane>
         <el-tab-pane label="数据条">
-          <div class="cond-scale-row">
-            <span>颜色：</span>
-            <el-color-picker v-model="condDataBarColor" size="small" />
+          <div style="display:flex;align-items:center;gap:8px">
+            <span>颜色：</span><el-color-picker v-model="condDataBarColor" size="small" />
             <el-button size="small" type="primary" @click="applyDataBar">应用到选区</el-button>
           </div>
         </el-tab-pane>
       </el-tabs>
     </el-dialog>
 
-    <!-- 查找替换对话框 -->
-    <el-dialog v-model="showSearchDialog" title="查找和替换" width="420px" :close-on-click-modal="false">
+    <!-- 查找替换 -->
+    <el-dialog v-model="showSearchDialog" title="查找和替换" width="400px" :close-on-click-modal="false">
       <el-input v-model="searchText" placeholder="查找内容" size="small" style="margin-bottom:8px" @keydown.enter="findNext">
         <template #append><el-button @click="findNext" size="small">查找下一个</el-button></template>
       </el-input>
-      <el-input v-model="replaceText" placeholder="替换为" size="small" style="margin-bottom:8px">
+      <el-input v-model="replaceText" placeholder="替换为" size="small">
         <template #append>
           <el-button @click="replaceOne" size="small">替换</el-button>
           <el-button @click="replaceAll" size="small">全部替换</el-button>
         </template>
       </el-input>
-      <div v-if="searchResult" style="color:#999;font-size:12px">{{ searchResult }}</div>
+      <div v-if="searchResult" style="color:#999;font-size:12px;margin-top:4px">{{ searchResult }}</div>
     </el-dialog>
 
-    <!-- 批注编辑对话框 -->
-    <el-dialog v-model="showCommentDialog" title="编辑批注" width="360px">
-      <el-input v-model="commentText" type="textarea" :rows="4" placeholder="输入批注内容..." />
+    <!-- 批注编辑 -->
+    <el-dialog v-model="showCommentDialog" title="批注" width="360px">
+      <el-input v-model="commentText" type="textarea" :rows="4" placeholder="批注内容..." />
       <template #footer>
         <el-button size="small" @click="showCommentDialog = false">取消</el-button>
         <el-button size="small" type="primary" @click="saveComment">保存</el-button>
       </template>
     </el-dialog>
 
-    <!-- 数据验证对话框 -->
+    <!-- 数据验证 -->
     <el-dialog v-model="showValidationDialog" title="数据验证" width="400px">
       <el-select v-model="validationType" size="small" style="width:100%;margin-bottom:8px">
-        <el-option label="无验证" value="none" />
-        <el-option label="下拉列表" value="list" />
-        <el-option label="数字范围" value="number" />
+        <el-option label="无" value="none" /><el-option label="下拉列表" value="list" /><el-option label="数字范围" value="number" />
       </el-select>
-      <div v-if="validationType === 'list'">
-        <el-input v-model="validationOptions" size="small" placeholder="选项，用逗号分隔 (如: 是,否,待定)" />
-      </div>
+      <el-input v-if="validationType === 'list'" v-model="validationOptions" size="small" placeholder="选项,逗号分隔" />
       <div v-if="validationType === 'number'" style="display:flex;gap:8px">
-        <el-input-number v-model="validationMin" size="small" placeholder="最小值" />
-        <el-input-number v-model="validationMax" size="small" placeholder="最大值" />
+        <el-input-number v-model="validationMin" size="small" placeholder="最小" />
+        <el-input-number v-model="validationMax" size="small" placeholder="最大" />
       </div>
       <template #footer>
         <el-button size="small" @click="showValidationDialog = false">取消</el-button>
@@ -394,42 +311,36 @@
     </el-dialog>
 
     <!-- 筛选面板 -->
-    <div v-if="showFilterPanel" class="filter-panel"
-      :style="{ left: '200px', top: '200px' }">
-      <div class="filter-panel-header">
+    <div v-if="showFilterPanel" class="filter-panel" :style="{ left: '200px', top: '200px' }">
+      <div style="padding:6px 10px;border-bottom:1px solid #e8e8e8">
         <el-checkbox v-model="filterSelectAll" @change="toggleFilterAll">全选</el-checkbox>
       </div>
-      <div class="filter-panel-list">
-        <div v-for="val in filterUniqueValues" :key="val" class="filter-panel-item">
-          <el-checkbox :model-value="filterSelectedValues.has(val)"
-            @change="(v: boolean) => toggleFilterValue(val, v)">{{ val || '(空)' }}</el-checkbox>
+      <div style="max-height:180px;overflow-y:auto;padding:4px 10px">
+        <div v-for="val in filterUniqueValues" :key="val" style="padding:1px 0">
+          <el-checkbox :model-value="filterSelectedValues.has(val)" @change="(v: boolean) => toggleFilterValue(val, v)">{{ val || '(空)' }}</el-checkbox>
         </div>
       </div>
-      <div class="filter-panel-footer">
+      <div style="padding:6px 10px;border-top:1px solid #e8e8e8;display:flex;gap:6px">
         <el-button size="small" @click="applyFilter(true)">确定</el-button>
         <el-button size="small" @click="applyFilter(false)">取消</el-button>
       </div>
     </div>
 
-    <!-- 多Sheet标签栏 -->
-    <div class="sheet-tabs-bar">
-      <div class="sheet-tabs-scroll">
+    <!-- 底部Sheet标签栏 -->
+    <div class="sheet-tabs">
+      <div class="tabs-scroll">
         <div v-for="(sh, si) in sheets" :key="si"
-          class="sheet-tab"
-          :class="{ active: activeSheet === si }"
-          @click="switchSheet(si)"
-          @dblclick="renameSheet(si)"
-          @contextmenu.prevent="renameSheet(si)"
-        >
+          class="tab" :class="{ active: activeSheet === si }"
+          @click="switchSheet(si)" @dblclick="renameSheet(si)" @contextmenu.prevent="renameSheet(si)">
           {{ sh.name }}
-          <span v-if="sheets.length > 1" class="tab-close" @click.stop="deleteSheet(si)">✕</span>
+          <span v-if="sheets.length > 1" class="tab-x" @click.stop="deleteSheet(si)">×</span>
         </div>
+        <button class="tab-add" @click="addSheet" title="新建工作表">+</button>
       </div>
-      <el-button size="small" text @click="addSheet" title="新增Sheet">+</el-button>
+      <div class="tabs-info">{{ currentSheetRows.length }}×{{ colCount }}</div>
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { RefreshLeft, RefreshRight, Delete, Top, Bottom, Back, Right, Lock, MagicStick, TrendCharts, Search, Grid, DocumentCopy } from '@element-plus/icons-vue'
@@ -1112,65 +1023,114 @@ defineExpose({ getData })
 </script>
 
 <style scoped>
-.sheet-container { display: flex; flex-direction: column; height: 100%; background: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-.formula-bar { display: flex; align-items: center; border-bottom: 1px solid #d0d3d8; height: 32px; font-size: 13px; }
-.cell-ref { width: 80px; text-align: center; border-right: 1px solid #d0d3d8; font-weight: 500; color: #333; height: 100%; display: flex; align-items: center; justify-content: center; background: #f8f9fa; }
-.formula-divider { padding: 0 8px; color: #666; font-style: italic; border-right: 1px solid #d0d3d8; height: 100%; display: flex; align-items: center; background: #f8f9fa; }
-.formula-input { flex: 1; border: none; outline: none; padding: 0 8px; height: 100%; font-size: 13px; }
-.sheet-toolbar { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-bottom: 1px solid #d0d3d8; background: #f8f9fa; flex-wrap: wrap; }
-.sheet-info { margin-left: auto; color: #999; font-size: 12px; white-space: nowrap; }
-.sheet-scroll { flex: 1; overflow: auto; }
-.sheet-table { border-collapse: collapse; table-layout: fixed; }
-.sheet-table th, .sheet-table td { border: 1px solid #d0d3d8; font-size: 13px; position: relative; }
-.corner { background: #eef0f4; width: 40px; position: sticky; top: 0; left: 0; z-index: 5; }
-.col-header { background: #eef0f4; font-weight: 500; color: #555; text-align: center; position: sticky; top: 0; z-index: 4; cursor: pointer; user-select: none; min-height: 26px; }
-.col-header:hover { background: #dde0e6; }
-.col-header.selected { background: #c8ddf0; color: #1a73e8; }
-.col-header.sorted { color: #1a73e8; }
-.col-menu-trigger { cursor: pointer; font-size: 10px; margin-left: 2px; opacity: 0.5; }
-.col-menu-trigger:hover { opacity: 1; }
-.sort-icon { font-size: 10px; color: #1a73e8; }
-.filter-icon { font-size: 10px; color: #e6a23c; }
-.col-resize-handle { position: absolute; right: -2px; top: 0; bottom: 0; width: 5px; cursor: col-resize; }
-.row-header { background: #eef0f4; text-align: center; color: #555; font-weight: 500; position: sticky; left: 0; z-index: 2; cursor: pointer; user-select: none; position: relative; }
-.row-header:hover { background: #dde0e6; }
-.row-header.selected { background: #c8ddf0; color: #1a73e8; }
-.row-resize-handle { position: absolute; bottom: -2px; left: 0; right: 0; height: 5px; cursor: row-resize; }
-.frozen-corner { z-index: 7 !important; }
-.frozen-col-header { z-index: 6 !important; }
-.frozen-row-header { z-index: 3 !important; }
-.cell { padding: 0; cursor: cell; overflow: hidden; position: relative; }
-.cell.selected { background: #e8f0fe; }
-.cell.selected-head { outline: 2px solid #1a73e8; outline-offset: -1px; z-index: 1; }
+/* ── Layout ── */
+.sheet-container { display: flex; flex-direction: column; height: 100%; background: #fff; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; color: #333; outline: none; }
+
+/* ── Formula Bar ── */
+.formula-bar { display: flex; align-items: center; height: 28px; border-bottom: 1px solid #d6d6d6; background: #f3f3f3; }
+.cell-ref { width: 72px; text-align: center; font-size: 12px; color: #444; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; justify-content: center; background: #fff; font-weight: 500; }
+.formula-fx { padding: 0 8px; color: #555; font-style: italic; font-weight: 600; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; background: #f3f3f3; font-size: 12px; }
+.formula-input { flex: 1; border: none; outline: none; padding: 0 8px; height: 100%; font-size: 13px; background: #fff; }
+
+/* ── Toolbar ── */
+.toolbar { display: flex; align-items: center; gap: 0; padding: 3px 6px; border-bottom: 1px solid #d6d6d6; background: #f8f8f8; flex-wrap: wrap; min-height: 34px; }
+.tb-group { display: flex; align-items: center; gap: 1px; }
+.tb-sep { width: 1px; height: 20px; background: #d6d6d6; margin: 0 4px; }
+.tb-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 26px; border: 1px solid transparent; border-radius: 3px; background: transparent; cursor: pointer; font-size: 13px; color: #444; padding: 0 5px; transition: all 0.1s; }
+.tb-btn:hover:not(:disabled) { background: #e5e5e5; border-color: #c8c8c8; }
+.tb-btn:active:not(:disabled) { background: #d0d0d0; }
+.tb-btn.active { background: #d6e4f9; border-color: #8cb4e0; color: #1a73e8; }
+.tb-btn:disabled { opacity: 0.35; cursor: default; }
+.tb-select :deep(.el-input__wrapper) { box-shadow: none; background: #fff; }
+
+/* Toolbar icon placeholders */
+.icon-undo::before { content: '↩'; font-size: 14px; }
+.icon-redo::before { content: '↪'; font-size: 14px; }
+.icon-border::before { content: '⊞'; font-size: 14px; }
+.icon-row-add::before { content: '⬆≡'; font-size: 11px; }
+.icon-col-add::before { content: '⬌≡'; font-size: 11px; }
+.icon-row-del::before { content: '✕≡'; font-size: 11px; }
+.icon-col-del::before { content: '≡✕'; font-size: 11px; }
+.icon-freeze::before { content: '🔲'; font-size: 12px; }
+.icon-cond::before { content: '🎨'; font-size: 12px; }
+.icon-chart::before { content: '📊'; font-size: 12px; }
+.icon-search::before { content: '🔍'; font-size: 12px; }
+
+/* ── Grid ── */
+.grid-area { flex: 1; overflow: auto; background: #fff; }
+.grid-table { border-collapse: collapse; table-layout: fixed; }
+.grid-table th, .grid-table td { border-right: 1px solid #e2e2e2; border-bottom: 1px solid #e2e2e2; }
+
+/* Corner */
+.corner-cell { background: linear-gradient(135deg, #f0f0f0, #e8e8e8); width: 46px; position: sticky; top: 0; left: 0; z-index: 5; border-right: 1px solid #c0c0c0; border-bottom: 1px solid #c0c0c0; }
+
+/* Column Headers */
+.col-hdr { background: linear-gradient(180deg, #fafafa, #eee); font-weight: 600; color: #555; text-align: center; position: sticky; top: 0; z-index: 4; cursor: pointer; user-select: none; height: 24px; font-size: 12px; border-bottom: 1px solid #c0c0c0; }
+.col-hdr:hover { background: linear-gradient(180deg, #e8e8e8, #ddd); }
+.col-hdr.sel { background: linear-gradient(180deg, #d6e4f9, #c2d8f0); color: #1a73e8; }
+.col-hdr.sorted { color: #1a73e8; }
+.col-letter { font-size: 12px; }
+.sort-arrow { font-size: 9px; color: #1a73e8; margin-left: 2px; }
+.filter-dot { font-size: 8px; color: #e6a23c; margin-left: 2px; }
+.hdr-menu { cursor: pointer; font-size: 10px; margin-left: 1px; opacity: 0.4; }
+.hdr-menu:hover { opacity: 1; }
+.col-resize { position: absolute; right: -2px; top: 0; bottom: 0; width: 5px; cursor: col-resize; }
+.frozen-col-hdr { z-index: 6 !important; }
+
+/* Row Headers */
+.row-hdr { background: linear-gradient(90deg, #fafafa, #eee); text-align: center; color: #555; font-weight: 600; position: sticky; left: 0; z-index: 2; cursor: pointer; user-select: none; font-size: 12px; border-right: 1px solid #c0c0c0; position: relative; min-width: 46px; }
+.row-hdr:hover { background: linear-gradient(90deg, #e8e8e8, #ddd); }
+.row-hdr.sel { background: linear-gradient(90deg, #d6e4f9, #c2d8f0); color: #1a73e8; }
+.row-resize { position: absolute; bottom: -2px; left: 0; right: 0; height: 5px; cursor: row-resize; }
+
+/* ── Cells ── */
+.cell { padding: 0; cursor: cell; overflow: hidden; position: relative; height: 26px; }
+.cell.sel { background: #e8f0fe !important; }
+.cell.sel-head { outline: 2px solid #1a73e8; outline-offset: -1px; z-index: 1; background: #fff !important; }
 .cell.editing { padding: 0; }
-.cell-display { display: block; padding: 0 6px; line-height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cell-edit-input { width: 100%; height: 100%; border: none; outline: none; padding: 0 6px; font-size: 13px; font-family: inherit; background: #fff; }
-.fill-handle { position: absolute; right: -3px; bottom: -3px; width: 8px; height: 8px; background: #1a73e8; cursor: crosshair; z-index: 2; border-radius: 1px; }
-.move-handle { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 20px; height: 4px; background: #1a73e8; cursor: move; z-index: 2; border-radius: 2px; }
-.comment-marker { position: absolute; top: 0; right: 0; width: 0; height: 0; border-left: 6px solid transparent; border-top: 6px solid #ff6b6b; z-index: 3; }
-.hover-comment { position: fixed; background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 8px 12px; font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 2000; max-width: 250px; white-space: pre-wrap; }
-.context-menu { position: fixed; background: #fff; border: 1px solid #d0d3d8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 1000; min-width: 180px; padding: 4px 0; }
-.menu-item { padding: 6px 16px; font-size: 13px; cursor: pointer; color: #333; }
-.menu-item:hover { background: #f0f5ff; color: #1a73e8; }
-.menu-divider { height: 1px; background: #e8e8e8; margin: 4px 0; }
-.chart-panel { border-top: 1px solid #d0d3d8; background: #fafafa; padding: 8px; }
-.chart-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.chart-title-input { border: 1px solid #d0d3d8; border-radius: 4px; padding: 2px 8px; font-size: 13px; width: 120px; outline: none; }
-.chart-title-input:focus { border-color: #409eff; }
-.chart-body { display: flex; justify-content: center; position: relative; }
-.chart-body canvas { border: 1px solid #e8e8e8; border-radius: 4px; background: #fff; }
-.chart-tooltip { position: absolute; background: rgba(0,0,0,0.75); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; }
-.filter-panel { position: fixed; background: #fff; border: 1px solid #d0d3d8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 1001; width: 200px; max-height: 300px; }
-.filter-panel-header { padding: 8px 12px; border-bottom: 1px solid #e8e8e8; }
-.filter-panel-list { max-height: 200px; overflow-y: auto; padding: 4px 12px; }
-.filter-panel-item { padding: 2px 0; }
-.filter-panel-footer { padding: 8px 12px; border-top: 1px solid #e8e8e8; display: flex; gap: 8px; }
-.cond-rule-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-.cond-new-rule { display: flex; align-items: center; gap: 8px; }
-.cond-scale-row { display: flex; align-items: center; gap: 8px; }
-.sheet-tabs { display: flex; align-items: center; gap: 2px; padding: 4px 8px; border-top: 1px solid #d0d3d8; background: #f8f9fa; min-height: 32px; }
-.sheet-tab { padding: 4px 12px; font-size: 12px; cursor: pointer; border: 1px solid transparent; border-radius: 4px 4px 0 0; color: #555; user-select: none; }
-.sheet-tab:hover { background: #e8e8e8; }
-.sheet-tab.active { background: #fff; border-color: #d0d3d8; border-bottom-color: #fff; font-weight: 500; color: #1a73e8; }
-.search-dialog { position: fixed; top: 60px; right: 20px; z-index: 2000; }
+.cell.has-comment .comment-flag { position: absolute; top: 0; right: 0; width: 0; height: 0; border-left: 6px solid transparent; border-top: 6px solid #e6a23c; z-index: 3; }
+.cell.frozen { background: #fafafa; }
+
+.cell-val { display: block; padding: 0 6px; line-height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell-input { width: 100%; height: 100%; border: none; outline: none; padding: 0 6px; font-size: 13px; font-family: inherit; background: #fff; }
+
+/* Fill & Move handles */
+.fill-h { position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px; background: #1a73e8; cursor: crosshair; z-index: 2; border-radius: 0; }
+.move-h { position: absolute; left: 50%; top: -4px; transform: translateX(-50%); width: 16px; height: 4px; background: #1a73e8; cursor: move; z-index: 2; border-radius: 2px; opacity: 0.7; }
+.comment-flag { position: absolute; top: 0; right: 0; width: 0; height: 0; border-left: 6px solid transparent; border-top: 6px solid #e6a23c; z-index: 3; }
+
+/* ── Comment Popup ── */
+.comment-popup { position: fixed; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 4px; padding: 8px 12px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); z-index: 2000; max-width: 250px; white-space: pre-wrap; color: #333; }
+
+/* ── Context Menu ── */
+.ctx-menu { position: fixed; background: #fff; border: 1px solid #d0d0d0; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); z-index: 1000; min-width: 200px; padding: 4px 0; }
+.ctx-item { padding: 6px 28px 6px 12px; font-size: 13px; cursor: pointer; color: #333; display: flex; align-items: center; gap: 8px; }
+.ctx-item:hover { background: #e8f0fe; color: #1a73e8; }
+.ctx-icon { font-size: 14px; width: 18px; text-align: center; }
+.ctx-key { margin-left: auto; color: #aaa; font-size: 11px; }
+.ctx-sep { height: 1px; background: #e8e8e8; margin: 4px 0; }
+
+/* ── Chart Panel ── */
+.chart-panel { border-top: 1px solid #d6d6d6; background: #fafafa; padding: 8px; }
+.chart-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.chart-title { border: 1px solid #d6d6d6; border-radius: 4px; padding: 2px 8px; font-size: 13px; width: 120px; outline: none; }
+.chart-title:focus { border-color: #1a73e8; }
+.chart-canvas-wrap { display: flex; justify-content: center; position: relative; }
+.chart-canvas-wrap canvas { border: 1px solid #e0e0e0; border-radius: 4px; background: #fff; }
+.chart-tip { position: absolute; background: rgba(0,0,0,0.78); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; }
+
+/* ── Filter Panel ── */
+.filter-panel { position: fixed; background: #fff; border: 1px solid #d0d0d0; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); z-index: 1001; width: 200px; }
+
+/* ── Sheet Tabs (Excel style) ── */
+.sheet-tabs { display: flex; align-items: center; height: 32px; border-top: 1px solid #d6d6d6; background: #f3f3f3; padding: 0 4px; flex-shrink: 0; }
+.tabs-scroll { display: flex; align-items: center; gap: 0; flex: 1; overflow-x: auto; }
+.tab { display: inline-flex; align-items: center; gap: 4px; padding: 4px 14px; font-size: 12px; cursor: pointer; border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0; color: #555; user-select: none; background: transparent; height: 26px; transition: all 0.1s; white-space: nowrap; }
+.tab:hover { background: #e5e5e5; }
+.tab.active { background: #fff; border-color: #d6d6d6; color: #1a73e8; font-weight: 600; border-bottom: 1px solid #fff; margin-bottom: -1px; }
+.tab-x { font-size: 14px; color: #999; margin-left: 2px; line-height: 1; }
+.tab-x:hover { color: #e53935; }
+.tab-add { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; font-size: 16px; color: #666; transition: all 0.1s; }
+.tab-add:hover { background: #e5e5e5; border-color: #d0d0d0; color: #1a73e8; }
+.tabs-info { font-size: 11px; color: #999; padding: 0 8px; white-space: nowrap; }
 </style>
