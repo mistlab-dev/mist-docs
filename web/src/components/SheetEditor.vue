@@ -307,124 +307,241 @@ function getCellDisplay(row: number, col: number): string {
 
 function evaluateFormula(formula: string): string {
   try {
-    const expr = formula.substring(1).toUpperCase()
-    // SUM(A1:B3)
-    const sumMatch = expr.match(/^SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/)
-    if (sumMatch) {
-      const c1 = colIndex(sumMatch[1]), r1 = parseInt(sumMatch[2]) - 1
-      const c2 = colIndex(sumMatch[3]), r2 = parseInt(sumMatch[4]) - 1
-      let sum = 0
-      for (let r = r1; r <= r2; r++) {
-        for (let c = c1; c <= c2; c++) {
-          sum += parseFloat(rows.value[r]?.[c]) || 0
-        }
-      }
-      return String(sum)
-    }
-    // AVG
-    const avgMatch = expr.match(/^AVG\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/)
-    if (avgMatch) {
-      const c1 = colIndex(avgMatch[1]), r1 = parseInt(avgMatch[2]) - 1
-      const c2 = colIndex(avgMatch[3]), r2 = parseInt(avgMatch[4]) - 1
-      let sum = 0, count = 0
-      for (let r = r1; r <= r2; r++) {
-        for (let c = c1; c <= c2; c++) {
-          const v = parseFloat(rows.value[r]?.[c])
-          if (!isNaN(v)) { sum += v; count++ }
-        }
-      }
-      return count ? String(Math.round(sum / count * 100) / 100) : '0'
-    }
-    // COUNT
-    const countMatch = expr.match(/^COUNT\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/)
-    if (countMatch) {
-      const c1 = colIndex(countMatch[1]), r1 = parseInt(countMatch[2]) - 1
-      const c2 = colIndex(countMatch[3]), r2 = parseInt(countMatch[4]) - 1
-      let count = 0
-      for (let r = r1; r <= r2; r++) {
-        for (let c = c1; c <= c2; c++) {
-          const v = rows.value[r]?.[c]
-          if (v && v.trim()) count++
-        }
-      }
-      return String(count)
-    }
-    // MAX
-    const maxMatch = expr.match(/^MAX\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/)
-    if (maxMatch) {
-      const c1 = colIndex(maxMatch[1]), r1 = parseInt(maxMatch[2]) - 1
-      const c2 = colIndex(maxMatch[3]), r2 = parseInt(maxMatch[4]) - 1
-      let max = -Infinity
-      for (let r = r1; r <= r2; r++) {
-        for (let c = c1; c <= c2; c++) {
-          const v = parseFloat(rows.value[r]?.[c])
-          if (!isNaN(v) && v > max) max = v
-        }
-      }
-      return max === -Infinity ? '0' : String(max)
-    }
-    // MIN
-    const minMatch = expr.match(/^MIN\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/)
-    if (minMatch) {
-      const c1 = colIndex(minMatch[1]), r1 = parseInt(minMatch[2]) - 1
-      const c2 = colIndex(minMatch[3]), r2 = parseInt(minMatch[4]) - 1
-      let min = Infinity
-      for (let r = r1; r <= r2; r++) {
-        for (let c = c1; c <= c2; c++) {
-          const v = parseFloat(rows.value[r]?.[c])
-          if (!isNaN(v) && v < min) min = v
-        }
-      }
-      return min === Infinity ? '0' : String(min)
-    }
-    // IF(condition, true_val, false_val) - supports simple comparisons
-    const ifMatch = expr.match(/^IF\(([^,]+),([^,]+),([^)]+)\)$/)
-    if (ifMatch) {
-      const cond = resolveValue(ifMatch[1].trim())
-      const trueVal = resolveValue(ifMatch[2].trim())
-      const falseVal = resolveValue(ifMatch[3].trim())
-      // Evaluate condition
-      const condStr = String(cond)
-      let result = false
-      if (condStr.includes('>=')) { const [a, b] = condStr.split('>='); result = parseFloat(a) >= parseFloat(b) }
-      else if (condStr.includes('<=')) { const [a, b] = condStr.split('<='); result = parseFloat(a) <= parseFloat(b) }
-      else if (condStr.includes('!=')) { const [a, b] = condStr.split('!='); result = a !== b }
-      else if (condStr.includes('>')) { const [a, b] = condStr.split('>'); result = parseFloat(a) > parseFloat(b) }
-      else if (condStr.includes('<')) { const [a, b] = condStr.split('<'); result = parseFloat(a) < parseFloat(b) }
-      else if (condStr.includes('=')) { const [a, b] = condStr.split('='); result = a === b }
-      else { result = !!cond && cond !== '0' && cond !== '' }
-      return result ? trueVal : falseVal
-    }
-    // 简单四则运算
-    const calcMatch = expr.match(/^([\d+\-*/(). ]+)$/)
-    if (calcMatch) {
-      // 安全计算：只允许数字和运算符
-      const safe = expr.replace(/[^0-9+\-*/().]/g, '')
-      if (safe === expr) {
-        const result = Function('"use strict"; return (' + expr + ')')()
-        return String(result)
-      }
-    }
-    // 单元格引用 A1
-    const cellMatch = expr.match(/^([A-Z]+)(\d+)$/)
-    if (cellMatch) {
-      const c = colIndex(cellMatch[1]), r = parseInt(cellMatch[2]) - 1
-      return rows.value[r]?.[c] || ''
-    }
-    return formula
+    const result = parseExpr(formula.substring(1))
+    return String(result)
   } catch {
     return formula
   }
 }
 
-function resolveValue(expr: string): string {
-  // Cell reference like A1
-  const cellMatch = expr.match(/^([A-Z]+)(\d+)$/)
-  if (cellMatch) {
-    const c = colIndex(cellMatch[1]), r = parseInt(cellMatch[2]) - 1
-    return rows.value[r]?.[c] || ''
+// ─── 递归公式解析器 ───
+function parseExpr(expr: string): any {
+  expr = expr.trim()
+  // 字符串字面量
+  if (expr.startsWith('"') && expr.endsWith('"')) return expr.slice(1, -1)
+  // 数字
+  if (/^-?\d+(\.\d+)?$/.test(expr)) return parseFloat(expr)
+  // 布尔
+  if (expr.toUpperCase() === 'TRUE') return true
+  if (expr.toUpperCase() === 'FALSE') return false
+  // 函数调用
+  const fnMatch = expr.match(/^([A-Z]+)\((.+)\)$/is)
+  if (fnMatch) return callFn(fnMatch[1].toUpperCase(), fnMatch[2])
+  // 范围 A1:B3
+  if (/^[A-Z]+\d+:[A-Z]+\d+$/.test(expr.toUpperCase())) return getRange(expr.toUpperCase())
+  // 单元格引用 A1
+  const cellM = expr.match(/^([A-Z]+)(\d+)$/i)
+  if (cellM) return getCellVal(cellM[1].toUpperCase(), parseInt(cellM[2]))
+  // 四则运算 + 比较
+  if (/[+\-*/()><=!]/.test(expr)) {
+    return safeCalc(expr)
   }
   return expr
+}
+
+// 拆分多参数（支持括号嵌套）
+function splitArgs(s: string): string[] {
+  const args: string[] = []
+  let depth = 0, cur = ''
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    if (ch === ',' && depth === 0) { args.push(cur.trim()); cur = '' }
+    else cur += ch
+  }
+  if (cur.trim()) args.push(cur.trim())
+  return args
+}
+
+function callFn(name: string, rawArgs: string): any {
+  const args = splitArgs(rawArgs)
+  // 解析参数时，范围参数特殊处理
+  const parsed = args.map(a => parseExpr(a))
+
+  switch (name) {
+    // ─── 聚合 ───
+    case 'SUM': return numArray(args[0]).reduce((a, b) => a + b, 0)
+    case 'AVG': case 'AVERAGE': { const arr = numArray(args[0]); return arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length * 100) / 100 : 0 }
+    case 'COUNT': return numArray(args[0], true).length
+    case 'MAX': { const arr = numArray(args[0]); return arr.length ? Math.max(...arr) : 0 }
+    case 'MIN': { const arr = numArray(args[0]); return arr.length ? Math.min(...arr) : 0 }
+    case 'COUNTA': return strArray(args[0]).filter(v => v !== '').length
+
+    // ─── 条件聚合 ───
+    case 'COUNTIF': { const vals = strArray(args[0]), cond = parsed[1]; return vals.filter(v => testCond(v, cond)).length }
+    case 'SUMIF': { const vals = numArray(args[0], false, true), criteria = parsed[1]; return vals.filter((_, i) => testCond(strArray(args[0], true)[i], criteria)).reduce((a, b) => a + b, 0) }
+    case 'AVERAGEIF': { const s = numArray(args[0]), c = parsed[1]; const f = s.filter((_, i) => testCond(strArray(args[0], true)[i], c)); return f.length ? Math.round(f.reduce((a, b) => a + b, 0) / f.length * 100) / 100 : 0 }
+
+    // ─── 数学 ───
+    case 'ABS': return Math.abs(parsed[0])
+    case 'ROUND': return Math.round(parsed[0] * Math.pow(10, parsed[1] || 0)) / Math.pow(10, parsed[1] || 0)
+    case 'CEIL': case 'CEILING': return Math.ceil(parsed[0])
+    case 'FLOOR': return Math.floor(parsed[0])
+    case 'INT': return Math.trunc(parsed[0])
+    case 'POWER': case 'POW': return Math.pow(parsed[0], parsed[1])
+    case 'MOD': return parsed[0] % parsed[1]
+    case 'SQRT': return Math.sqrt(parsed[0])
+    case 'LOG': return parsed[1] ? Math.log(parsed[0]) / Math.log(parsed[1]) : Math.log10(parsed[0])
+    case 'LN': return Math.log(parsed[0])
+    case 'EXP': return Math.exp(parsed[0])
+    case 'PI': return Math.PI
+    case 'RAND': return Math.random()
+    case 'RANDBETWEEN': return Math.floor(Math.random() * (parsed[1] - parsed[0] + 1)) + parsed[0]
+    case 'SIGN': return Math.sign(parsed[0])
+    case 'TRUNC': return Math.trunc(parsed[0])
+    case 'PRODUCT': return numArray(args[0]).reduce((a, b) => a * b, 1)
+    case 'MEDIAN': { const arr = numArray(args[0]).sort((a, b) => a - b); const m = Math.floor(arr.length / 2); return arr.length % 2 ? arr[m] : (arr[m - 1] + arr[m]) / 2 }
+    case 'STDEV': { const arr = numArray(args[0]); const avg = arr.reduce((a, b) => a + b, 0) / arr.length; return Math.sqrt(arr.reduce((s, v) => s + (v - avg) ** 2, 0) / (arr.length - 1)) }
+    case 'VAR': { const arr = numArray(args[0]); const avg = arr.reduce((a, b) => a + b, 0) / arr.length; return arr.reduce((s, v) => s + (v - avg) ** 2, 0) / (arr.length - 1) }
+
+    // ─── 逻辑 ───
+    case 'IF': return parsed[0] ? parsed[1] : parsed[2]
+    case 'AND': return parsed.every(v => !!v)
+    case 'OR': return parsed.some(v => !!v)
+    case 'NOT': return !parsed[0]
+    case 'XOR': return parsed.filter(v => !!v).length === 1
+    case 'IFS': { for (let i = 0; i < parsed.length - 1; i += 2) { if (parsed[i]) return parsed[i + 1] } return parsed.length % 2 ? parsed[parsed.length - 1] : '#N/A' }
+    case 'SWITCH': { const val = parsed[0]; for (let i = 1; i < parsed.length - 1; i += 2) { if (val == parsed[i]) return parsed[i + 1] } return parsed.length % 2 === 0 ? parsed[parsed.length - 1] : '#N/A' }
+    case 'ISBLANK': return parsed[0] === '' || parsed[0] === undefined || parsed[0] === null
+    case 'ISNUMBER': return !isNaN(parsed[0]) && parsed[0] !== ''
+    case 'ISTEXT': return typeof parsed[0] === 'string' && isNaN(parsed[0])
+
+    // ─── 文本 ───
+    case 'CONCAT': case 'CONCATENATE': return parsed.join('')
+    case 'LEN': return String(parsed[0]).length
+    case 'LEFT': return String(parsed[0]).substring(0, parsed[1] || 1)
+    case 'RIGHT': return String(parsed[0]).slice(-(parsed[1] || 1))
+    case 'MID': return String(parsed[0]).substring(parsed[1] - 1, parsed[1] - 1 + parsed[2])
+    case 'UPPER': return String(parsed[0]).toUpperCase()
+    case 'LOWER': return String(parsed[0]).toLowerCase()
+    case 'TRIM': return String(parsed[0]).trim()
+    case 'SUBSTITUTE': case 'REPLACE': return String(parsed[0]).replaceAll(String(parsed[1]), String(parsed[2]))
+    case 'REPT': return String(parsed[0]).repeat(parsed[1])
+    case 'FIND': return String(parsed[1]).indexOf(String(parsed[0])) + 1
+    case 'TEXT': return String(parsed[0])
+    case 'VALUE': return parseFloat(String(parsed[0])) || 0
+    case 'EXACT': return String(parsed[0]) === String(parsed[1])
+    case 'JOIN': return strArray(args[1]).join(String(parsed[0]))
+
+    // ─── 日期 ───
+    case 'NOW': return new Date().toLocaleString('zh-CN')
+    case 'TODAY': return new Date().toLocaleDateString('zh-CN')
+    case 'YEAR': return new Date(String(parsed[0])).getFullYear()
+    case 'MONTH': return new Date(String(parsed[0])).getMonth() + 1
+    case 'DAY': return new Date(String(parsed[0])).getDate()
+    case 'HOUR': return new Date(String(parsed[0])).getHours()
+    case 'MINUTE': return new Date(String(parsed[0])).getMinutes()
+    case 'DATEDIF': { const d1 = new Date(String(parsed[0])), d2 = new Date(String(parsed[1])); const diff = (d2.getTime() - d1.getTime()) / 86400000; return parsed[2] === 'Y' ? Math.floor(diff / 365.25) : parsed[2] === 'M' ? Math.floor(diff / 30.44) : Math.floor(diff) }
+    case 'WEEKDAY': return new Date(String(parsed[0])).getDay() + 1
+    case 'WEEKNUM': { const d = new Date(String(parsed[0])); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7); const w1 = new Date(d.getFullYear(), 0, 4); return 1 + Math.round(((d.getTime() - w1.getTime()) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7) }
+
+    // ─── 查找 ───
+    case 'VLOOKUP': { const key = String(parsed[0]); const vals = strArray(args[1], true); const col = parsed[2] - 1; const data = getRangeData(args[1]); const idx = vals.indexOf(key); return idx >= 0 && data[idx] ? getCellValByRC(data[idx].r, data[idx].c + col) : '#N/A' }
+    case 'INDEX': { const arr = numArray(args[0], false, true); return arr[parsed[1] - 1] ?? '#N/A' }
+    case 'MATCH': { const arr = strArray(args[0], true); const idx = arr.indexOf(String(parsed[1])); return idx >= 0 ? idx + 1 : '#N/A' }
+    case 'CHOOSE': return parsed[parsed[0]] ?? '#N/A'
+
+    default: return '#NAME?'
+  }
+}
+
+// ─── 辅助 ───
+function getCellVal(col: string, row: number): any {
+  const c = colIndex(col), r = row - 1
+  const v = rows.value[r]?.[c]
+  if (v === undefined || v === '') return ''
+  const n = parseFloat(v)
+  return isNaN(n) ? v : n
+}
+
+function getCellValByRC(r: number, c: number): any {
+  const v = rows.value[r]?.[c]
+  if (v === undefined || v === '') return ''
+  const n = parseFloat(v)
+  return isNaN(n) ? v : n
+}
+
+function getRange(rangeStr: string): any[] {
+  const m = rangeStr.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+  if (!m) return []
+  const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1
+  const result: any[] = []
+  for (let r = r1; r <= r2; r++)
+    for (let c = c1; c <= c2; c++)
+      result.push(rows.value[r]?.[c] || '')
+  return result
+}
+
+interface RC { r: number; c: number }
+function getRangeData(arg: string): RC[] {
+  const m = arg.trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+  if (!m) return []
+  const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1
+  const result: RC[] = []
+  for (let r = r1; r <= r2; r++)
+    for (let c = c1; c <= c2; c++)
+      result.push({ r, c })
+  return result
+}
+
+function numArray(arg: string, countNonNum = false, raw = false): number[] {
+  const m = arg.trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+  if (m) {
+    const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1
+    const result: number[] = []
+    for (let r = r1; r <= r2; r++)
+      for (let c = c1; c <= c2; c++) {
+        const v = rows.value[r]?.[c]
+        if (countNonNum) { if (v !== undefined && v !== '') result.push(raw ? parseFloat(v) || 0 : 1) }
+        else { const n = parseFloat(v); if (!isNaN(n)) result.push(n) }
+      }
+    return result
+  }
+  // comma-separated values
+  return arg.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
+}
+
+function strArray(arg: string, keepAll = false): string[] {
+  const m = arg.trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+  if (m) {
+    const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1
+    const result: string[] = []
+    for (let r = r1; r <= r2; r++)
+      for (let c = c1; c <= c2; c++) {
+        const v = rows.value[r]?.[c]
+        if (keepAll || (v !== undefined && v !== '')) result.push(v || '')
+      }
+    return result
+  }
+  return arg.split(',').map(v => v.trim())
+}
+
+function testCond(value: string, cond: any): boolean {
+  const cs = String(cond)
+  if (cs.startsWith('>') || cs.startsWith('<') || cs.startsWith('!=') || cs.startsWith('=')) {
+    const op = cs.match(/^(>=|<=|!=|>|<|=)/)![1]
+    const target = cs.slice(op.length)
+    const a = parseFloat(value), b = parseFloat(target)
+    if (!isNaN(a) && !isNaN(b)) {
+      if (op === '>') return a > b; if (op === '<') return a < b
+      if (op === '>=') return a >= b; if (op === '<=') return a <= b
+      if (op === '!=') return a !== b; if (op === '=') return a === b
+    }
+    if (op === '=') return value === target
+    if (op === '!=') return value !== target
+  }
+  return value === cs
+}
+
+function safeCalc(expr: string): number {
+  // Replace cell refs with values
+  let safe = expr.replace(/([A-Z]+)(\d+)/gi, (_, col, row) => {
+    const v = getCellVal(col.toUpperCase(), parseInt(row))
+    return isNaN(v) ? '0' : String(v)
+  })
+  safe = safe.replace(/[^0-9+\-*/.() ><=!]/g, '')
+  try { return Function('"use strict"; return (' + safe + ')')() } catch { return NaN }
 }
 
 function colIndex(name: string): number {
