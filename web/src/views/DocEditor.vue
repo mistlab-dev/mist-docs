@@ -8,6 +8,8 @@
       <div class="header-actions">
         <el-tag size="small">{{ doc?.type === 'sheet' ? '表格' : '文档' }}</el-tag>
         <el-tag size="small">v{{ doc?.version || 1 }}</el-tag>
+        <el-tag v-if="collabUsers.length" size="small" type="success">{{ collabUsers.length + 1 }} 人在线</el-tag>
+        <el-tag v-if="collabStatus === 'connected'" size="small" type="success">协同中</el-tag>
         <el-button type="primary" size="small" @click="manualSave" :loading="saving">
           <el-icon><Check /></el-icon> 保存
         </el-button>
@@ -245,6 +247,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
@@ -259,7 +262,11 @@ import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import Collaboration from '@tiptap/extension-collaboration'
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
 import { common, createLowlight } from 'lowlight'
+import * as Y from 'yjs'
+import { MistWSProvider, type CollabUser } from '@/utils/collab'
 import http from '@/utils/http'
 import SheetEditor from '@/components/SheetEditor.vue'
 
@@ -267,6 +274,7 @@ const lowlight = createLowlight(common)
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const docId = route.params.id as string
 
 const doc = ref<any>(null)
@@ -294,6 +302,12 @@ const commentCount = ref(0)
 const replyParent = ref('')
 const currentUserId = ref('')
 
+// 协同编辑
+const collabStatus = ref<'connecting' | 'connected' | 'disconnected'>('disconnected')
+const collabUsers = ref<CollabUser[]>([])
+let ydoc: Y.Doc | null = null
+let wsProvider: MistWSProvider | null = null
+
 // 链接弹窗
 const linkDialog = reactive({ show: false, text: '', url: '' })
 // 代码语言弹窗
@@ -318,6 +332,115 @@ async function loadVersions() {
 }
 
 function initEditor(initialContent: string) {
+  // Try to use Yjs collaboration
+  const token = localStorage.getItem('token')
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsUrl = `${wsProtocol}//${window.location.host}/ws/docs/${docId}?token=${token}`
+
+  // Check if we already have Yjs state on the server
+  // If yes, use collaboration mode. If no, use local mode.
+  const useCollab = !!token && doc.value?.type === 'doc'
+
+  if (useCollab) {
+    try {
+      ydoc = new Y.Doc()
+
+      // Setup WS provider
+      wsProvider = new MistWSProvider(wsUrl, ydoc)
+      wsProvider.onStatus = (status) => { collabStatus.value = status }
+      wsProvider.onUserJoin = (user) => { collabUsers.value = [...collabUsers.value, user] }
+      wsProvider.onUserLeave = (userId) => { collabUsers.value = collabUsers.value.filter(u => u.id !== userId) }
+      wsProvider.onClients = (users) => { collabUsers.value = users.filter((u: CollabUser) => u.id !== currentUserId.value) }
+      wsProvider.bind()
+
+      // Load existing HTML into Y.Doc if it's empty
+      const yXmlFragment = ydoc.getXmlFragment('default')
+      if (yXmlFragment.length === 0 && initialContent) {
+        // Use a temp editor to convert HTML to Y.Doc format
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = initialContent
+        // Let Collaboration extension handle initial content
+      }
+
+      const userColors = ['#e06c75', '#e5c07b', '#98c379', '#56b6c2', '#61afef', '#c678dd', '#d19a66']
+      const userColorIdx = currentUserId.value.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % userColors.length
+
+      editor.value = new Editor({
+        extensions: [
+          StarterKit.configure({
+            codeBlock: false,
+            history: false, // Yjs handles history
+          }),
+          Underline,
+          TaskList,
+          TaskItem.configure({ nested: true }),
+          Placeholder.configure({ placeholder: '开始输入内容...' }),
+          Image.configure({ inline: false, allowBase64: true, HTMLAttributes: { class: 'editor-image' } }),
+          Link.configure({ openOnClick: false, HTMLAttributes: { class: 'editor-link', target: '_blank', rel: 'noopener' } }),
+          Table.configure({ resizable: true }),
+          TableRow,
+          TableCell,
+          TableHeader,
+          CodeBlockLowlight.configure({ lowlight }),
+          Collaboration.configure({
+            document: ydoc,
+          }),
+          CollaborationCursor.configure({
+            provider: { awareness: null } as any,
+            user: {
+              name: auth.user?.name || auth.user?.username || '匿名',
+              color: userColors[userColorIdx],
+              fallbackColor: userColors[userColorIdx],
+            },
+          }),
+        ],
+        editorProps: {
+          attributes: { class: 'prose prose-lg focus:outline-none max-w-none' },
+          handlePaste: (_view: any, event: ClipboardEvent) => {
+            const items = event.clipboardData?.items
+            if (items) {
+              for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') >= 0) {
+                  event.preventDefault()
+                  const file = items[i].getAsFile()
+                  if (file) uploadImageFile(file)
+                  return true
+                }
+              }
+            }
+            return false
+          },
+          handleDrop: (_view: any, event: DragEvent) => {
+            const files = event.dataTransfer?.files
+            if (files) {
+              for (let i = 0; i < files.length; i++) {
+                if (files[i].type.indexOf('image') >= 0) {
+                  event.preventDefault()
+                  uploadImageFile(files[i])
+                  return true
+                }
+              }
+            }
+            return false
+          },
+        },
+        onUpdate: () => {
+          // In collab mode, Yjs handles sync via WS
+          // Still auto-save HTML snapshot periodically
+          scheduleAutoSave()
+        },
+      })
+      return
+    } catch (e) {
+      console.warn('Collab mode failed, falling back to local:', e)
+      ydoc?.destroy()
+      ydoc = null
+      wsProvider?.destroy()
+      wsProvider = null
+    }
+  }
+
+  // Fallback: local mode (no collab)
   editor.value = new Editor({
     content: initialContent || '',
     extensions: [
@@ -593,6 +716,8 @@ onMounted(async () => {
 onUnmounted(() => {
   doSave().catch(() => {})
   clearTimeout(autoSaveTimer)
+  wsProvider?.destroy()
+  ydoc?.destroy()
   editor.value?.destroy()
 })
 </script>
@@ -639,6 +764,30 @@ onUnmounted(() => {
 .tiptap-editor :deep(.ProseMirror table th) { background: #f5f7fa; font-weight: 600; text-align: left; }
 .tiptap-editor :deep(.ProseMirror table .selectedCell) { background: #e8f0fe; }
 .tiptap-editor :deep(.ProseMirror hr) { border: none; border-top: 2px solid #e8e8e8; margin: 1.5em 0; }
+
+/* Collaboration cursors */
+.tiptap-editor :deep(.collaboration-cursor__caret) {
+  border-left: 1px solid #0d0d0d;
+  border-right: 1px solid #0d0d0d;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+.tiptap-editor :deep(.collaboration-cursor__label) {
+  border-radius: 3px 3px 3px 0;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  left: -1px;
+  line-height: normal;
+  padding: 2px 6px;
+  position: absolute;
+  top: -1.4em;
+  user-select: none;
+  white-space: nowrap;
+}
 
 /* 移动端适配 */
 @media (max-width: 768px) {
