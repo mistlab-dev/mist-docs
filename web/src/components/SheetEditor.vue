@@ -992,8 +992,8 @@ function callFn(name: string, rawArgs: string): any {
     case 'IFS': { for (let i = 0; i < parsed.length - 1; i += 2) { if (parsed[i]) return parsed[i + 1] } return parsed.length % 2 ? parsed[parsed.length - 1] : '#N/A' }
     case 'SWITCH': { const val = parsed[0]; for (let i = 1; i < parsed.length - 1; i += 2) { if (val == parsed[i]) return parsed[i + 1] } return parsed.length % 2 === 0 ? parsed[parsed.length - 1] : '#N/A' }
     case 'ISBLANK': return parsed[0] === '' || parsed[0] === undefined || parsed[0] === null
-    case 'ISNUMBER': return !isNaN(parsed[0]) && parsed[0] !== ''
-    case 'ISTEXT': return typeof parsed[0] === 'string' && isNaN(parsed[0])
+    case 'ISNUMBER': return !isNaN(Number(parsed[0])) && parsed[0] !== ''
+    case 'ISTEXT': return typeof parsed[0] === 'string' && isNaN(Number(parsed[0]))
     case 'CONCAT': case 'CONCATENATE': return parsed.join('')
     case 'LEN': return String(parsed[0]).length
     case 'LEFT': return String(parsed[0]).substring(0, parsed[1] || 1)
@@ -1002,7 +1002,7 @@ function callFn(name: string, rawArgs: string): any {
     case 'UPPER': return String(parsed[0]).toUpperCase()
     case 'LOWER': return String(parsed[0]).toLowerCase()
     case 'TRIM': return String(parsed[0]).trim()
-    case 'SUBSTITUTE': case 'REPLACE': return String(parsed[0]).replaceAll(String(parsed[1]), String(parsed[2]))
+    case 'SUBSTITUTE': case 'REPLACE': return String(parsed[0]).split(String(parsed[1])).join(String(parsed[2]))
     case 'REPT': return String(parsed[0]).repeat(parsed[1])
     case 'FIND': return String(parsed[1]).indexOf(String(parsed[0])) + 1
     case 'TEXT': return String(parsed[0])
