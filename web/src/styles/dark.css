@@ -1,0 +1,40 @@
+/* MistDocs Dark Mode Overrides */
+
+html.dark {
+  --md-bg: #141414;
+  --md-card-bg: #1d1e2c;
+  --md-text: #e0e0e0;
+  --md-text-secondary: #a0a4b8;
+  --md-border: #333;
+  --md-sidebar-bg: #0d0d1a;
+  --md-hover: #2a2b3d;
+}
+
+html.dark .docs-page { background: var(--md-bg); color: var(--md-text); }
+html.dark .doc-card { background: var(--md-card-bg); border-color: var(--md-border); }
+html.dark .doc-card:hover { background: var(--md-hover); }
+html.dark .editor-page { background: var(--md-bg); }
+html.dark .editor-header { background: var(--md-card-bg); border-color: var(--md-border); }
+html.dark .editor-content { background: var(--md-bg); color: var(--md-text); }
+html.dark .ProseMirror { color: var(--md-text); }
+html.dark .formula-bar { background: var(--md-card-bg); border-color: var(--md-border); }
+html.dark .formula-bar input { background: var(--md-bg); color: var(--md-text); border-color: var(--md-border); }
+html.dark .sheet-table { color: var(--md-text); }
+html.dark .sheet-table th { background: var(--md-card-bg); color: var(--md-text-secondary); border-color: var(--md-border); }
+html.dark .sheet-table td { border-color: var(--md-border); }
+html.dark .sheet-table td.editing { background: var(--md-hover); }
+html.dark .sheet-table td.selected { background: rgba(64,158,255,0.2); }
+html.dark .sheet-toolbar { background: var(--md-card-bg); border-color: var(--md-border); }
+html.dark .sidebar { background: var(--md-sidebar-bg) !important; }
+html.dark .topbar { background: var(--md-card-bg); border-color: var(--md-border); }
+html.dark .el-dialog { background: var(--md-card-bg); }
+html.dark .comment-panel { background: var(--md-card-bg); border-color: var(--md-border); }
+html.dark .share-view { background: var(--md-bg); color: var(--md-text); }
+html.dark .share-content { background: var(--md-card-bg); }
+html.dark .notif-drawer { background: var(--md-card-bg); }
+html.dark .login-page { background: var(--md-bg); }
+html.dark .login-card { background: var(--md-card-bg); }
+html.dark .trash-page { background: var(--md-bg); color: var(--md-text); }
+html.dark .el-table { background: var(--md-card-bg); }
+html.dark .el-table tr { background: var(--md-card-bg); }
+html.dark .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell { background: var(--md-hover); }

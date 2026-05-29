@@ -78,6 +78,10 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="theme">
+                  <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
+                  {{ isDark ? '浅色模式' : '深色模式' }}
+                </el-dropdown-item>
                 <el-dropdown-item command="password">修改密码</el-dropdown-item>
                 <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
               </el-dropdown-menu>
@@ -129,6 +133,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { Sunny, Moon } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
@@ -138,6 +143,7 @@ import http from '@/utils/http'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const isDark = ref(false)
 const collapsed = ref(false)
 
 const showPasswordDialog = ref(false)
@@ -200,7 +206,15 @@ function handleCommand(cmd: string) {
     router.push('/login')
   } else if (cmd === 'password') {
     showPasswordDialog.value = true
+  } else if (cmd === 'theme') {
+    toggleDark()
   }
+}
+
+function toggleDark() {
+  isDark.value = !isDark.value
+  document.documentElement.classList.toggle('dark', isDark.value)
+  localStorage.setItem('mistdocs-theme', isDark.value ? 'dark' : 'light')
 }
 
 async function changePassword() {
@@ -218,6 +232,13 @@ async function changePassword() {
 }
 
 onMounted(() => {
+  // Restore theme preference
+  const saved = localStorage.getItem('mistdocs-theme')
+  if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    isDark.value = true
+    document.documentElement.classList.add('dark')
+  }
+
   if (auth.token && !auth.user) {
     auth.fetchMe()
   }
