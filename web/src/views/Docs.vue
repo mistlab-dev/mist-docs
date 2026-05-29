@@ -23,6 +23,7 @@
     <div v-if="selectedDocs.length" class="batch-bar">
       <span>已选 {{ selectedDocs.length }} 项</span>
       <el-button size="small" @click="showBatchMove = true">批量移动</el-button>
+      <el-button size="small" type="success" @click="batchExport">批量导出</el-button>
       <el-button size="small" type="danger" @click="batchDelete">批量删除</el-button>
       <el-button size="small" text @click="selectedDocs = []">取消选择</el-button>
     </div>
@@ -535,6 +536,23 @@ async function batchDelete() {
   ElMessage.success(`已删除 ${ok} 个文档`)
   selectedDocs.value = []
   loadDocs()
+}
+
+async function batchExport() {
+  if (!selectedDocs.value.length) return
+  ElMessage.info('正在导出...')
+  let ok = 0
+  for (const id of selectedDocs.value) {
+    try {
+      const resp = await http.get(`/docs/documents/${id}/export`, { params: { format: 'markdown' }, responseType: 'blob' })
+      const url = URL.createObjectURL(resp.data)
+      const a = document.createElement('a'); a.href = url
+      a.download = resp.headers['content-disposition']?.match(/"([^"]+)"/)?.[1] || `${id}.md`
+      a.click(); URL.revokeObjectURL(url)
+      ok++
+    } catch {}
+  }
+  ElMessage.success(`已导出 ${ok} 个文档`)
 }
 
 async function doBatchMove() {

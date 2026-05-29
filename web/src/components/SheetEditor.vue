@@ -38,6 +38,9 @@
         </el-button>
       </el-button-group>
       <span class="sheet-info">{{ rows.length }} 行 × {{ colCount }} 列</span>
+      <el-button size="small" @click="showChart = !showChart" :type="showChart ? 'primary' : ''">
+        <el-icon><TrendCharts /></el-icon> 图表
+      </el-button>
     </div>
 
     <!-- 表格 -->
@@ -119,12 +122,32 @@
       <div class="menu-divider"></div>
       <div class="menu-item" @click="ctxClearCells">清空单元格</div>
     </div>
+
+    <!-- 图表面板 -->
+    <div v-if="showChart" class="chart-panel">
+      <div class="chart-header">
+        <el-select v-model="chartType" size="small" style="width:100px">
+          <el-option label="柱状图" value="bar" />
+          <el-option label="折线图" value="line" />
+          <el-option label="饼图" value="pie" />
+        </el-select>
+        <el-select v-model="chartDataRange" size="small" style="width:140px" placeholder="数据范围">
+          <el-option label="当前列" value="col" />
+          <el-option label="选中区域" value="selection" />
+          <el-option label="全部数据" value="all" />
+        </el-select>
+        <el-button size="small" text @click="showChart = false">✕</el-button>
+      </div>
+      <div class="chart-body">
+        <canvas ref="chartCanvas" width="500" height="300"></canvas>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { Top, Bottom, Back, Right, Delete } from '@element-plus/icons-vue'
+import { Top, Bottom, Back, Right, Delete, TrendCharts } from '@element-plus/icons-vue'
 
 const props = defineProps<{ initialData?: string }>()
 const emit = defineEmits<{ (e: 'change', data: string): void }>()
@@ -148,9 +171,113 @@ const currentCellRef = computed(() => {
 })
 
 // 右键菜单
-const contextMenu = ref<{ show: boolean; x: number; y: number; row: number; col: number }>({
-  show: false, x: 0, y: 0, row: -1, col: -1
-})
+const contextMenu = ref<{ show: boolean; x: number; y: number; row: number; col: number }>({ show: false, x: 0, y: 0, row: -1, col: -1 })
+const showChart = ref(false)
+const chartType = ref('bar')
+const chartDataRange = ref('col')
+const chartCanvas = ref<HTMLCanvasElement | null>(null)
+
+// 绘制图表
+function drawChart() {
+  const canvas = chartCanvas.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  const W = canvas.width, H = canvas.height
+  ctx.clearRect(0, 0, W, H)
+
+  // 获取数据
+  let labels: string[] = [], values: number[] = []
+  if (chartDataRange.value === 'col' && selectedCell.value) {
+    const c = selectedCell.value.c
+    for (let r = 0; r < rows.value.length; r++) {
+      labels.push(rows.value[r]?.[0] || String(r + 1))
+      values.push(parseFloat(rows.value[r]?.[c]) || 0)
+    }
+  } else {
+    // 全部：第一列标签，第二列数值
+    for (let r = 0; r < rows.value.length; r++) {
+      labels.push(rows.value[r]?.[0] || String(r + 1))
+      values.push(parseFloat(rows.value[r]?.[1]) || 0)
+    }
+  }
+  if (!values.length) return
+
+  const colors = ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399', '#00D1B2', '#FF6B6B', '#48C774']
+
+  if (chartType.value === 'pie') {
+    const total = values.reduce((a, b) => a + b, 0)
+    if (total === 0) return
+    const cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 40
+    let startAngle = -Math.PI / 2
+    values.forEach((v, i) => {
+      const slice = (v / total) * Math.PI * 2
+      ctx.beginPath()
+      ctx.moveTo(cx, cy)
+      ctx.arc(cx, cy, r, startAngle, startAngle + slice)
+      ctx.fillStyle = colors[i % colors.length]
+      ctx.fill()
+      // Label
+      const mid = startAngle + slice / 2
+      const lx = cx + (r * 0.65) * Math.cos(mid), ly = cy + (r * 0.65) * Math.sin(mid)
+      ctx.fillStyle = '#fff'
+      ctx.font = '11px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText(labels[i], lx, ly)
+      startAngle += slice
+    })
+  } else {
+    const max = Math.max(...values) * 1.2 || 1
+    const padL = 50, padR = 20, padT = 20, padB = 40
+    const chartW = W - padL - padR, chartH = H - padT - padB
+
+    // Y轴
+    ctx.strokeStyle = '#ddd'
+    ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + chartH); ctx.stroke()
+    // X轴
+    ctx.beginPath(); ctx.moveTo(padL, padT + chartH); ctx.lineTo(padL + chartW, padT + chartH); ctx.stroke()
+
+    // 刻度
+    ctx.fillStyle = '#999'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'
+    for (let i = 0; i <= 5; i++) {
+      const y = padT + (chartH / 5) * i
+      const val = (max * (5 - i) / 5).toFixed(0)
+      ctx.fillText(val, padL - 6, y + 4)
+      ctx.strokeStyle = '#f0f0f0'
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + chartW, y); ctx.stroke()
+    }
+
+    const step = chartW / (values.length || 1)
+    ctx.textAlign = 'center'
+    labels.forEach((l, i) => ctx.fillText(l, padL + step * i + step / 2, padT + chartH + 16))
+
+    if (chartType.value === 'bar') {
+      const bw = Math.min(step * 0.6, 40)
+      values.forEach((v, i) => {
+        const h = (v / max) * chartH
+        ctx.fillStyle = colors[i % colors.length]
+        ctx.fillRect(padL + step * i + (step - bw) / 2, padT + chartH - h, bw, h)
+      })
+    } else {
+      ctx.strokeStyle = '#409EFF'; ctx.lineWidth = 2; ctx.beginPath()
+      values.forEach((v, i) => {
+        const x = padL + step * i + step / 2
+        const y = padT + chartH - (v / max) * chartH
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+      })
+      ctx.stroke()
+      // dots
+      values.forEach((v, i) => {
+        const x = padL + step * i + step / 2
+        const y = padT + chartH - (v / max) * chartH
+        ctx.fillStyle = '#409EFF'
+        ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill()
+      })
+    }
+  }
+}
+
+watch([showChart, chartType, chartDataRange], () => { nextTick(drawChart) })
 
 function colName(i: number): string {
   let name = ''

@@ -16,6 +16,9 @@
         <el-button type="primary" size="small" @click="manualSave" :loading="saving">
           <el-icon><Check /></el-icon> 保存
         </el-button>
+        <span v-if="saveStatus === 'saving'" class="save-indicator saving">⏳ 保存中...</span>
+        <span v-else-if="saveStatus === 'saved'" class="save-indicator saved">✅ 已保存</span>
+        <span v-else-if="saveStatus === 'error'" class="save-indicator error">❌ 保存失败</span>
         <el-button v-if="doc?.locked_by && doc?.locked_by !== currentUserId" size="small" type="warning" disabled>
           🔒 已锁定
         </el-button>
@@ -40,6 +43,9 @@
         </el-button>
         <el-button size="small" @click="showShareDialog = true">
           <el-icon><Share /></el-icon> 分享
+        </el-button>
+        <el-button size="small" @click="toggleWatermark" :type="showWatermark ? 'warning' : ''">
+          <el-icon><Stamp /></el-icon> 水印
         </el-button>
         <el-badge :value="commentCount" :hidden="commentCount === 0" :max="99">
           <el-button size="small" @click="showComments = true">
@@ -110,13 +116,28 @@
     <input type="file" ref="imageInput" style="display:none" accept="image/*" @change="handleImageUpload" />
 
     <!-- 文档编辑器 -->
-    <div v-if="doc?.type === 'doc' && editor" class="editor-body">
+    <div v-if="doc?.type === 'doc' && editor" class="editor-body with-outline">
       <editor-content :editor="editor" class="tiptap-editor" />
+      <!-- 大纲导航 -->
+      <div v-if="outlineItems.length" class="outline-panel">
+        <div class="outline-title">大纲</div>
+        <div
+          v-for="(item, i) in outlineItems" :key="i"
+          class="outline-item"
+          :class="'outline-h' + item.level"
+          @click="scrollToHeading(item.id)"
+        >{{ item.text }}</div>
+      </div>
     </div>
 
     <!-- 表格编辑器 -->
     <div v-else-if="doc?.type === 'sheet'" class="editor-body sheet-body">
       <SheetEditor ref="sheetRef" :initial-data="sheetData" @change="onSheetChange" />
+    </div>
+
+    <!-- 水印层 -->
+    <div v-if="showWatermark" class="watermark-layer">
+      <div v-for="i in 40" :key="i" class="watermark-text">{{ currentUser }} · {{ formatTime(new Date().toISOString()) }}</div>
     </div>
 
     <!-- 版本回退确认 -->
@@ -339,7 +360,14 @@
     <!-- 评论面板 -->
     <el-drawer v-model="showComments" title="评论" size="400px">
       <div class="comment-input">
-        <el-input v-model="newComment" type="textarea" :rows="3" placeholder="写评论..." />
+        <div style="position:relative">
+          <el-input v-model="newComment" type="textarea" :rows="3" placeholder="写评论... @提及用户" @input="onCommentInput" />
+          <div v-if="mentionList.length" class="mention-dropdown">
+            <div v-for="u in mentionList" :key="u.id" class="mention-item" @click="selectMention(u)">
+              {{ u.name }} ({{ u.username }})
+            </div>
+          </div>
+        </div>
         <el-button type="primary" size="small" @click="submitComment" :disabled="!newComment.trim()" style="margin-top:8px">发送</el-button>
       </div>
       <div class="comment-list">
@@ -412,10 +440,15 @@ const sheetData = ref('{}')
 const sheetRef = ref<InstanceType<typeof SheetEditor> | null>(null)
 const imageInput = ref<HTMLInputElement | null>(null)
 const saving = ref(false)
+const saveStatus = ref('') // '', 'saving', 'saved', 'error'
+let saveTimer: any = null
 let autoSaveTimer: any = null
 
 // 分享
 const showShareDialog = ref(false)
+const showWatermark = ref(false)
+
+function toggleWatermark() { showWatermark.value = !showWatermark.value }
 const showShareList = ref(false)
 const shareForm = reactive({ password: '', expiresIn: 0 })
 const shareResult = ref<any>(null)
@@ -425,7 +458,59 @@ const shares = ref<any[]>([])
 const showComments = ref(false)
 const comments = ref<any[]>([])
 const newComment = ref('')
+const mentionList = ref<any[]>([])
+const allUsers = ref<any[]>([])
+
+// 加载用户列表用于 @提及
+async function loadMentionUsers() {
+  if (allUsers.value.length) return
+  try {
+    const { data } = await http.get('/users')
+    allUsers.value = data.data || []
+  } catch {}
+}
+
+function onCommentInput() {
+  const text = newComment.value
+  const atIdx = text.lastIndexOf('@')
+  if (atIdx < 0) { mentionList.value = []; return }
+  const query = text.slice(atIdx + 1).toLowerCase()
+  if (query.includes(' ') || query.includes('\n')) { mentionList.value = []; return }
+  mentionList.value = allUsers.value.filter((u: any) =>
+    u.name?.toLowerCase().includes(query) || u.username?.toLowerCase().includes(query)
+  ).slice(0, 5)
+  loadMentionUsers()
+}
+
+function selectMention(u: any) {
+  const text = newComment.value
+  const atIdx = text.lastIndexOf('@')
+  newComment.value = text.slice(0, atIdx) + '@' + u.name + ' '
+  mentionList.value = []
+}
 const commentCount = ref(0)
+const outlineItems = ref<{text: string; level: number; id: string}[]>([])
+
+// 提取大纲
+function updateOutline() {
+  if (!editor.value) return
+  const items: {text: string; level: number; id: string}[] = []
+  const doc = editor.value.state.doc
+  doc.descendants((node: any, pos: number) => {
+    if (node.type.name === 'heading') {
+      const id = 'heading-' + pos
+      items.push({ text: node.textContent, level: node.attrs.level, id })
+    }
+  })
+  outlineItems.value = items
+}
+
+function scrollToHeading(id: string) {
+  const el = document.querySelector(`[data-heading="${id}"]`) ||
+    [...document.querySelectorAll('.tiptap-editor h1, .tiptap-editor h2, .tiptap-editor h3')]
+      .find(el => el.textContent === outlineItems.value.find(o => o.id === id)?.text)
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
 const replyParent = ref('')
 const currentUserId = ref('')
 
@@ -716,6 +801,7 @@ function initEditor(initialContent: string) {
           // In collab mode, Yjs handles sync via WS
           // Still auto-save HTML snapshot periodically
           scheduleAutoSave()
+          updateOutline()
         },
       })
       return
@@ -777,6 +863,7 @@ function initEditor(initialContent: string) {
     },
     onUpdate: () => {
       scheduleAutoSave()
+      updateOutline()
     },
   })
 }
@@ -854,11 +941,18 @@ async function doSave() {
   }
   if (!content) return
   saving.value = true
+  saveStatus.value = 'saving'
   try {
     await http.put(`/docs/documents/${docId}/content`, { content })
     await loadDoc()
     await loadVersions()
-  } catch (e) { console.error('保存失败', e) }
+    saveStatus.value = 'saved'
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => { saveStatus.value = '' }, 3000)
+  } catch (e) {
+    console.error('保存失败', e)
+    saveStatus.value = 'error'
+  }
   saving.value = false
 }
 
@@ -1093,6 +1187,34 @@ document.addEventListener('keydown', handleGlobalKeydown)
   flex-wrap: wrap; gap: 4px;
 }
 .editor-body { flex: 1; overflow-y: auto; background: #fff; }
+.editor-body.with-outline { display: flex; }
+.editor-body.with-outline .tiptap-editor { flex: 1; }
+.outline-panel {
+  width: 200px; min-width: 200px; border-left: 1px solid #e8e8e8;
+  background: #fafafa; padding: 12px 0; overflow-y: auto; font-size: 13px;
+}
+.outline-title { font-weight: bold; padding: 0 12px 8px; color: #333; border-bottom: 1px solid #eee; margin-bottom: 4px; }
+.outline-item {
+  padding: 4px 12px; cursor: pointer; color: #666; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; transition: all .15s;
+}
+.outline-item:hover { color: #1a73e8; background: #e8f0fe; }
+.outline-h1 { font-weight: 600; }
+.outline-h2 { padding-left: 20px; }
+.outline-h3 { padding-left: 28px; font-size: 12px; }
+.save-indicator { font-size: 12px; margin-left: 8px; }
+.save-indicator.saving { color: #E6A23C; }
+.save-indicator.saved { color: #67C23A; }
+.save-indicator.error { color: #F56C6C; }
+.watermark-layer {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; z-index: 9999; overflow: hidden;
+}
+.watermark-text {
+  display: inline-block; width: 280px; text-align: center;
+  transform: rotate(-30deg); font-size: 14px; color: rgba(0,0,0,.06);
+  padding: 40px 20px; user-select: none; white-space: nowrap;
+}
 .sheet-body { overflow: hidden; }
 .tiptap-editor { padding: 24px 48px; min-height: 100%; }
 .tiptap-editor :deep(.ProseMirror) { outline: none; min-height: 60vh; }
@@ -1165,6 +1287,13 @@ document.addEventListener('keydown', handleGlobalKeydown)
 
 /* 评论 */
 .comment-input { margin-bottom: 16px; }
+.mention-dropdown {
+  position: absolute; top: 100%; left: 0; z-index: 10;
+  background: #fff; border: 1px solid #ddd; border-radius: 4px;
+  max-height: 200px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,.1);
+}
+.mention-item { padding: 6px 12px; cursor: pointer; font-size: 13px; }
+.mention-item:hover { background: #e8f0fe; }
 .comment-item { padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
 .comment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .comment-time { font-size: 12px; color: #c0c4cc; }
