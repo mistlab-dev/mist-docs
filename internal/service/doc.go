@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
@@ -432,8 +433,16 @@ func cleanOldVersions(docID, deptID string) {
 // ==================== 搜索 ====================
 
 func SearchDocuments(ctx context.Context, keyword, deptID string, page, pageSize int) ([]*model.Document, int, error) {
-	where := "WHERE d.status = 1 AND d.title LIKE ?"
+	// First pass: search by title
+	where := "WHERE d.status = 1 AND (d.title LIKE ?"
 	args := []interface{}{"%" + keyword + "%"}
+
+	// Also search by creator name
+	where += " OR d.created_by IN (SELECT id FROM md_users WHERE name LIKE ?)"
+	args = append(args, "%"+keyword+"%")
+
+	where += ")"
+
 	if deptID != "" {
 		where += " AND d.department_id = ?"
 		args = append(args, deptID)
@@ -461,7 +470,87 @@ func SearchDocuments(ctx context.Context, keyword, deptID string, page, pageSize
 		}
 		docs = append(docs, doc)
 	}
+
+	// Second pass: search document content for keyword
+	// Only search docs not already found by title
+	foundIDs := map[string]bool{}
+	for _, d := range docs {
+		foundIDs[d.ID] = true
+	}
+
+	contentHits, err := searchDocumentContent(ctx, keyword, deptID)
+	if err == nil {
+		for _, doc := range contentHits {
+			if !foundIDs[doc.ID] {
+				docs = append(docs, doc)
+				foundIDs[doc.ID] = true
+			}
+		}
+		total = len(docs)
+	}
+
 	return docs, total, nil
+}
+
+// searchDocumentContent searches decrypted document content for a keyword
+func searchDocumentContent(ctx context.Context, keyword, deptID string) ([]*model.Document, error) {
+	where := "WHERE status = 1 AND type = 'doc'"
+	args := []interface{}{}
+	if deptID != "" {
+		where += " AND department_id = ?"
+		args = append(args, deptID)
+	}
+	where += " ORDER BY updated_at DESC LIMIT 50"
+
+	rows, err := database.DB.QueryContext(ctx, "SELECT id, IFNULL(folder_id,''), department_id, title, type, file_size, version, IFNULL(created_by,''), IFNULL(updated_by,''), created_at, updated_at FROM md_documents "+where, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	lowerKW := strings.ToLower(keyword)
+	var results []*model.Document
+
+	for rows.Next() {
+		doc := &model.Document{}
+		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FileSize, &doc.Version, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+			continue
+		}
+
+		// Read and decrypt content
+		content, _, err := GetDocumentContent(ctx, doc.ID)
+		if err != nil || len(content) == 0 {
+			continue
+		}
+
+		// Strip HTML tags for text search
+		plain := stripHTMLTags(string(content))
+		if strings.Contains(strings.ToLower(plain), lowerKW) {
+			results = append(results, doc)
+		}
+	}
+
+	return results, nil
+}
+
+// stripHTMLTags removes HTML tags for plain text search
+func stripHTMLTags(s string) string {
+	var buf strings.Builder
+	inTag := false
+	for _, r := range s {
+		if r == '<' {
+			inTag = true
+			continue
+		}
+		if r == '>' {
+			inTag = false
+			continue
+		}
+		if !inTag {
+			buf.WriteRune(r)
+		}
+	}
+	return buf.String()
 }
 
 // ==================== 最近文档 ====================
