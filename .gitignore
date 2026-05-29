@@ -6,3 +6,4 @@ dist/
 .env.local
 /configs/config.local.yaml
 secrets/master.key
+mist-docs

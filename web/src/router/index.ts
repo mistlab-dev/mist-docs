@@ -9,6 +9,12 @@ const routes = [
     meta: { public: true },
   },
   {
+    path: '/s/:token',
+    name: 'ShareView',
+    component: () => import('@/views/ShareView.vue'),
+    meta: { public: true },
+  },
+  {
     path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
     children: [
@@ -16,6 +22,7 @@ const routes = [
       { path: 'docs', name: 'Docs', component: () => import('@/views/Docs.vue') },
       { path: 'docs/:id', name: 'DocEditor', component: () => import('@/views/DocEditor.vue') },
       { path: 'trash', name: 'Trash', component: () => import('@/views/Trash.vue') },
+      { path: 'admin/dashboard', name: 'Dashboard', component: () => import('@/views/admin/Dashboard.vue'), meta: { admin: true } },
       { path: 'admin/users', name: 'Users', component: () => import('@/views/admin/Users.vue'), meta: { admin: true } },
       { path: 'admin/departments', name: 'Departments', component: () => import('@/views/admin/Departments.vue'), meta: { admin: true } },
       { path: 'admin/permissions', name: 'Permissions', component: () => import('@/views/admin/Permissions.vue'), meta: { admin: true } },

@@ -122,6 +122,10 @@ func main() {
 		api.POST("/auth/login", handler.Login)
 		api.GET("/files/:filename", handler.GetFile)
 
+		// 公开分享链接
+		api.GET("/s/:token", handler.AccessShare)
+		api.GET("/s/:token/info", handler.AccessShareInfo)
+
 		// 需认证
 		auth := api.Group("")
 		auth.Use(middleware.JWTAuth())
@@ -181,6 +185,31 @@ func main() {
 
 			// 存储监控
 			auth.GET("/storage/status", handler.StorageStatus)
+
+			// 管理后台
+			auth.GET("/admin/dashboard", handler.DashboardStats)
+			auth.GET("/admin/system-info", handler.SystemInfo)
+
+			// 文档分享
+			auth.POST("/docs/documents/:id/share", handler.CreateShare)
+			auth.GET("/docs/documents/:id/shares", handler.ListShares)
+			auth.DELETE("/docs/shares/:id", handler.DeleteShare)
+
+			// 文档导出
+			auth.GET("/docs/documents/:id/export", handler.ExportDocument)
+
+			// 评论
+			auth.GET("/docs/documents/:id/comments", handler.ListComments)
+			auth.POST("/docs/documents/:id/comments", handler.CreateComment)
+			auth.PUT("/docs/comments/:id", handler.UpdateComment)
+			auth.DELETE("/docs/comments/:id", handler.DeleteComment)
+
+			// 通知
+			auth.GET("/notifications", handler.ListNotifications)
+			auth.PUT("/notifications/:id/read", handler.MarkNotificationRead)
+			auth.PUT("/notifications/read-all", handler.MarkAllNotificationsRead)
+			auth.DELETE("/notifications/:id", handler.DeleteNotification)
+			auth.GET("/notifications/unread-count", handler.UnreadCount)
 		}
 	}
 

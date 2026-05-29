@@ -11,6 +11,24 @@
         <el-button type="primary" size="small" @click="manualSave" :loading="saving">
           <el-icon><Check /></el-icon> 保存
         </el-button>
+        <el-dropdown @command="handleExport">
+          <el-button size="small">导出 <el-icon><ArrowDown /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="html">HTML</el-dropdown-item>
+              <el-dropdown-item command="markdown">Markdown</el-dropdown-item>
+              <el-dropdown-item command="txt">纯文本</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button size="small" @click="showShareDialog = true">
+          <el-icon><Share /></el-icon> 分享
+        </el-button>
+        <el-badge :value="commentCount" :hidden="commentCount === 0" :max="99">
+          <el-button size="small" @click="showComments = true">
+            <el-icon><ChatDotRound /></el-icon> 评论
+          </el-button>
+        </el-badge>
         <el-dropdown @command="handleVersion">
           <el-button size="small">
             版本 <el-icon><ArrowDown /></el-icon>
@@ -137,6 +155,90 @@
         <el-button type="primary" @click="confirmCodeLang">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 分享弹窗 -->
+    <el-dialog v-model="showShareDialog" title="分享文档" width="500">
+      <el-form label-width="80px">
+        <el-form-item label="访问密码">
+          <el-input v-model="shareForm.password" placeholder="留空则无需密码" />
+        </el-form-item>
+        <el-form-item label="有效期">
+          <el-select v-model="shareForm.expiresIn" style="width:100%">
+            <el-option label="永久" :value="0" />
+            <el-option label="1 小时" :value="1" />
+            <el-option label="24 小时" :value="24" />
+            <el-option label="7 天" :value="168" />
+            <el-option label="30 天" :value="720" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <div v-if="shareResult" style="margin-top:12px">
+        <el-alert type="success" :closable="false" style="margin-bottom:12px">
+          分享链接已生成
+        </el-alert>
+        <el-input :model-value="shareResult.share_url" readonly>
+          <template #append>
+            <el-button @click="copyShareUrl">复制</el-button>
+          </template>
+        </el-input>
+      </div>
+      <template #footer>
+        <el-button @click="showShareDialog = false; shareResult = null">关闭</el-button>
+        <el-button type="primary" @click="createShare">生成链接</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 已有分享列表 -->
+    <el-dialog v-model="showShareList" title="分享记录" width="500">
+      <el-table :data="shares" stripe>
+        <el-table-column label="链接" prop="token" width="120" />
+        <el-table-column label="密码保护" width="80">
+          <template #default="{ row }">{{ row.has_password ? '是' : '否' }}</template>
+        </el-table-column>
+        <el-table-column label="访问次数" prop="access_count" width="80" />
+        <el-table-column label="过期" width="60">
+          <template #default="{ row }">{{ row.expired ? '是' : '否' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="80">
+          <template #default="{ row }">
+            <el-button link type="danger" size="small" @click="deleteShare(row.id)">取消</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
+    <!-- 评论面板 -->
+    <el-drawer v-model="showComments" title="评论" size="400px">
+      <div class="comment-input">
+        <el-input v-model="newComment" type="textarea" :rows="3" placeholder="写评论..." />
+        <el-button type="primary" size="small" @click="submitComment" :disabled="!newComment.trim()" style="margin-top:8px">发送</el-button>
+      </div>
+      <div class="comment-list">
+        <div v-for="c in comments" :key="c.id" class="comment-item">
+          <div class="comment-header">
+            <strong>{{ c.user_name }}</strong>
+            <span class="comment-time">{{ formatTime(c.created_at) }}</span>
+          </div>
+          <div class="comment-content">{{ c.content }}</div>
+          <div class="comment-actions">
+            <el-button link size="small" @click="replyTo(c)">回复</el-button>
+            <el-button v-if="c.user_id === currentUserId" link type="danger" size="small" @click="deleteComment(c.id)">删除</el-button>
+          </div>
+          <!-- 回复 -->
+          <div v-for="r in getReplies(c.id)" :key="r.id" class="comment-reply">
+            <div class="comment-header">
+              <strong>{{ r.user_name }}</strong>
+              <span class="comment-time">{{ formatTime(r.created_at) }}</span>
+            </div>
+            <div class="comment-content">{{ r.content }}</div>
+            <div class="comment-actions">
+              <el-button v-if="r.user_id === currentUserId" link type="danger" size="small" @click="deleteComment(r.id)">删除</el-button>
+            </div>
+          </div>
+        </div>
+        <div v-if="!comments.length" class="no-data">暂无评论</div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -176,6 +278,21 @@ const sheetRef = ref<InstanceType<typeof SheetEditor> | null>(null)
 const imageInput = ref<HTMLInputElement | null>(null)
 const saving = ref(false)
 let autoSaveTimer: any = null
+
+// 分享
+const showShareDialog = ref(false)
+const showShareList = ref(false)
+const shareForm = reactive({ password: '', expiresIn: 0 })
+const shareResult = ref<any>(null)
+const shares = ref<any[]>([])
+
+// 评论
+const showComments = ref(false)
+const comments = ref<any[]>([])
+const newComment = ref('')
+const commentCount = ref(0)
+const replyParent = ref('')
+const currentUserId = ref('')
 
 // 链接弹窗
 const linkDialog = reactive({ show: false, text: '', url: '' })
@@ -379,9 +496,94 @@ async function confirmRestore() {
 
 function onSheetChange() { scheduleAutoSave() }
 
+// === 分享 ===
+async function createShare() {
+  const { data } = await http.post(`/docs/documents/${docId}/share`, shareForm)
+  shareResult.value = data
+  ElMessage.success('分享链接已生成')
+}
+
+function copyShareUrl() {
+  if (!shareResult.value) return
+  const url = `${window.location.origin}${shareResult.value.share_url}`
+  navigator.clipboard.writeText(url)
+  ElMessage.success('已复制到剪贴板')
+}
+
+async function loadShares() {
+  const { data } = await http.get(`/docs/documents/${docId}/shares`)
+  shares.value = data.data || []
+  showShareList.value = true
+}
+
+async function deleteShare(id: string) {
+  await http.delete(`/docs/shares/${id}`)
+  ElMessage.success('已取消分享')
+  loadShares()
+}
+
+// === 导出 ===
+async function handleExport(format: string) {
+  try {
+    const token = localStorage.getItem('token')
+    const resp = await fetch(`/api/docs/documents/${docId}/export?format=${format}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!resp.ok) { ElMessage.error('导出失败'); return }
+    const blob = await resp.blob()
+    const cd = resp.headers.get('Content-Disposition') || ''
+    const match = cd.match(/filename="?([^"]+)"?/)
+    const filename = match ? match[1] : `${doc.value?.title || 'export'}.${format === 'markdown' ? 'md' : format}`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch { ElMessage.error('导出失败') }
+}
+
+// === 评论 ===
+async function loadComments() {
+  const { data } = await http.get(`/docs/documents/${docId}/comments`)
+  comments.value = data.data || []
+  commentCount.value = comments.value.length
+}
+
+async function submitComment() {
+  if (!newComment.value.trim()) return
+  await http.post(`/docs/documents/${docId}/comments`, {
+    content: newComment.value,
+    parent_id: replyParent.value,
+  })
+  newComment.value = ''
+  replyParent.value = ''
+  loadComments()
+}
+
+function replyTo(c: any) {
+  replyParent.value = c.id
+  newComment.value = `@${c.user_name} `
+}
+
+async function deleteComment(id: string) {
+  await http.delete(`/docs/comments/${id}`)
+  loadComments()
+}
+
+function getReplies(parentId: string) {
+  return comments.value.filter(c => c.parent_id === parentId)
+}
+
 onMounted(async () => {
   await loadDoc()
   await loadVersions()
+  // Get current user ID
+  try {
+    const { data: me } = await http.get('/auth/me')
+    currentUserId.value = me.data?.id || ''
+  } catch {}
+  // Load comment count
+  loadComments()
   if (doc.value?.type === 'doc') {
     const content = doc.value?.content || ''
     initEditor(content === '{}' ? '' : content)
@@ -455,4 +657,14 @@ onUnmounted(() => {
   .tiptap-editor { padding: 12px 16px; }
   .editor-body { -webkit-overflow-scrolling: touch; }
 }
+
+/* 评论 */
+.comment-input { margin-bottom: 16px; }
+.comment-item { padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
+.comment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.comment-time { font-size: 12px; color: #c0c4cc; }
+.comment-content { font-size: 14px; line-height: 1.6; }
+.comment-actions { margin-top: 4px; display: flex; gap: 8px; }
+.comment-reply { margin-left: 24px; padding: 8px 0; border-top: 1px dashed #eee; }
+.no-data { text-align: center; padding: 40px; color: #c0c4cc; }
 </style>

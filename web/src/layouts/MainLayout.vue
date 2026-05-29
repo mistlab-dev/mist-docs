@@ -26,6 +26,10 @@
         <el-divider v-if="auth.isAdmin" />
 
         <template v-if="auth.isAdmin">
+          <el-menu-item index="/admin/dashboard">
+            <el-icon><DataAnalysis /></el-icon>
+            <template #title>系统概览</template>
+          </el-menu-item>
           <el-menu-item index="/admin/users">
             <el-icon><User /></el-icon>
             <template #title>用户管理</template>
@@ -57,11 +61,16 @@
           <el-breadcrumb separator="/">
             <el-breadcrumb-item :to="{ path: '/docs' }">文档</el-breadcrumb-item>
             <el-breadcrumb-item v-if="route.name === 'DocEditor'">
-              {{ route.params.id }}
+              编辑
             </el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <div class="user-area">
+          <!-- 通知铃铛 -->
+          <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99" class="notif-badge">
+            <el-button :icon="Bell" circle size="small" @click="showNotifications = true" />
+          </el-badge>
+
           <el-dropdown @command="handleCommand">
             <span class="user-name">
               {{ auth.user?.name || auth.user?.username }}
@@ -96,6 +105,25 @@
         <el-button type="primary" @click="changePassword">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 通知面板 -->
+    <el-drawer v-model="showNotifications" title="通知" size="360px">
+      <div class="notif-header">
+        <el-button link size="small" @click="markAllRead">全部已读</el-button>
+      </div>
+      <div class="notif-list">
+        <div v-for="n in notifications" :key="n.id" class="notif-item" :class="{ unread: !n.is_read }">
+          <el-tag size="small" :type="notifType(n.type)">{{ notifLabel(n.type) }}</el-tag>
+          <div class="notif-title">{{ n.title }}</div>
+          <div class="notif-time">{{ formatTime(n.created_at) }}</div>
+          <div class="notif-actions">
+            <el-button v-if="!n.is_read" link size="small" @click="markRead(n.id)">已读</el-button>
+            <el-button v-if="n.document_id" link size="small" type="primary" @click="goDoc(n.document_id)">查看</el-button>
+          </div>
+        </div>
+        <div v-if="!notifications.length" class="no-data">暂无通知</div>
+      </div>
+    </el-drawer>
   </el-container>
 </template>
 
@@ -104,6 +132,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
+import { Bell } from '@element-plus/icons-vue'
 import http from '@/utils/http'
 
 const route = useRoute()
@@ -113,6 +142,57 @@ const collapsed = ref(false)
 
 const showPasswordDialog = ref(false)
 const passwordForm = ref({ old: '', new_: '' })
+
+// Notifications
+const showNotifications = ref(false)
+const notifications = ref<any[]>([])
+const unreadCount = ref(0)
+
+async function loadNotifications() {
+  try {
+    const { data } = await http.get('/notifications')
+    notifications.value = data.data || []
+    unreadCount.value = data.unread_count || 0
+  } catch {}
+}
+
+async function markRead(id: string) {
+  await http.put(`/notifications/${id}/read`)
+  loadNotifications()
+}
+
+async function markAllRead() {
+  await http.put('/notifications/read-all')
+  loadNotifications()
+}
+
+function goDoc(docId: string) {
+  showNotifications.value = false
+  router.push(`/docs/${docId}`)
+}
+
+function notifType(type: string) {
+  if (type === 'comment') return ''
+  if (type === 'reply') return 'success'
+  if (type === 'share') return 'warning'
+  return 'info'
+}
+
+function notifLabel(type: string) {
+  const map: any = { comment: '评论', reply: '回复', share: '分享' }
+  return map[type] || type
+}
+
+function formatTime(t: string) {
+  if (!t) return ''
+  const d = new Date(t)
+  const now = new Date()
+  const diff = now.getTime() - d.getTime()
+  if (diff < 60000) return '刚刚'
+  if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
+  if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前'
+  return d.toLocaleDateString()
+}
 
 function handleCommand(cmd: string) {
   if (cmd === 'logout') {
@@ -141,6 +221,9 @@ onMounted(() => {
   if (auth.token && !auth.user) {
     auth.fetchMe()
   }
+  loadNotifications()
+  // Poll notifications every 60s
+  setInterval(loadNotifications, 60000)
 })
 </script>
 
@@ -171,11 +254,21 @@ onMounted(() => {
   border-bottom: 1px solid #e8e8e8;
   background: #fff;
 }
+.user-area { display: flex; align-items: center; gap: 16px; }
 .user-name {
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 4px;
 }
+.notif-badge { margin-right: 4px; }
 .el-divider { margin: 8px 16px; border-color: #2a2b3d; }
+
+.notif-header { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.notif-item { padding: 12px; border-bottom: 1px solid #f0f0f0; }
+.notif-item.unread { background: #f0f7ff; }
+.notif-title { margin: 4px 0; font-size: 14px; }
+.notif-time { font-size: 12px; color: #c0c4cc; }
+.notif-actions { margin-top: 4px; display: flex; gap: 8px; }
+.no-data { text-align: center; padding: 40px; color: #c0c4cc; }
 </style>
