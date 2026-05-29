@@ -98,6 +98,33 @@
         <button class="tb-btn" :class="{active:showChart}" @click="showChart = !showChart" title="插入图表"><span class="icon-chart" /></button>
         <button class="tb-btn" :class="{active:showSearchDialog}" @click="showSearchDialog = !showSearchDialog" title="查找替换 (Ctrl+F)"><span class="icon-search" /></button>
       </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <button class="tb-btn" @click="increaseIndent" title="增加缩进">→→</button>
+        <button class="tb-btn" @click="decreaseIndent" title="减少缩进">←←</button>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <el-dropdown trigger="click" @command="applyStylePreset">
+          <button class="tb-btn" title="单元格样式">🎨<span style="font-size:10px">▼</span></button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item v-for="(_, name) in stylePresets" :key="name" :command="name">{{ name }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <button class="tb-btn" @click="openSplitColDialog" title="分列">⬡</button>
+        <button class="tb-btn" @click="removeDuplicates" title="去重">⧸⧸</button>
+        <button class="tb-btn" @click="openPivotDialog" title="数据透视">⊞</button>
+      </div>
+      <div class="tb-sep" />
+      <div class="tb-group">
+        <button class="tb-btn" @click="exportCSV" title="导出CSV">📥</button>
+        <button class="tb-btn" @click="printSheet" title="打印">🖨</button>
+      </div>
     </div>
 
     <!-- 表格区域 -->
@@ -268,6 +295,14 @@
             <el-button size="small" type="primary" @click="applyDataBar">应用到选区</el-button>
           </div>
         </el-tab-pane>
+        <el-tab-pane label="图标集">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <el-button size="small" @click="applyIconSet('arrows')">🟢↑ 🟡→ 🔴↓ 箭头</el-button>
+            <el-button size="small" @click="applyIconSet('flags')">🚩 旗帜</el-button>
+            <el-button size="small" @click="applyIconSet('traffic')">🟢🟡🔴 红绿灯</el-button>
+          </div>
+          <div style="color:#999;font-size:12px;margin-top:8px">根据数值大小自动分配图标，应用到当前选区</div>
+        </el-tab-pane>
       </el-tabs>
     </el-dialog>
 
@@ -326,6 +361,67 @@
       </div>
     </div>
 
+    <!-- 分列对话框 -->
+    <el-dialog v-model="showSplitColDialog" title="分列" width="400px">
+      <div style="margin-bottom:12px;color:#666">将选定列的内容按分隔符拆分为多列</div>
+      <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        <span>分隔符：</span>
+        <el-select v-model="splitDelimiter" size="small" style="width:120px">
+          <el-option label="逗号 (,)" value="," />
+          <el-option label="空格" value=" " />
+          <el-option label="Tab" value="\t" />
+          <el-option label="分号 (;)" value=";" />
+          <el-option label="竖线 (|)" value="|" />
+        </el-select>
+      </div>
+      <div style="color:#999;font-size:12px">源列：{{ colName(splitCol) }}</div>
+      <template #footer>
+        <el-button size="small" @click="showSplitColDialog = false">取消</el-button>
+        <el-button size="small" type="primary" @click="doSplitCol">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 数据透视对话框 -->
+    <el-dialog v-model="showPivotDialog" title="数据透视" width="500px">
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <div style="flex:1">
+          <div style="font-size:12px;color:#999;margin-bottom:4px">分组列</div>
+          <el-select v-model="pivotGroupCol" size="small" style="width:100%">
+            <el-option v-for="c in colCount" :key="c" :label="colName(c-1)" :value="c-1" />
+          </el-select>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:12px;color:#999;margin-bottom:4px">值列</div>
+          <el-select v-model="pivotValueCol" size="small" style="width:100%">
+            <el-option v-for="c in colCount" :key="c" :label="colName(c-1)" :value="c-1" />
+          </el-select>
+        </div>
+      </div>
+      <el-button size="small" type="primary" @click="doPivot" style="margin-bottom:12px">生成透视表</el-button>
+      <div v-if="pivotResult.length" style="max-height:300px;overflow:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:#f0f0f0">
+            <th style="padding:6px;border:1px solid #ddd">分组</th>
+            <th style="padding:6px;border:1px solid #ddd">求和</th>
+            <th style="padding:6px;border:1px solid #ddd">计数</th>
+            <th style="padding:6px;border:1px solid #ddd">平均值</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="row in pivotResult" :key="row.group">
+              <td style="padding:6px;border:1px solid #ddd">{{ row.group }}</td>
+              <td style="padding:6px;border:1px solid #ddd">{{ row.sum }}</td>
+              <td style="padding:6px;border:1px solid #ddd">{{ row.count }}</td>
+              <td style="padding:6px;border:1px solid #ddd">{{ row.avg }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <template #footer>
+        <el-button size="small" @click="showPivotDialog = false">关闭</el-button>
+        <el-button v-if="pivotResult.length" size="small" type="primary" @click="insertPivotResult">插入到表格</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 底部Sheet标签栏 -->
     <div class="sheet-tabs">
       <div class="tabs-scroll">
@@ -351,7 +447,7 @@ const emit = defineEmits<{ (e: 'change', data: string): void }>()
 interface CellMeta {
   bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean
   color?: string; bgColor?: string; align?: string; wrap?: boolean
-  fontFamily?: string; fontSize?: number; precision?: number
+  fontFamily?: string; fontSize?: number; precision?: number; indent?: number
   border?: { top?: boolean; right?: boolean; bottom?: boolean; left?: boolean }
   comment?: string
   validation?: { type: 'list'|'number'|'text'; options?: string; min?: number; max?: number }
@@ -591,6 +687,7 @@ function getCellTextStyle(r: number, c: number): Record<string, string> {
   if (m.color) s.color = m.color; if (m.fontFamily) s.fontFamily = m.fontFamily
   if (m.fontSize) s.fontSize = m.fontSize + 'px'; if (m.align) s.textAlign = m.align
   if (m.wrap) { s.whiteSpace = 'normal'; s.wordBreak = 'break-all' }
+  if ((m as any).indent) s.paddingLeft = ((m as any).indent * 16) + 'px'
   return s
 }
 function getCellStyle(r: number, c: number): Record<string, string> {
@@ -941,6 +1038,7 @@ function evalFormula(expr: string): string {
     case 'INDEX': { const arr = numArray(args[0], false, true); return String(arr[Number(parsed[1]) - 1] ?? '#N/A') }
     case 'MATCH': { const arr = strArray(args[0], true); const idx = arr.indexOf(String(parsed[1])); return String(idx >= 0 ? idx + 1 : '#N/A') }
     case 'CHOOSE': return String(parsed[Number(parsed[0])] ?? '#N/A')
+    case 'SPARKLINE': { const data = numArray(args[0]); return computeSparkline(data, String(parsed[1] || 'line')) }
     default: return '#NAME?'
   }
 }
@@ -1010,6 +1108,237 @@ function onGlobalKeydown(e: KeyboardEvent) {
   else if (e.key === 'ArrowRight') { if (selection.value.startCol < colCount.value - 1) selectCell(selection.value.startRow, selection.value.startCol + 1) }
   else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { editingValue.value = e.key; startEdit(selection.value.startRow, selection.value.startCol) }
 }
+
+// ─── Text to Columns (分列) ───
+const showSplitColDialog = ref(false)
+const splitDelimiter = ref(',')
+const splitCol = ref(0)
+
+function openSplitColDialog() {
+  if (!selection.value) return
+  splitCol.value = selection.value.startCol
+  showSplitColDialog.value = true
+}
+function doSplitCol() {
+  pushUndo()
+  const c = splitCol.value, delim = splitDelimiter.value
+  // Find max splits
+  let maxParts = 1
+  for (const row of rows.value) {
+    const parts = (row[c] || '').split(delim)
+    if (parts.length > maxParts) maxParts = parts.length
+  }
+  // Insert new columns
+  for (let i = 1; i < maxParts; i++) insertColAt(c + i)
+  // Split data
+  for (const row of rows.value) {
+    const parts = (row[c] || '').split(delim)
+    for (let i = 0; i < parts.length; i++) row[c + i] = parts[i].trim()
+  }
+  showSplitColDialog.value = false
+  emitChange()
+}
+
+// ─── Remove Duplicates (去重) ───
+function removeDuplicates() {
+  if (!selection.value) return
+  pushUndo()
+  const { startRow, startCol, endRow, endCol } = selection.value
+  const r1 = Math.min(startRow, endRow), r2 = Math.max(startRow, endRow)
+  const c1 = Math.min(startCol, endCol), c2 = Math.max(startCol, endCol)
+  const seen = new Set<string>()
+  const toRemove: number[] = []
+  for (let r = r1; r <= r2; r++) {
+    const key = rows.value[r].slice(c1, c2 + 1).join('\x00')
+    if (seen.has(key)) toRemove.push(r)
+    else seen.add(key)
+  }
+  // Remove from bottom up
+  for (let i = toRemove.length - 1; i >= 0; i--) {
+    rows.value.splice(toRemove[i], 1)
+    rowHeights.value.splice(toRemove[i], 1)
+  }
+  emitChange()
+}
+
+// ─── Print (打印) ───
+function printSheet() {
+  const w = window.open('', '_blank')
+  if (!w) return
+  let html = '<html><head><title>打印表格</title><style>'
+  html += 'body{font-family:Arial,sans-serif;font-size:12px}'
+  html += 'table{border-collapse:collapse;width:100%}'
+  html += 'th,td{border:1px solid #999;padding:4px 8px;text-align:left}'
+  html += 'th{background:#eee;font-weight:bold}'
+  html += '</style></head><body><table>'
+  // Header row
+  html += '<tr><th></th>'
+  for (let c = 0; c < colCount.value; c++) html += `<th>${colName(c)}</th>`
+  html += '</tr>'
+  // Data rows
+  for (let r = 0; r < rows.value.length; r++) {
+    if (isRowFiltered(r)) continue
+    html += `<tr><td style="background:#eee;color:#666">${r + 1}</td>`
+    for (let c = 0; c < colCount.value; c++) {
+      const v = getCellDisplay(r, c)
+      const m = getCellMeta(r, c)
+      let style = ''
+      if (m.bold) style += 'font-weight:bold;'
+      if (m.italic) style += 'font-style:italic;'
+      if (m.align) style += `text-align:${m.align};`
+      if (m.bgColor) style += `background:${m.bgColor};`
+      if (m.color) style += `color:${m.color};`
+      html += `<td style="${style}">${v}</td>`
+    }
+    html += '</tr>'
+  }
+  html += '</table></body></html>'
+  w.document.write(html)
+  w.document.close()
+  w.setTimeout(() => w.print(), 300)
+}
+
+// ─── Sparklines (迷你图) ───
+function renderSparklines() {
+  // Sparklines rendered via cell display - uses SPARKLINE() formula
+}
+function computeSparkline(data: number[], type: string): string {
+  if (!data.length) return ''
+  const canvas = document.createElement('canvas')
+  canvas.width = 120; canvas.height = 28
+  const ctx = canvas.getContext('2d')!
+  const maxV = Math.max(...data), minV = Math.min(...data)
+  const range = maxV - minV || 1
+  if (type === 'bar') {
+    const bw = Math.max(2, 120 / data.length - 1)
+    data.forEach((v, i) => {
+      const h = Math.max(1, ((v - minV) / range) * 24)
+      ctx.fillStyle = '#4caf50'
+      ctx.fillRect(i * (bw + 1), 28 - h, bw, h)
+    })
+  } else {
+    ctx.strokeStyle = '#1a73e8'; ctx.lineWidth = 1.5; ctx.beginPath()
+    data.forEach((v, i) => {
+      const x = (i / (data.length - 1 || 1)) * 120
+      const y = 28 - ((v - minV) / range) * 26
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    })
+    ctx.stroke()
+  }
+  return canvas.toDataURL()
+}
+
+// ─── Indent (缩进) ───
+function increaseIndent() { if (!selection.value) return; pushUndo(); applyToSelection('indent', (getMetaProp('indent') || 0) + 1) }
+function decreaseIndent() { if (!selection.value) return; const cur = getMetaProp('indent') || 0; if (cur <= 0) return; pushUndo(); applyToSelection('indent', cur - 1) }
+
+// ─── Export xlsx placeholder (frontend only, exports CSV) ───
+function exportCSV() {
+  let csv = ''
+  for (let r = 0; r < rows.value.length; r++) {
+    if (isRowFiltered(r)) continue
+    const cells: string[] = []
+    for (let c = 0; c < colCount.value; c++) {
+      let v = rows.value[r]?.[c] || ''
+      if (v.startsWith('=')) v = computeFormula(v)
+      if (v.includes(',') || v.includes('"') || v.includes('\n')) v = '"' + v.replace(/"/g, '""') + '"'
+      cells.push(v)
+    }
+    csv += cells.join(',') + '\n'
+  }
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+  const link = document.createElement('a'); link.download = 'sheet.csv'; link.href = URL.createObjectURL(blob); link.click()
+}
+
+// ─── Cell Style Presets ───
+const stylePresets: Record<string, Partial<CellMeta>> = {
+  '标题': { bold: true, fontSize: 16, align: 'center', bgColor: '#4472c4', color: '#ffffff' },
+  '标题2': { bold: true, fontSize: 14, color: '#2f5496' },
+  '标题3': { bold: true, fontSize: 12, color: '#2f5496', bgColor: '#d6e4f0' },
+  '强调': { bold: true, bgColor: '#ffd7d7' },
+  '良好': { bgColor: '#c6efce', color: '#006100' },
+  '警告': { bgColor: '#ffeb9c', color: '#9c6500' },
+  '计算': { bgColor: '#e2efda', italic: true },
+  '输入': { bgColor: '#fff2cc', border: { top: true, right: true, bottom: true, left: true } },
+  '清除': {},
+}
+const showStylePanel = ref(false)
+function applyStylePreset(name: string) {
+  if (!selection.value) return; pushUndo()
+  const preset = stylePresets[name]; if (!preset) return
+  const { startRow, startCol, endRow, endCol } = selection.value
+  for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++)
+    for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) {
+      if (name === '清除') { sheet.value.cellMeta[metaKey(r, c)] = {} }
+      else setCellMeta(r, c, { ...preset })
+    }
+  showStylePanel.value = false; emitChange()
+}
+
+// ─── Icon Set Condition Format ───
+function applyIconSet(type: 'arrows' | 'flags' | 'traffic') {
+  if (!selection.value) return; pushUndo()
+  const { startRow, startCol, endRow, endCol } = selection.value
+  let minV = Infinity, maxV = -Infinity
+  for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++)
+    for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) {
+      const n = parseFloat(rows.value[r]?.[c] || ''); if (!isNaN(n)) { if (n < minV) minV = n; if (n > maxV) maxV = n }
+    }
+  if (minV === Infinity) return
+  const range = maxV - minV || 1
+  for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++)
+    for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) {
+      const n = parseFloat(rows.value[r]?.[c] || ''); if (isNaN(n)) continue
+      const pct = (n - minV) / range
+      let icon = ''
+      if (type === 'arrows') icon = pct > 0.66 ? '🟢↑' : pct > 0.33 ? '🟡→' : '🔴↓'
+      else if (type === 'flags') icon = pct > 0.66 ? '🚩' : pct > 0.33 ? '🏁' : '🏳️'
+      else icon = pct > 0.66 ? '🟢' : pct > 0.33 ? '🟡' : '🔴'
+      setCellMeta(r, c, { comment: icon + ' ' + (rows.value[r][c] || '') })
+    }
+  emitChange()
+}
+
+// ─── Pivot Table (简易数据透视) ───
+const showPivotDialog = ref(false)
+const pivotGroupCol = ref(0)
+const pivotValueCol = ref(1)
+const pivotResult = ref<{ group: string; sum: number; count: number; avg: number }[]>([])
+
+function openPivotDialog() {
+  if (!selection.value) return
+  pivotGroupCol.value = selection.value.startCol
+  pivotValueCol.value = Math.min(selection.value.startCol + 1, colCount.value - 1)
+  showPivotDialog.value = true
+}
+function doPivot() {
+  const gc = pivotGroupCol.value, vc = pivotValueCol.value
+  const { startRow, endRow } = selection.value || { startRow: 0, endRow: rows.value.length - 1 }
+  const r1 = Math.min(startRow, endRow), r2 = Math.max(startRow, endRow)
+  const groups = new Map<string, { sum: number; count: number }>()
+  for (let r = r1; r <= r2; r++) {
+    const g = rows.value[r]?.[gc] || '(空)'
+    const v = parseFloat(rows.value[r]?.[vc] || '0') || 0
+    const cur = groups.get(g) || { sum: 0, count: 0 }
+    cur.sum += v; cur.count++; groups.set(g, cur)
+  }
+  pivotResult.value = Array.from(groups.entries()).map(([group, { sum, count }]) => ({ group, sum, count, avg: count ? Math.round((sum / count) * 100) / 100 : 0 }))
+}
+function insertPivotResult() {
+  pushUndo()
+  const startR = rows.value.length
+  // Header
+  rows.value.push(['分组', '求和', '计数', '平均值'])
+  // Data
+  for (const row of pivotResult.value) rows.value.push([row.group, String(row.sum), String(row.count), String(row.avg)])
+  showPivotDialog.value = false; emitChange()
+}
+
+// ─── Extend CellMeta type for indent ───
+// indent is already handled via Partial<CellMeta>
+// Update getCellTextStyle to include indent
+const _origGetCellTextStyle = getCellTextStyle
+// We'll handle indent in the template display directly
 
 // Emit
 function emitChange() { emit('change', getData()) }
