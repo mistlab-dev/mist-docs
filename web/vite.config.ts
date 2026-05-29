@@ -29,6 +29,7 @@ export default defineConfig({
         manualChunks: {
           'element-plus': ['element-plus', '@element-plus/icons-vue'],
           vue: ['vue', 'vue-router', 'pinia'],
+          yjs: ['yjs', '@tiptap/extension-collaboration', '@tiptap/extension-collaboration-cursor'],
         },
       },
     },

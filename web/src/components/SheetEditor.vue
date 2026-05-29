@@ -45,7 +45,7 @@
       <table class="sheet-table" ref="tableRef">
         <colgroup>
           <col style="width: 40px" />
-          <col v-for="c in colCount" :key="c" style="width: 120px" />
+          <col v-for="(w, c) in colWidths" :key="c" :style="{ width: w + 'px' }" />
         </colgroup>
         <thead>
           <tr>
@@ -131,6 +131,7 @@ const emit = defineEmits<{ (e: 'change', data: string): void }>()
 
 const rows = ref<string[][]>([])
 const colCount = ref(10)
+const colWidths = ref<number[]>([])
 const scrollRef = ref<HTMLElement | null>(null)
 const tableRef = ref<HTMLElement | null>(null)
 const editInput = ref<any[]>([])
@@ -168,6 +169,7 @@ function makeRow(cols: number): string[] {
 
 function initEmpty(numRows = 50, numCols = 10) {
   colCount.value = numCols
+  colWidths.value = Array(numCols).fill(120)
   rows.value = Array.from({ length: numRows }, () => makeRow(numCols))
 }
 
@@ -179,6 +181,7 @@ function loadData() {
       if (parsed.rows && parsed.rows.length) {
         rows.value = parsed.rows
         colCount.value = parsed.cols || parsed.rows[0]?.length || 10
+        colWidths.value = parsed.colWidths || Array(colCount.value).fill(120)
         return
       }
     } catch { /* ignore */ }
@@ -392,6 +395,7 @@ function deleteRowAt(index: number) {
 
 function insertColAt(index: number) {
   colCount.value++
+  colWidths.value.splice(index, 0, 120)
   rows.value.forEach(row => row.splice(index, 0, ''))
   adjustSelection()
   emitChange()
@@ -400,6 +404,7 @@ function insertColAt(index: number) {
 function deleteColAt(index: number) {
   if (colCount.value <= 1) return
   colCount.value--
+  colWidths.value.splice(index, 1)
   rows.value.forEach(row => row.splice(index, 1))
   adjustSelection()
   emitChange()
@@ -501,15 +506,32 @@ function moveDown() {
 
 // 列宽拖拽
 function startColResize(col: number, e: MouseEvent) {
-  // TODO: 列宽调整
+  e.preventDefault()
+  const startX = e.clientX
+  const startWidth = colWidths.value[col] || 120
+  const minWidth = 40
+
+  function onMove(ev: MouseEvent) {
+    const delta = ev.clientX - startX
+    colWidths.value[col] = Math.max(minWidth, startWidth + delta)
+  }
+
+  function onUp() {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    emitChange()
+  }
+
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
 }
 
 function emitChange() {
-  emit('change', JSON.stringify({ rows: rows.value, cols: colCount.value }))
+  emit('change', JSON.stringify({ rows: rows.value, cols: colCount.value, colWidths: colWidths.value }))
 }
 
 function getData(): string {
-  return JSON.stringify({ rows: rows.value, cols: colCount.value })
+  return JSON.stringify({ rows: rows.value, cols: colCount.value, colWidths: colWidths.value })
 }
 
 // 全局键盘

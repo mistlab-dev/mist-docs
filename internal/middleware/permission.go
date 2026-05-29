@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 
+	"github.com/c-wind/mist-docs/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -35,29 +36,20 @@ func RequirePermission(resourceType, requiredPerm string) gin.HandlerFunc {
 		if resourceID == "" {
 			resourceID = c.Query("resource_id")
 		}
+		if resourceID == "" {
+			c.Next()
+			return
+		}
 
 		userID := c.GetString("user_id")
 		deptID := c.GetString("department_id")
 
-		// TODO: query permission from database
-		perm := checkPermission(userID, deptID, resourceType, resourceID)
-
-		if !hasPermissionLevel(perm, requiredPerm) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
-			c.Abort()
+		if service.HasPermission(c.Request.Context(), userID, deptID, role, resourceType, resourceID, requiredPerm) {
+			c.Next()
 			return
 		}
-		c.Next()
+
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		c.Abort()
 	}
-}
-
-func checkPermission(userID, deptID, resourceType, resourceID string) string {
-	// TODO: implement permission lookup
-	// Priority: user-level > department-level > inherit > default
-	return ""
-}
-
-func hasPermissionLevel(actual, required string) bool {
-	levels := map[string]int{PermRead: 1, PermWrite: 2, PermAdmin: 3}
-	return levels[actual] >= levels[required]
 }
