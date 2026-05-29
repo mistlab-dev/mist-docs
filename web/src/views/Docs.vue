@@ -205,13 +205,13 @@
 
     <!-- 批量导入 -->
     <el-dialog v-model="showImportDialog" title="批量导入" width="500">
-      <p style="color:#999;font-size:13px;margin-bottom:12px">支持 .txt、.md、.html 文件，最多20个，每个不超过2MB</p>
+      <p style="color:#999;font-size:13px;margin-bottom:12px">支持 .txt、.md、.html、.docx、.xlsx 文件，最多20个，每个不超过10MB</p>
       <el-upload
         ref="importUpload"
         :auto-upload="false"
         :limit="20"
         multiple
-        accept=".txt,.md,.html,.htm"
+        accept=".txt,.md,.html,.htm,.docx,.xlsx"
         :on-change="onImportFileChange"
       >
         <el-button type="primary" size="small">选择文件</el-button>

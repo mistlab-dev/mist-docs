@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"archive/zip"
+	"bytes"
+	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,8 +16,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type BatchImportResult struct {
+	Title  string `json:"title"`
+	ID     string `json:"id"`
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
 // BatchImport POST /docs/import
-// Accepts multipart files (.txt, .md, .html) and creates documents
+// Accepts .txt, .md, .html, .docx, .xlsx
 func BatchImport(c *gin.Context) {
 	userID := c.GetString("user_id")
 	userDeptID := c.GetString("department_id")
@@ -36,89 +48,74 @@ func BatchImport(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择文件"})
 		return
 	}
-
 	if len(files) > 20 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "最多同时导入20个文件"})
 		return
 	}
 
-	type importResult struct {
-		Title  string `json:"title"`
-		ID     string `json:"id"`
-		Status string `json:"status"`
-		Error  string `json:"error,omitempty"`
-	}
-
-	var results []importResult
+	var results []BatchImportResult
 
 	for _, file := range files {
 		ext := strings.ToLower(filepath.Ext(file.Filename))
-		if ext != ".txt" && ext != ".md" && ext != ".html" && ext != ".htm" {
-			results = append(results, importResult{
-				Title:  file.Filename,
-				Status: "skipped",
-				Error:  "不支持的格式（仅 .txt/.md/.html）",
-			})
+		supported := map[string]bool{".txt": true, ".md": true, ".html": true, ".htm": true, ".docx": true, ".xlsx": true}
+		if !supported[ext] {
+			results = append(results, BatchImportResult{Title: file.Filename, Status: "skipped", Error: "不支持的格式"})
+			continue
+		}
+		if file.Size > 10*1024*1024 {
+			results = append(results, BatchImportResult{Title: file.Filename, Status: "skipped", Error: "文件超过10MB"})
 			continue
 		}
 
-		if file.Size > 2*1024*1024 {
-			results = append(results, importResult{
-				Title:  file.Filename,
-				Status: "skipped",
-				Error:  "文件超过2MB",
-			})
-			continue
-		}
-
-		// Read file content
 		src, err := file.Open()
 		if err != nil {
-			results = append(results, importResult{Title: file.Filename, Status: "error", Error: err.Error()})
+			results = append(results, BatchImportResult{Title: file.Filename, Status: "error", Error: err.Error()})
 			continue
 		}
-		data, err := io.ReadAll(src)
+		data, _ := io.ReadAll(src)
 		src.Close()
-		if err != nil {
-			results = append(results, importResult{Title: file.Filename, Status: "error", Error: err.Error()})
-			continue
-		}
 
-		content := string(data)
-		// Convert to HTML based on source format
-		var htmlContent string
 		title := strings.TrimSuffix(filepath.Base(file.Filename), ext)
-
-		switch ext {
-		case ".html", ".htm":
-			htmlContent = content
-		case ".md":
-			htmlContent = markdownToHTML(content)
-		case ".txt":
-			htmlContent = textToHTML(content)
-		}
-
-		// Resolve department
 		deptID := resolveDeptID(c, folderID, userDeptID)
 		if role == "dept_admin" && deptID != userDeptID {
-			results = append(results, importResult{Title: title, Status: "error", Error: "只能导入到本部门"})
+			results = append(results, BatchImportResult{Title: title, Status: "error", Error: "只能导入到本部门"})
 			continue
 		}
 
-		doc := &model.Document{
-			Title:        title,
-			Type:         "doc",
-			FolderID:     folderID,
-			DepartmentID: deptID,
-		}
+		switch ext {
+		case ".xlsx":
+			sheetJSON, err := xlsxToSheet(data)
+			if err != nil {
+				results = append(results, BatchImportResult{Title: title, Status: "error", Error: "Excel解析: " + err.Error()})
+				continue
+			}
+			doc := &model.Document{Title: title, Type: "sheet", FolderID: folderID, DepartmentID: deptID}
+			if err := service.CreateDocument(c.Request.Context(), doc, []byte(sheetJSON), userID); err != nil {
+				results = append(results, BatchImportResult{Title: title, Status: "error", Error: err.Error()})
+				continue
+			}
+			audit(c, "import_doc", "document", doc.ID, title, "")
+			results = append(results, BatchImportResult{Title: title, ID: doc.ID, Type: "sheet", Status: "created"})
 
-		if err := service.CreateDocument(c.Request.Context(), doc, []byte(htmlContent), userID); err != nil {
-			results = append(results, importResult{Title: title, Status: "error", Error: err.Error()})
-			continue
-		}
+		case ".docx":
+			html, err := docxToHTML(data)
+			if err != nil {
+				results = append(results, BatchImportResult{Title: title, Status: "error", Error: "Word解析: " + err.Error()})
+				continue
+			}
+			createDocFromImport(c, title, "doc", html, folderID, deptID, userID, &results)
 
-		audit(c, "import_doc", "document", doc.ID, title, fmt.Sprintf(`{"file":"%s"}`, file.Filename))
-		results = append(results, importResult{Title: title, ID: doc.ID, Status: "created"})
+		case ".html", ".htm":
+			createDocFromImport(c, title, "doc", string(data), folderID, deptID, userID, &results)
+
+		case ".md":
+			html := markdownToHTML(string(data))
+			createDocFromImport(c, title, "doc", html, folderID, deptID, userID, &results)
+
+		case ".txt":
+			html := textToHTML(string(data))
+			createDocFromImport(c, title, "doc", html, folderID, deptID, userID, &results)
+		}
 	}
 
 	created := 0
@@ -127,34 +124,306 @@ func BatchImport(c *gin.Context) {
 			created++
 		}
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data":    results,
-		"message": fmt.Sprintf("成功导入 %d/%d 个文件", created, len(files)),
-	})
+	c.JSON(http.StatusOK, gin.H{"data": results, "message": fmt.Sprintf("成功导入 %d/%d 个文件", created, len(files))})
 }
 
-// markdownToHTML converts basic markdown to HTML
+func createDocFromImport(c *gin.Context, title, docType, html, folderID, deptID, userID string, results *[]BatchImportResult) {
+	doc := &model.Document{Title: title, Type: docType, FolderID: folderID, DepartmentID: deptID}
+	if err := service.CreateDocument(c.Request.Context(), doc, []byte(html), userID); err != nil {
+		*results = append(*results, BatchImportResult{Title: title, Status: "error", Error: err.Error()})
+		return
+	}
+	audit(c, "import_doc", "document", doc.ID, title, "")
+	*results = append(*results, BatchImportResult{Title: title, ID: doc.ID, Type: docType, Status: "created"})
+}
+
+// ─── Word (.docx) → HTML ───
+
+type wDocument struct {
+	XMLName xml.Name    `xml:"document"`
+	Body    wBody       `xml:"body"`
+}
+type wBody struct {
+	Paragraphs []wParagraph `xml:"p"`
+}
+type wParagraph struct {
+	Runs []wRun `xml:"r"`
+	PPr  *wPPr  `xml:"pPr"`
+}
+type wPPr struct {
+	PStyle wVal `xml:"pStyle"`
+}
+type wRun struct {
+	Text wText `xml:"t"`
+}
+type wText struct {
+	Text string `xml:",chardata"`
+}
+type wVal struct {
+	Val string `xml:"val,attr"`
+}
+
+func docxToHTML(data []byte) (string, error) {
+	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return "", err
+	}
+	var docFile *zip.File
+	for _, f := range r.File {
+		if f.Name == "word/document.xml" {
+			docFile = f
+			break
+		}
+	}
+	if docFile == nil {
+		return "", fmt.Errorf("未找到document.xml")
+	}
+
+	rc, err := docFile.Open()
+	if err != nil {
+		return "", err
+	}
+	defer rc.Close()
+	docXML, _ := io.ReadAll(rc)
+
+	var doc wDocument
+	if err := xml.Unmarshal(docXML, &doc); err != nil {
+		return "", err
+	}
+
+	var html strings.Builder
+	for _, p := range doc.Body.Paragraphs {
+		var text strings.Builder
+		for _, run := range p.Runs {
+			text.WriteString(run.Text.Text)
+		}
+		line := strings.TrimSpace(text.String())
+		if line == "" {
+			html.WriteString("<p><br></p>")
+			continue
+		}
+
+		style := ""
+		if p.PPr != nil {
+			style = p.PPr.PStyle.Val
+		}
+		escaped := escapeHTML(line)
+		switch {
+		case strings.Contains(style, "Heading1") || strings.HasSuffix(style, "1"):
+			html.WriteString("<h1>" + escaped + "</h1>")
+		case strings.Contains(style, "Heading2") || strings.HasSuffix(style, "2"):
+			html.WriteString("<h2>" + escaped + "</h2>")
+		case strings.Contains(style, "Heading3") || strings.HasSuffix(style, "3") || strings.HasSuffix(style, "4"):
+			html.WriteString("<h3>" + escaped + "</h3>")
+		default:
+			html.WriteString("<p>" + escaped + "</p>")
+		}
+	}
+
+	result := html.String()
+	if result == "" {
+		result = "<p>（空文档）</p>"
+	}
+	return result, nil
+}
+
+func escapeHTML(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
+}
+
+// ─── Excel (.xlsx) → Sheet JSON ───
+
+func xlsxToSheet(data []byte) (string, error) {
+	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return "", err
+	}
+
+	// Parse shared strings
+	sharedStrings := []string{}
+	for _, f := range r.File {
+		if f.Name == "xl/sharedStrings.xml" {
+			if ss, err := parseXlsxSharedStrings(f); err == nil {
+				sharedStrings = ss
+			}
+			break
+		}
+	}
+
+	// Parse first worksheet
+	var sheetFile *zip.File
+	for _, f := range r.File {
+		if strings.HasPrefix(f.Name, "xl/worksheets/sheet") && strings.HasSuffix(f.Name, ".xml") {
+			sheetFile = f
+			break
+		}
+	}
+	if sheetFile == nil {
+		return "", fmt.Errorf("未找到工作表")
+	}
+
+	rc, err := sheetFile.Open()
+	if err != nil {
+		return "", err
+	}
+	defer rc.Close()
+	sheetXML, _ := io.ReadAll(rc)
+
+	type xCell struct {
+		Ref   string `xml:"r,attr"`
+		Type  string `xml:"t,attr"`
+		Value string `xml:"v"`
+	}
+	type xRow struct {
+		Cells []xCell `xml:"c"`
+	}
+	type xSheetData struct {
+		Rows []xRow `xml:"row"`
+	}
+	type xWorksheet struct {
+		SheetData xSheetData `xml:"sheetData"`
+	}
+
+	var ws xWorksheet
+	if err := xml.Unmarshal(sheetXML, &ws); err != nil {
+		return "", err
+	}
+
+	// Build grid
+	maxCol, maxRow := 0, 0
+	type coord struct{ r, c int }
+	cellMap := make(map[coord]string)
+
+	for ri, row := range ws.SheetData.Rows {
+		rowIdx := ri
+		for _, cell := range row.Cells {
+			colStr, rowStr := splitCellRef(cell.Ref)
+			colIdx := colLetterToIdx(colStr)
+			if n, err := parseSimpleInt(rowStr); err == nil {
+				rowIdx = n - 1
+			}
+			if rowIdx >= maxRow {
+				maxRow = rowIdx + 1
+			}
+			if colIdx >= maxCol {
+				maxCol = colIdx + 1
+			}
+
+			var value string
+			if cell.Type == "s" {
+				if idx, err := parseSimpleInt(cell.Value); err == nil && idx < len(sharedStrings) {
+					value = sharedStrings[idx]
+				}
+			} else {
+				value = cell.Value
+			}
+			cellMap[coord{rowIdx, colIdx}] = value
+		}
+	}
+
+	if maxRow < 1 {
+		maxRow = 1
+	}
+	if maxCol < 1 {
+		maxCol = 1
+	}
+	if maxRow > 200 {
+		maxRow = 200
+	}
+	if maxCol > 26 {
+		maxCol = 26
+	}
+
+	rows := make([][]string, maxRow)
+	for i := range rows {
+		rows[i] = make([]string, maxCol)
+	}
+	for k, v := range cellMap {
+		if k.r < maxRow && k.c < maxCol {
+			rows[k.r][k.c] = v
+		}
+	}
+
+	out, err := json.Marshal(rows)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+func parseXlsxSharedStrings(f *zip.File) ([]string, error) {
+	rc, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	data, _ := io.ReadAll(rc)
+
+	type xSI struct {
+		Text string `xml:"t"`
+	}
+	type xSST struct {
+		Items []xSI `xml:"si"`
+	}
+	var sst xSST
+	if err := xml.Unmarshal(data, &sst); err != nil {
+		return nil, err
+	}
+	result := make([]string, len(sst.Items))
+	for i, item := range sst.Items {
+		result[i] = item.Text
+	}
+	return result, nil
+}
+
+func splitCellRef(ref string) (string, string) {
+	var col, row string
+	for _, ch := range ref {
+		if ch >= 'A' && ch <= 'Z' {
+			col += string(ch)
+		} else {
+			row += string(ch)
+		}
+	}
+	return col, row
+}
+
+func colLetterToIdx(s string) int {
+	idx := 0
+	for _, ch := range s {
+		idx = idx*26 + int(ch-'A')
+	}
+	return idx
+}
+
+func parseSimpleInt(s string) (int, error) {
+	n := 0
+	for _, ch := range s {
+		if ch < '0' || ch > '9' {
+			return 0, fmt.Errorf("not a number")
+		}
+		n = n*10 + int(ch-'0')
+	}
+	return n, nil
+}
+
+// ─── Text converters ───
+
 func markdownToHTML(md string) string {
 	lines := strings.Split(md, "\n")
 	var html strings.Builder
-	inCode := false
-	inList := false
+	inCode, inList := false, false
 
 	for _, line := range lines {
-		// Code blocks
 		if strings.HasPrefix(line, "```") {
 			if inCode {
 				html.WriteString("</code></pre>")
 				inCode = false
 			} else {
-				lang := strings.TrimPrefix(line, "```")
-				html.WriteString(fmt.Sprintf("<pre><code%s>", func() string {
-					if lang != "" {
-						return ` class="language-` + lang + `"`
-					}
-					return ""
-				}()))
+				html.WriteString("<pre><code>")
 				inCode = true
 			}
 			continue
@@ -163,82 +432,47 @@ func markdownToHTML(md string) string {
 			html.WriteString(line + "\n")
 			continue
 		}
-
-		// Close list if needed
 		if inList && !strings.HasPrefix(strings.TrimSpace(line), "- ") && !strings.HasPrefix(strings.TrimSpace(line), "* ") {
 			html.WriteString("</ul>")
 			inList = false
 		}
-
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
-
-		// Headings
 		if strings.HasPrefix(trimmed, "### ") {
-			html.WriteString("<h3>" + inlineMD(trimmed[4:]) + "</h3>")
+			html.WriteString("<h3>" + trimmed[4:] + "</h3>")
 		} else if strings.HasPrefix(trimmed, "## ") {
-			html.WriteString("<h2>" + inlineMD(trimmed[3:]) + "</h2>")
+			html.WriteString("<h2>" + trimmed[3:] + "</h2>")
 		} else if strings.HasPrefix(trimmed, "# ") {
-			html.WriteString("<h1>" + inlineMD(trimmed[2:]) + "</h1>")
+			html.WriteString("<h1>" + trimmed[2:] + "</h1>")
 		} else if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
 			if !inList {
 				html.WriteString("<ul>")
 				inList = true
 			}
-			html.WriteString("<li>" + inlineMD(trimmed[2:]) + "</li>")
+			html.WriteString("<li>" + trimmed[2:] + "</li>")
 		} else {
-			html.WriteString("<p>" + inlineMD(trimmed) + "</p>")
+			html.WriteString("<p>" + trimmed + "</p>")
 		}
 	}
-
 	if inCode {
 		html.WriteString("</code></pre>")
 	}
 	if inList {
 		html.WriteString("</ul>")
 	}
-
 	return html.String()
-}
-
-func inlineMD(s string) string {
-	// Bold
-	s = strings.ReplaceAll(s, "**", "</strong>")
-	// Simple approach: odd occurrences get <strong>, even get </strong>
-	parts := strings.Split(s, "</strong>")
-	for i, p := range parts {
-		if i%2 == 0 && i < len(parts)-1 {
-			parts[i] = p + "<strong>"
-		} else if i < len(parts)-1 {
-			parts[i] = p + "</strong>"
-		}
-	}
-	s = strings.Join(parts, "")
-
-	// Italic
-	s = strings.ReplaceAll(s, "*", "<em>")
-	parts2 := strings.Split(s, "<em>")
-	for i, p := range parts2 {
-		if i%2 == 0 && i < len(parts2)-1 {
-			parts2[i] = p + "<em>"
-		} else if i < len(parts2)-1 {
-			parts2[i] = p + "</em>"
-		}
-	}
-	return strings.Join(parts2, "")
 }
 
 func textToHTML(txt string) string {
 	lines := strings.Split(txt, "\n")
 	var html strings.Builder
 	for _, line := range lines {
-		escaped := strings.TrimSpace(line)
-		if escaped == "" {
+		if strings.TrimSpace(line) == "" {
 			html.WriteString("<br>")
 		} else {
-			html.WriteString("<p>" + escaped + "</p>")
+			html.WriteString("<p>" + strings.TrimSpace(line) + "</p>")
 		}
 	}
 	return html.String()
