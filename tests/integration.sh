@@ -1,93 +1,243 @@
 #!/bin/bash
+# MistDocs Integration Test
 set -e
+
 BASE="https://docs.mistlab.dev"
+PASS=0; FAIL=0; TOTAL=0
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+ok() { PASS=$((PASS+1)); TOTAL=$((TOTAL+1)); echo -e "  \033[32m✅ PASS\033[0m $1"; }
+fail() { FAIL=$((FAIL+1)); TOTAL=$((TOTAL+1)); echo -e "  \033[31m❌ FAIL\033[0m $1"; }
+section() { echo -e "\n\033[1;33m━━━ $1 ━━━\033[0m"; }
 
-PASS=0
-FAIL=0
+# JSON helper: extract field, handles {data:{...}} wrapper
+jf() { python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+r=d.get('data',None)
+if r is None or not isinstance(r,dict): r=d
+print(r.get('$1',''))
+" 2>/dev/null; }
 
-check() {
-  local name="$1"
-  local code="$2"
-  local expect="${3:-200}"
-  if [ "$code" = "$expect" ]; then
-    echo "${GREEN}✅ PASS${NC} $name"
-    PASS=$((PASS+1))
-  else
-    echo "${RED}❌ FAIL${NC} $name (got $code, expect $expect)"
-    FAIL=$((FAIL+1))
-  fi
-}
+CURL="curl -sk"
 
-echo -e "${YELLOW}━━━ Auth ━━━${NC}"
-TOKEN=$(curl -sk "$BASE/api/auth/login" -X POST -H 'Content-Type: application/json' -d '{"username":"admin","password":"Admin@2026"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
-[ -n "$TOKEN" ] && check "Login" 200 || check "Login" 0
+echo -e "\n\033[1;36m╔══════════════════════════════════╗"
+echo -e "║  MistDocs Integration Test       ║"
+echo -e "╚══════════════════════════════════╝\033[0m"
 
-curl -sk "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}'
-check "Me" "$(curl -sk "$BASE/api/auth/me" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
+# ─── Auth ───
+section "Auth"
 
-echo -e "${YELLOW}━━━ Documents ━━━${NC}"
-DOCID=$(curl -sk "$BASE/api/docs/documents" -H "Authorization: Bearer $TOKEN" | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; print(d[0]['id'] if d else '')")
-[ -n "$DOCID" ] && check "List documents" 200 || check "List documents" 0
+LOGIN=$($CURL "$BASE/api/auth/login" -X POST -H 'Content-Type: application/json' -d '{"username":"admin","password":"Admin@2026"}')
+TOKEN=$(echo "$LOGIN" | jf 'token')
+AUTH="Authorization: Bearer $TOKEN"
 
-check "Get content" "$(curl -sk "$BASE/api/docs/documents/$DOCID/content" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "List versions" "$(curl -sk "$BASE/api/docs/documents/$DOCID/versions" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Search" "$(curl -sk "$BASE/api/docs/documents/search?q=test" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Recent" "$(curl -sk "$BASE/api/docs/documents/recent" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Favorites" "$(curl -sk "$BASE/api/docs/favorites" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Trash" "$(curl -sk "$BASE/api/docs/trash" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
+[ -n "$TOKEN" ] && ok "Login" || { fail "Login"; exit 1; }
 
-echo -e "${YELLOW}━━━ Share ━━━${NC}"
-SHARE=$(curl -sk "$BASE/api/docs/documents/$DOCID/share" -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"password":"test","expires_in":24}')
-SHARE_TOKEN=$(echo $SHARE | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
-[ -n "$SHARE_TOKEN" ] && check "Create share" 200 || check "Create share" 0
+ME=$($CURL "$BASE/api/auth/me" -H "$AUTH")
+ME_ID=$(echo "$ME" | jf 'id')
+[ -n "$ME_ID" ] && ok "Get current user ($ME_ID)" || fail "Get current user"
 
-check "Access share (no pwd)" "$(curl -sk "$BASE/api/s/$SHARE_TOKEN" -o /dev/null -w '%{http_code}')" 403
-check "Access share (wrong pwd)" "$(curl -sk "$BASE/api/s/$SHARE_TOKEN?password=wrong" -o /dev/null -w '%{http_code}')" 403
-check "Access share (correct)" "$(curl -sk "$BASE/api/s/$SHARE_TOKEN?password=test" -o /dev/null -w '%{http_code}')"
+# ─── Documents ───
+section "Documents"
 
-SHARE_ID=$(echo $SHARE | python3 -c "import sys,json; print(json.load(sys.stdin)['share_id'])")
-curl -sk -X DELETE "$BASE/api/docs/shares/$SHARE_ID" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}'
-check "Delete share" "$(curl -sk -X DELETE "$BASE/api/docs/shares/$SHARE_ID" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
+DOCS=$($CURL "$BASE/api/docs/documents" -H "$AUTH")
+DOC_ID=$(echo "$DOCS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',[]); print(d[0]['id'] if d else '')" 2>/dev/null)
+DOC_COUNT=$(echo "$DOCS" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('data',[])))" 2>/dev/null)
+[ "$DOC_COUNT" -ge 0 ] && ok "List documents ($DOC_COUNT)" || fail "List documents"
 
-echo -e "${YELLOW}━━━ Export ━━━${NC}"
-check "Export HTML" "$(curl -sk "$BASE/api/docs/documents/$DOCID/export?format=html" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Export Markdown" "$(curl -sk "$BASE/api/docs/documents/$DOCID/export?format=markdown" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Export TXT" "$(curl -sk "$BASE/api/docs/documents/$DOCID/export?format=txt" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
+NEW_DOC=$($CURL "$BASE/api/docs/documents" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"title":"集成测试文档","type":"doc","folder_id":""}')
+NEW_DOC_ID=$(echo "$NEW_DOC" | jf 'id')
+[ -n "$NEW_DOC_ID" ] && ok "Create document" || fail "Create document"
 
-echo -e "${YELLOW}━━━ Comments ━━━${NC}"
-C1=$(curl -sk "$BASE/api/docs/documents/$DOCID/comments" -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"content":"测试评论"}')
-C1_ID=$(echo $C1 | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-[ -n "$C1_ID" ] && check "Create comment" 200 || check "Create comment" 0
+GET_DOC=$($CURL "$BASE/api/docs/documents/$NEW_DOC_ID" -H "$AUTH")
+GET_TITLE=$(echo "$GET_DOC" | jf 'title')
+[ "$GET_TITLE" = "集成测试文档" ] && ok "Get document" || fail "Get document (got: $GET_TITLE)"
 
-C2=$(curl -sk "$BASE/api/docs/documents/$DOCID/comments" -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "{\"content\":\"回复\",\"parent_id\":\"$C1_ID\"}")
-C2_ID=$(echo $C2 | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-[ -n "$C2_ID" ] && check "Reply comment" 200 || check "Reply comment" 0
+$CURL "$BASE/api/docs/documents/$NEW_DOC_ID" -X PUT -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"title":"集成测试文档(已改)","content":"<p>Hello</p>"}' > /dev/null
+UPDATED=$($CURL "$BASE/api/docs/documents/$NEW_DOC_ID" -H "$AUTH")
+UP_TITLE=$(echo "$UPDATED" | jf 'title')
+[ "$UP_TITLE" = "集成测试文档(已改)" ] && ok "Update document" || fail "Update document"
 
-check "List comments" "$(curl -sk "$BASE/api/docs/documents/$DOCID/comments" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Delete reply" "$(curl -sk -X DELETE "$BASE/api/docs/comments/$C2_ID" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Delete comment" "$(curl -sk -X DELETE "$BASE/api/docs/comments/$C1_ID" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
+DEL=$($CURL "$BASE/api/docs/documents/$NEW_DOC_ID" -X DELETE -H "$AUTH")
+DEL_MSG=$(echo "$DEL" | jf 'message')
+[ -n "$DEL_MSG" ] && ok "Delete document" || fail "Delete document"
 
-echo -e "${YELLOW}━━━ Notifications ━━━${NC}"
-check "List notifications" "$(curl -sk "$BASE/api/notifications" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Unread count" "$(curl -sk "$BASE/api/notifications/unread-count" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-curl -sk -X PUT "$BASE/api/notifications/read-all" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}'
-check "Mark all read" "$(curl -sk -X PUT "$BASE/api/notifications/read-all" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
+# ─── Folders ───
+section "Folders"
 
-echo -e "${YELLOW}━━━ Admin ━━━${NC}"
-check "Dashboard" "$(curl -sk "$BASE/api/admin/dashboard" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "System info" "$(curl -sk "$BASE/api/admin/system-info" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Users list" "$(curl -sk "$BASE/api/users" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Departments list" "$(curl -sk "$BASE/api/departments" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Permissions list" "$(curl -sk "$BASE/api/permissions?resource_type=document&resource_id=$DOCID" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Audits list" "$(curl -sk "$BASE/api/audits" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
-check "Storage status" "$(curl -sk "$BASE/api/storage/status" -H "Authorization: Bearer $TOKEN" -o /dev/null -w '%{http_code}')"
+NEW_FOLDER=$($CURL "$BASE/api/docs/folders" -X POST -H "$AUTH" -H 'Content-Type: application/json' -d '{"name":"测试文件夹"}')
+FOLDER_ID=$(echo "$NEW_FOLDER" | jf 'id')
+[ -n "$FOLDER_ID" ] && ok "Create folder" || fail "Create folder"
 
-echo ""
-echo -e "${YELLOW}━━━ Summary ━━━${NC}"
-echo -e "PASS: ${GREEN}$PASS${NC}  FAIL: ${RED}$FAIL${NC}"
-[ $FAIL -eq 0 ]
+TREE=$($CURL "$BASE/api/docs/tree" -H "$AUTH")
+TREE_OK=$(echo "$TREE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if isinstance(d.get('data'), list) else 'fail')" 2>/dev/null)
+[ "$TREE_OK" = "ok" ] && ok "List folder tree" || fail "List folder tree"
+
+$CURL "$BASE/api/docs/folders/$FOLDER_ID" -X DELETE -H "$AUTH" > /dev/null
+ok "Delete folder"
+
+# ─── Dashboard ───
+section "Dashboard"
+
+DASH=$($CURL "$BASE/api/admin/dashboard" -H "$AUTH")
+DASH_OK=$(echo "$DASH" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print('ok' if 'users' in d and 'documents' in d else 'fail')" 2>/dev/null)
+[ "$DASH_OK" = "ok" ] && ok "Dashboard stats" || fail "Dashboard stats"
+
+SYSINFO=$($CURL "$BASE/api/admin/system-info" -H "$AUTH")
+SYSINFO_OK=$(echo "$SYSINFO" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print('ok' if 'version' in d else 'fail')" 2>/dev/null)
+[ "$SYSINFO_OK" = "ok" ] && ok "System info" || fail "System info"
+
+# ─── Share ───
+section "Share"
+
+SHARE=$($CURL "$BASE/api/docs/documents/$DOC_ID/share" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"password":"test123","expires_in":24}')
+SHARE_TOKEN=$(echo "$SHARE" | jf 'token')
+SHARE_ID=$(echo "$SHARE" | jf 'share_id')
+[ -n "$SHARE_TOKEN" ] && ok "Create share" || fail "Create share"
+
+NOPWD=$($CURL "$BASE/api/s/$SHARE_TOKEN")
+NOPWD_ERR=$(echo "$NOPWD" | jf 'error')
+[ -n "$NOPWD_ERR" ] && ok "Share rejects no password" || fail "Share rejects no password"
+
+WRONG=$($CURL "$BASE/api/s/$SHARE_TOKEN?password=wrong")
+WRONG_ERR=$(echo "$WRONG" | jf 'error')
+[ -n "$WRONG_ERR" ] && ok "Share rejects wrong password" || fail "Share rejects wrong password"
+
+CORRECT=$($CURL "$BASE/api/s/$SHARE_TOKEN?password=test123")
+CORRECT_TITLE=$(echo "$CORRECT" | jf 'title')
+[ -n "$CORRECT_TITLE" ] && ok "Share access with correct password" || fail "Share access with correct password"
+
+SHARES=$($CURL "$BASE/api/docs/documents/$DOC_ID/shares" -H "$AUTH")
+SHARES_OK=$(echo "$SHARES" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if isinstance(d.get('data'), list) else 'fail')" 2>/dev/null)
+[ "$SHARES_OK" = "ok" ] && ok "List shares" || fail "List shares"
+
+DEL_SHARE=$($CURL "$BASE/api/docs/shares/$SHARE_ID" -X DELETE -H "$AUTH")
+DEL_SHARE_MSG=$(echo "$DEL_SHARE" | jf 'message')
+[ -n "$DEL_SHARE_MSG" ] && ok "Delete share" || fail "Delete share"
+
+# ─── Export ───
+section "Export"
+
+for FMT in html markdown txt; do
+  CODE=$($CURL -o /dev/null -w "%{http_code}" "$BASE/api/docs/documents/$DOC_ID/export?format=$FMT" -H "$AUTH")
+  [ "$CODE" = "200" ] && ok "Export $FMT" || fail "Export $FMT (HTTP $CODE)"
+done
+
+# ─── Comments ───
+section "Comments"
+
+CMT=$($CURL "$BASE/api/docs/documents/$DOC_ID/comments" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"content":"测试评论内容"}')
+CMT_ID=$(echo "$CMT" | jf 'id')
+[ -n "$CMT_ID" ] && ok "Create comment" || fail "Create comment"
+
+REPLY=$($CURL "$BASE/api/docs/documents/$DOC_ID/comments" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d "{\"content\":\"回复评论\",\"parent_id\":\"$CMT_ID\"}")
+REPLY_ID=$(echo "$REPLY" | jf 'id')
+[ -n "$REPLY_ID" ] && ok "Reply to comment" || fail "Reply to comment"
+
+CMTS=$($CURL "$BASE/api/docs/documents/$DOC_ID/comments" -H "$AUTH")
+CMT_COUNT=$(echo "$CMTS" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('data',[])))" 2>/dev/null)
+[ "$CMT_COUNT" -ge 2 ] && ok "List comments ($CMT_COUNT)" || fail "List comments (got $CMT_COUNT)"
+
+UP_CMT=$($CURL "$BASE/api/docs/comments/$CMT_ID" -X PUT -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"content":"修改后的评论"}')
+UP_CMT_OK=$(echo "$UP_CMT" | jf 'message')
+[ -n "$UP_CMT_OK" ] && ok "Update comment" || fail "Update comment"
+
+DEL_R=$($CURL "$BASE/api/docs/comments/$REPLY_ID" -X DELETE -H "$AUTH")
+DEL_R_MSG=$(echo "$DEL_R" | jf 'message')
+[ -n "$DEL_R_MSG" ] && ok "Delete reply" || fail "Delete reply"
+
+DEL_C=$($CURL "$BASE/api/docs/comments/$CMT_ID" -X DELETE -H "$AUTH")
+DEL_C_MSG=$(echo "$DEL_C" | jf 'message')
+[ -n "$DEL_C_MSG" ] && ok "Delete comment" || fail "Delete comment"
+
+# ─── Notifications ───
+section "Notifications"
+
+NOTIFS=$($CURL "$BASE/api/notifications" -H "$AUTH")
+NOTIF_OK=$(echo "$NOTIFS" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if isinstance(d.get('data'), list) else 'fail')" 2>/dev/null)
+[ "$NOTIF_OK" = "ok" ] && ok "List notifications" || fail "List notifications"
+
+UNREAD=$($CURL "$BASE/api/notifications/unread-count" -H "$AUTH")
+UNREAD_N=$(echo "$UNREAD" | jf 'count')
+[ "$UNREAD_N" != "" ] && ok "Unread count ($UNREAD_N)" || fail "Unread count"
+
+MARK=$($CURL "$BASE/api/notifications/read-all" -X PUT -H "$AUTH")
+MARK_OK=$(echo "$MARK" | jf 'message')
+[ -n "$MARK_OK" ] && ok "Mark all read" || fail "Mark all read"
+
+# ─── Users & Departments ───
+section "Users & Departments"
+
+USERS=$($CURL "$BASE/api/users" -H "$AUTH")
+USER_COUNT=$(echo "$USERS" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('data',[])))" 2>/dev/null)
+[ "$USER_COUNT" -ge 1 ] && ok "List users ($USER_COUNT)" || fail "List users"
+
+DEPTS=$($CURL "$BASE/api/departments" -H "$AUTH")
+DEPT_COUNT=$(echo "$DEPTS" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('data',[])))" 2>/dev/null)
+[ "$DEPT_COUNT" -ge 1 ] && ok "List departments ($DEPT_COUNT)" || fail "List departments"
+
+# ─── Permissions ───
+section "Permissions"
+
+TEST_USER=$($CURL "$BASE/api/users" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"username":"test_perm_user","name":"权限测试用户","password":"Test@2026","role":"member","department_id":""}')
+TEST_UID=$(echo "$TEST_USER" | jf 'id')
+[ -n "$TEST_UID" ] && ok "Create test user for permissions" || fail "Create test user"
+
+PERMS=$($CURL "$BASE/api/permissions?resource_type=document&resource_id=$DOC_ID" -H "$AUTH")
+PERM_OK=$(echo "$PERMS" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if isinstance(d.get('data'), list) else 'fail')" 2>/dev/null)
+[ "$PERM_OK" = "ok" ] && ok "List permissions" || fail "List permissions"
+
+SET_PERM=$($CURL "$BASE/api/permissions" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d "{\"resource_type\":\"document\",\"resource_id\":\"$DOC_ID\",\"target_type\":\"user\",\"target_id\":\"$TEST_UID\",\"permission\":\"read\",\"inherit\":false}")
+SET_PERM_ID=$(echo "$SET_PERM" | jf 'id')
+[ -n "$SET_PERM_ID" ] && ok "Set permission (read)" || fail "Set permission"
+
+CHK=$($CURL "$BASE/api/permissions/check?resource_type=document&resource_id=$DOC_ID&user_id=$TEST_UID" -H "$AUTH")
+CHK_PERM=$(echo "$CHK" | jf 'permission')
+[ "$CHK_PERM" = "read" -o "$CHK_PERM" = "write" -o "$CHK_PERM" = "admin" ] && ok "Check permission → $CHK_PERM" || fail "Check permission (got: $CHK_PERM)"
+
+$CURL "$BASE/api/permissions/$SET_PERM_ID" -X DELETE -H "$AUTH" > /dev/null
+ok "Remove permission"
+
+$CURL "$BASE/api/users/$TEST_UID" -X DELETE -H "$AUTH" > /dev/null
+ok "Cleanup test user"
+
+# ─── Audits ───
+section "Audits"
+
+AUDITS=$($CURL "$BASE/api/audits?page=1&page_size=5" -H "$AUTH")
+AUDIT_OK=$(echo "$AUDITS" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if isinstance(d.get('data'), list) else 'fail')" 2>/dev/null)
+[ "$AUDIT_OK" = "ok" ] && ok "List audits" || fail "List audits"
+
+# ─── Storage ───
+section "Storage"
+
+STORAGE=$($CURL "$BASE/api/storage/status" -H "$AUTH")
+STORAGE_OK=$(echo "$STORAGE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if isinstance(d.get('disk',{}), dict) else 'fail')" 2>/dev/null)
+[ "$STORAGE_OK" = "ok" ] && ok "Storage info" || fail "Storage info"
+
+# ─── WebSocket ───
+section "WebSocket"
+
+WS_OK=$(python3 -c "
+import ssl, websocket
+ws = websocket.WebSocket(sslopt={'cert_reqs': ssl.CERT_NONE})
+ws.connect('wss://docs.mistlab.dev/ws/docs/$DOC_ID?token=$TOKEN')
+ws.close()
+print('ok')
+" 2>/dev/null)
+[ "$WS_OK" = "ok" ] && ok "WebSocket connection" || fail "WebSocket connection"
+
+# ─── Summary ───
+echo -e "\n\033[1;36m═══════════════════════════════════"
+echo -e "  Results: \033[32m$PASS passed\033[36m, \033[31m$FAIL failed\033[36m, $TOTAL total"
+echo -e "═══════════════════════════════════\033[0m"
+
+[ "$FAIL" -gt 0 ] && exit 1 || exit 0

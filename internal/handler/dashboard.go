@@ -148,6 +148,7 @@ func SystemInfo(c *gin.Context) {
 	// 数据库统计
 	var tableCount int
 	db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'md_%'").Scan(&tableCount)
+	info["version"] = "2.0.0"
 	info["db_tables"] = tableCount
 
 	// 服务运行时间

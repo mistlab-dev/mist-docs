@@ -303,6 +303,17 @@ func CreateDocument(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": doc})
 }
 
+// GetDocument returns document metadata by ID
+func GetDocument(c *gin.Context) {
+	id := c.Param("id")
+	doc, err := service.GetDocumentByID(c.Request.Context(), id)
+	if err != nil || doc == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "文档不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": doc})
+}
+
 func UpdateDocument(c *gin.Context) {
 	var req struct {
 		Title    string `json:"title"`

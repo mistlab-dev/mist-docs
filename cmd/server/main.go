@@ -158,6 +158,7 @@ func main() {
 			auth.GET("/docs/documents", handler.ListDocuments)
 			auth.GET("/docs/documents/search", handler.SearchDocuments)
 			auth.GET("/docs/documents/recent", handler.RecentDocuments)
+			auth.GET("/docs/documents/:id", handler.GetDocument)
 			auth.GET("/docs/favorites", handler.ListFavorites)
 			auth.POST("/docs/favorites/:id", handler.AddFavorite)
 			auth.DELETE("/docs/favorites/:id", handler.RemoveFavorite)
