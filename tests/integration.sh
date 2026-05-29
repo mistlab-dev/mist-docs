@@ -240,6 +240,82 @@ STORAGE=$($CURL "$BASE/api/storage/status" -H "$AUTH")
 STORAGE_OK=$(echo "$STORAGE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if isinstance(d.get('disk',{}), dict) else 'fail')" 2>/dev/null)
 [ "$STORAGE_OK" = "ok" ] && ok "Storage info" || fail "Storage info"
 
+# ─── Document Move ───
+section "Document Move"
+
+MOVE_DOC=$($CURL "$BASE/api/docs/documents" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"title":"移动测试文档","type":"doc","folder_id":""}')
+MOVE_DOC_ID=$(echo "$MOVE_DOC" | jf 'id')
+[ -n "$MOVE_DOC_ID" ] && { ok "Create doc for move"; CREATED_DOCS="$CREATED_DOCS $MOVE_DOC_ID"; } || fail "Create doc for move"
+
+MOVE_FOLDER=$($CURL "$BASE/api/docs/folders" -X POST -H "$AUTH" -H 'Content-Type: application/json' -d '{"name":"移动目标文件夹"}')
+MOVE_FOLDER_ID=$(echo "$MOVE_FOLDER" | jf 'id')
+[ -n "$MOVE_FOLDER_ID" ] && { ok "Create folder for move target"; CREATED_FOLDERS="$CREATED_FOLDERS $MOVE_FOLDER_ID"; } || fail "Create folder for move target"
+
+$CURL "$BASE/api/docs/documents/$MOVE_DOC_ID" -X PUT -H "$AUTH" -H 'Content-Type: application/json' \
+  -d "{\"title\":\"移动测试文档\",\"folder_id\":\"$MOVE_FOLDER_ID\"}" > /dev/null
+MOVED=$($CURL "$BASE/api/docs/documents/$MOVE_DOC_ID" -H "$AUTH")
+MOVED_FID=$(echo "$MOVED" | jf 'folder_id')
+[ "$MOVED_FID" = "$MOVE_FOLDER_ID" ] && ok "Move document to folder" || fail "Move document to folder (got folder_id: $MOVED_FID)"
+
+# ─── Full-text Search ───
+section "Full-text Search"
+
+SEARCH_DOC=$($CURL "$BASE/api/docs/documents" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"title":"搜索引擎优化指南","type":"doc","content":"<p>这是一篇关于全文检索的文档，关键词：独特内容 xyzzy42</p>"}')
+SEARCH_DOC_ID=$(echo "$SEARCH_DOC" | jf 'id')
+[ -n "$SEARCH_DOC_ID" ] && { ok "Create doc for search"; CREATED_DOCS="$CREATED_DOCS $SEARCH_DOC_ID"; } || fail "Create doc for search"
+
+# Save content
+$CURL "$BASE/api/docs/documents/$SEARCH_DOC_ID" -X PUT -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"title":"搜索引擎优化指南","content":"<p>独特内容 xyzzy42 全文检索测试</p>"}' > /dev/null
+
+SEARCH_TITLE=$($CURL "$BASE/api/docs/documents/search?q=%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E" -H "$AUTH")
+SEARCH_TITLE_OK=$(echo "$SEARCH_TITLE" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',[]); print('ok' if len(d)>0 else 'fail')" 2>/dev/null)
+[ "$SEARCH_TITLE_OK" = "ok" ] && ok "Search by title" || fail "Search by title"
+
+SEARCH_CONTENT=$($CURL "$BASE/api/docs/documents/search?q=xyzzy42" -H "$AUTH")
+SEARCH_CONTENT_OK=$(echo "$SEARCH_CONTENT" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',[]); ids=[x['id'] for x in d]; print('ok' if '$SEARCH_DOC_ID' in ids else 'fail')" 2>/dev/null)
+[ "$SEARCH_CONTENT_OK" = "ok" ] && ok "Search by content" || fail "Search by content"
+
+# ─── Trash & Restore ───
+section "Trash & Restore"
+
+TRASH_DOC=$($CURL "$BASE/api/docs/documents" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"title":"回收站测试文档","type":"doc"}')
+TRASH_DOC_ID=$(echo "$TRASH_DOC" | jf 'id')
+[ -n "$TRASH_DOC_ID" ] && { ok "Create doc for trash"; CREATED_DOCS="$CREATED_DOCS $TRASH_DOC_ID"; } || fail "Create doc for trash"
+
+# Delete (soft delete → trash)
+$CURL "$BASE/api/docs/documents/$TRASH_DOC_ID" -X DELETE -H "$AUTH" > /dev/null
+ok "Soft-delete doc to trash"
+
+# List trash
+TRASH=$($CURL "$BASE/api/docs/trash" -H "$AUTH")
+TRASH_OK=$(echo "$TRASH" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',[]); ids=[x['id'] for x in d]; print('ok' if '$TRASH_DOC_ID' in ids else 'fail')" 2>/dev/null)
+[ "$TRASH_OK" = "ok" ] && ok "Doc appears in trash" || fail "Doc appears in trash"
+
+# Restore
+RESTORE=$($CURL "$BASE/api/docs/trash/restore/$TRASH_DOC_ID" -X POST -H "$AUTH")
+RESTORE_OK=$(echo "$RESTORE" | jf 'message')
+[ -n "$RESTORE_OK" ] && ok "Restore from trash" || fail "Restore from trash"
+
+# Verify doc is back
+RESTORED=$($CURL "$BASE/api/docs/documents/$TRASH_DOC_ID" -H "$AUTH")
+RESTORED_TITLE=$(echo "$RESTORED" | jf 'title')
+[ "$RESTORED_TITLE" = "回收站测试文档" ] && ok "Restored doc accessible" || fail "Restored doc accessible (got: $RESTORED_TITLE)"
+
+# ─── Rate Limit ───
+section "Rate Limit"
+
+# Send a burst of requests, ensure we get 200s (not 429 at 30 req/s with burst 60)
+RATE_OK=0
+for i in $(seq 1 20); do
+  CODE=$($CURL -o /dev/null -w "%{http_code}" "$BASE/api/auth/me" -H "$AUTH")
+  [ "$CODE" = "200" ] && RATE_OK=$((RATE_OK+1)) || true
+done
+[ "$RATE_OK" -ge 18 ] && ok "Rate limit allows normal traffic ($RATE_OK/20)" || fail "Rate limit too strict ($RATE_OK/20)"
+
 # ─── WebSocket ───
 section "WebSocket"
 
