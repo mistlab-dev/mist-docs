@@ -73,7 +73,8 @@
 
           <el-dropdown @command="handleCommand">
             <span class="user-name">
-              {{ auth.user?.name || auth.user?.username }}
+              <el-avatar :size="28" class="user-avatar">{{ (auth.user?.name || auth.user?.username || '?')[0] }}</el-avatar>
+              <span class="user-name-text">{{ auth.user?.name || auth.user?.username }}</span>
               <el-icon><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
@@ -280,8 +281,9 @@ onMounted(() => {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
+.user-avatar { background: #409eff; color: #fff; font-size: 13px; flex-shrink: 0; }
 .notif-badge { margin-right: 4px; }
 .el-divider { margin: 8px 16px; border-color: #2a2b3d; }
 

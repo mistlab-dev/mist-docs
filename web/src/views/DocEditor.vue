@@ -20,9 +20,13 @@
               <el-dropdown-item command="html">HTML</el-dropdown-item>
               <el-dropdown-item command="markdown">Markdown</el-dropdown-item>
               <el-dropdown-item command="txt">纯文本</el-dropdown-item>
+              <el-dropdown-item command="pdf" divided>PDF</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <el-button size="small" @click="showMoveDialog = true">
+          <el-icon><FolderOpened /></el-icon> 移动
+        </el-button>
         <el-button size="small" @click="showShareDialog = true">
           <el-icon><Share /></el-icon> 分享
         </el-button>
@@ -158,6 +162,29 @@
       </template>
     </el-dialog>
 
+    <!-- 移动文档弹窗 -->
+    <el-dialog v-model="showMoveDialog" title="移动文档" width="400px">
+      <p style="color:#999;margin-bottom:12px">选择目标文件夹：</p>
+      <el-tree
+        :data="folderTree"
+        :props="{ label: 'name', children: 'children', value: 'id' }"
+        node-key="id"
+        highlight-current
+        default-expand-all
+        @node-click="moveTarget = $event.id"
+      >
+        <template #default="{ node, data }">
+          <span :style="{ color: moveTarget === data.id ? '#409eff' : '' }">
+            📁 {{ data.name }}
+          </span>
+        </template>
+      </el-tree>
+      <template #footer>
+        <el-button @click="showMoveDialog = false">取消</el-button>
+        <el-button type="primary" @click="moveDoc" :disabled="!moveTarget">移动</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 分享弹窗 -->
     <el-dialog v-model="showShareDialog" title="分享文档" width="500">
       <el-form label-width="80px">
@@ -245,7 +272,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
@@ -308,6 +335,11 @@ const collabUsers = ref<CollabUser[]>([])
 let ydoc: Y.Doc | null = null
 let wsProvider: MistWSProvider | null = null
 
+// 移动文档
+const showMoveDialog = ref(false)
+const moveTarget = ref('')
+const folderTree = ref<any[]>([])
+
 // 链接弹窗
 const linkDialog = reactive({ show: false, text: '', url: '' })
 // 代码语言弹窗
@@ -325,6 +357,26 @@ async function loadDoc() {
     sheetData.value = doc.value?.content || '{}'
   }
 }
+
+// === 文档移动 ===
+async function loadFolderTree() {
+  try {
+    const { data } = await http.get('/docs/tree')
+    folderTree.value = data || []
+  } catch {}
+}
+
+async function moveDoc() {
+  if (!moveTarget.value) return
+  try {
+    await http.put(`/docs/documents/${docId}`, { title: title.value, folder_id: moveTarget.value })
+    ElMessage.success('文档已移动')
+    showMoveDialog.value = false
+    if (doc.value) doc.value.folder_id = moveTarget.value
+  } catch { ElMessage.error('移动失败') }
+}
+
+watch(showMoveDialog, (v) => { if (v) loadFolderTree() })
 
 async function loadVersions() {
   const { data } = await http.get(`/docs/documents/${docId}/versions`)
@@ -648,6 +700,26 @@ async function deleteShare(id: string) {
 // === 导出 ===
 async function handleExport(format: string) {
   try {
+    if (format === 'pdf') {
+      // PDF: 前端生成，支持中文
+      const html2pdf = (await import('html2pdf.js')).default
+      const editorEl = document.querySelector('.ProseMirror') as HTMLElement
+      if (!editorEl) { ElMessage.error('导出失败'); return }
+      // Clone and wrap for PDF
+      const wrapper = document.createElement('div')
+      wrapper.style.cssText = 'padding:20px;font-family:"Noto Sans SC",sans-serif;font-size:14px;line-height:1.8;color:#333'
+      wrapper.innerHTML = `<h1 style="text-align:center;font-size:22px;margin-bottom:16px">${doc.value?.title || ''}</h1>` + editorEl.innerHTML
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: `${doc.value?.title || 'export'}.pdf`,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
+      }
+      await html2pdf().set(opt).from(wrapper).save()
+      ElMessage.success('PDF 导出成功')
+      return
+    }
     const token = localStorage.getItem('token')
     const resp = await fetch(`/api/docs/documents/${docId}/export?format=${format}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -662,7 +734,7 @@ async function handleExport(format: string) {
     a.href = url; a.download = filename; a.click()
     URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
-  } catch { ElMessage.error('导出失败') }
+  } catch (e) { console.error(e); ElMessage.error('导出失败') }
 }
 
 // === 评论 ===
@@ -719,7 +791,44 @@ onUnmounted(() => {
   wsProvider?.destroy()
   ydoc?.destroy()
   editor.value?.destroy()
+  document.removeEventListener('keydown', handleGlobalKeydown)
 })
+
+function handleGlobalKeydown(e: KeyboardEvent) {
+  const mod = e.ctrlKey || e.metaKey
+  // Ctrl+S 保存
+  if (mod && e.key === 's') {
+    e.preventDefault()
+    manualSave()
+  }
+  // Ctrl+P 导出 PDF
+  if (mod && e.key === 'p') {
+    e.preventDefault()
+    handleExport('pdf')
+  }
+  // Ctrl+Shift+E 导出 HTML
+  if (mod && e.shiftKey && e.key === 'E') {
+    e.preventDefault()
+    handleExport('html')
+  }
+  // Ctrl+Shift+S 分享
+  if (mod && e.shiftKey && e.key === 'S') {
+    e.preventDefault()
+    showShareDialog.value = true
+  }
+  // Ctrl+K 插入链接（TipTap 已内置，这里处理无选中文本的情况）
+  // Ctrl+/ 显示快捷键帮助
+  if (mod && e.key === '/') {
+    e.preventDefault()
+    ElMessage({
+      message: 'Ctrl+S 保存 · Ctrl+P PDF · Ctrl+Shift+E HTML · Ctrl+Shift+S 分享 · Ctrl+B 粗体 · Ctrl+I 斜体 · Ctrl+U 下划线',
+      duration: 4000,
+    })
+  }
+}
+
+// Register global shortcut
+document.addEventListener('keydown', handleGlobalKeydown)
 </script>
 
 <style scoped>

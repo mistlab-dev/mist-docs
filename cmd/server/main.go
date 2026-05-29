@@ -108,6 +108,7 @@ func main() {
 	r := gin.Default()
 	r.Use(middleware.CORS())
 	r.Use(middleware.Recovery())
+	r.Use(middleware.RateLimit(30, 60)) // 30 req/s per IP, burst 60
 
 	// 静态文件
 	r.Static("/assets", "./web/dist/assets")

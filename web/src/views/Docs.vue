@@ -16,6 +16,14 @@
       </el-input>
     </div>
 
+    <!-- 批量操作栏 -->
+    <div v-if="selectedDocs.length" class="batch-bar">
+      <span>已选 {{ selectedDocs.length }} 项</span>
+      <el-button size="small" @click="showBatchMove = true">批量移动</el-button>
+      <el-button size="small" type="danger" @click="batchDelete">批量删除</el-button>
+      <el-button size="small" text @click="selectedDocs = []">取消选择</el-button>
+    </div>
+
     <div class="content">
       <!-- 遮罩层（移动端） -->
       <div class="sidebar-overlay" :class="{ open: sidebarOpen }" @click="sidebarOpen = false"></div>
@@ -76,8 +84,12 @@
             v-for="doc in docs"
             :key="doc.id"
             class="doc-card"
+            :class="{ selected: selectedDocs.includes(doc.id) }"
             @click="openDoc(doc)"
           >
+            <div class="card-checkbox" @click.stop="toggleSelect(doc.id)">
+              <el-checkbox :model-value="selectedDocs.includes(doc.id)" />
+            </div>
             <div class="card-icon">
               <el-icon :size="32">
                 <Document v-if="doc.type === 'doc'" />
@@ -179,6 +191,23 @@
         <el-button type="primary" @click="doMove" :disabled="!moveTargetFolder">移动</el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量移动弹窗 -->
+    <el-dialog v-model="showBatchMove" title="批量移动" width="400px">
+      <p style="color:#999;margin-bottom:12px">将 {{ selectedDocs.length }} 个文档移动到：</p>
+      <el-tree
+        :data="treeData"
+        :props="{ label: 'name', children: 'children', value: 'id' }"
+        node-key="id"
+        highlight-current
+        default-expand-all
+        @node-click="batchMoveTarget = $event.id"
+      />
+      <template #footer>
+        <el-button @click="showBatchMove = false">取消</el-button>
+        <el-button type="primary" @click="doBatchMove" :disabled="!batchMoveTarget">移动</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -192,6 +221,9 @@ import http from '@/utils/http'
 const router = useRouter()
 const treeData = ref<any[]>([])
 const docs = ref<any[]>([])
+const selectedDocs = ref<string[]>([])
+const showBatchMove = ref(false)
+const batchMoveTarget = ref('')
 const currentFolder = ref<string | null>(null)
 const viewMode = ref('all')
 const search = ref('')
@@ -384,6 +416,36 @@ async function toggleFavorite(doc: any) {
   } catch { /* ignore */ }
 }
 
+function toggleSelect(id: string) {
+  const idx = selectedDocs.value.indexOf(id)
+  if (idx >= 0) selectedDocs.value.splice(idx, 1)
+  else selectedDocs.value.push(id)
+}
+
+async function batchDelete() {
+  try {
+    await ElMessageBox.confirm(`确定删除 ${selectedDocs.value.length} 个文档？`, '批量删除', { type: 'warning' })
+  } catch { return }
+  let ok = 0
+  for (const id of selectedDocs.value) {
+    try { await http.delete(`/docs/documents/${id}`); ok++ } catch {}
+  }
+  ElMessage.success(`已删除 ${ok} 个文档`)
+  selectedDocs.value = []
+  loadDocs()
+}
+
+async function doBatchMove() {
+  let ok = 0
+  for (const id of selectedDocs.value) {
+    try { await http.put(`/docs/documents/${id}`, { folder_id: batchMoveTarget.value }); ok++ } catch {}
+  }
+  ElMessage.success(`已移动 ${ok} 个文档`)
+  selectedDocs.value = []
+  showBatchMove.value = false
+  loadDocs()
+}
+
 onMounted(async () => {
   await loadFavoriteIds()
   loadTree()
@@ -393,6 +455,11 @@ onMounted(async () => {
 
 <style scoped>
 .docs-page { height: 100%; display: flex; flex-direction: column; }
+.batch-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 16px; background: #ecf5ff; border-bottom: 1px solid #d9ecff;
+  font-size: 14px; color: #409eff;
+}
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
 .content { flex: 1; display: flex; gap: 16px; overflow: hidden; }
 
@@ -452,6 +519,16 @@ onMounted(async () => {
   border-color: #409eff;
   box-shadow: 0 2px 12px rgba(64,158,255,0.15);
   transform: translateY(-1px);
+}
+.doc-card.selected {
+  border-color: #409eff;
+  background: #ecf5ff;
+}
+.card-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
 }
 .card-icon { color: #409eff; margin-bottom: 8px; }
 .card-body { min-width: 0; }

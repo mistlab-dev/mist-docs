@@ -349,6 +349,52 @@ function evaluateFormula(formula: string): string {
       }
       return String(count)
     }
+    // MAX
+    const maxMatch = expr.match(/^MAX\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/)
+    if (maxMatch) {
+      const c1 = colIndex(maxMatch[1]), r1 = parseInt(maxMatch[2]) - 1
+      const c2 = colIndex(maxMatch[3]), r2 = parseInt(maxMatch[4]) - 1
+      let max = -Infinity
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          const v = parseFloat(rows.value[r]?.[c])
+          if (!isNaN(v) && v > max) max = v
+        }
+      }
+      return max === -Infinity ? '0' : String(max)
+    }
+    // MIN
+    const minMatch = expr.match(/^MIN\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/)
+    if (minMatch) {
+      const c1 = colIndex(minMatch[1]), r1 = parseInt(minMatch[2]) - 1
+      const c2 = colIndex(minMatch[3]), r2 = parseInt(minMatch[4]) - 1
+      let min = Infinity
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          const v = parseFloat(rows.value[r]?.[c])
+          if (!isNaN(v) && v < min) min = v
+        }
+      }
+      return min === Infinity ? '0' : String(min)
+    }
+    // IF(condition, true_val, false_val) - supports simple comparisons
+    const ifMatch = expr.match(/^IF\(([^,]+),([^,]+),([^)]+)\)$/)
+    if (ifMatch) {
+      const cond = resolveValue(ifMatch[1].trim())
+      const trueVal = resolveValue(ifMatch[2].trim())
+      const falseVal = resolveValue(ifMatch[3].trim())
+      // Evaluate condition
+      const condStr = String(cond)
+      let result = false
+      if (condStr.includes('>=')) { const [a, b] = condStr.split('>='); result = parseFloat(a) >= parseFloat(b) }
+      else if (condStr.includes('<=')) { const [a, b] = condStr.split('<='); result = parseFloat(a) <= parseFloat(b) }
+      else if (condStr.includes('!=')) { const [a, b] = condStr.split('!='); result = a !== b }
+      else if (condStr.includes('>')) { const [a, b] = condStr.split('>'); result = parseFloat(a) > parseFloat(b) }
+      else if (condStr.includes('<')) { const [a, b] = condStr.split('<'); result = parseFloat(a) < parseFloat(b) }
+      else if (condStr.includes('=')) { const [a, b] = condStr.split('='); result = a === b }
+      else { result = !!cond && cond !== '0' && cond !== '' }
+      return result ? trueVal : falseVal
+    }
     // 简单四则运算
     const calcMatch = expr.match(/^([\d+\-*/(). ]+)$/)
     if (calcMatch) {
@@ -369,6 +415,16 @@ function evaluateFormula(formula: string): string {
   } catch {
     return formula
   }
+}
+
+function resolveValue(expr: string): string {
+  // Cell reference like A1
+  const cellMatch = expr.match(/^([A-Z]+)(\d+)$/)
+  if (cellMatch) {
+    const c = colIndex(cellMatch[1]), r = parseInt(cellMatch[2]) - 1
+    return rows.value[r]?.[c] || ''
+  }
+  return expr
 }
 
 function colIndex(name: string): number {
