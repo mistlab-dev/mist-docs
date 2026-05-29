@@ -27,6 +27,18 @@ jobs:
           ls node_modules/.bin/vite || echo "vite not found in .bin"
           ls node_modules/vite/package.json || echo "vite package not found"
 
+      - name: Lint Frontend (vue-tsc)
+        working-directory: web
+        run: |
+          npx vue-tsc --noEmit --skipLibCheck 2>&1 | grep -E 'SheetEditor|DocEditor|Docs\.vue' || true
+          # Check SheetEditor specifically - fail on undefined template refs
+          ERRORS=$(npx vue-tsc --noEmit --skipLibCheck 2>&1 | grep 'SheetEditor' || true)
+          if [ -n "$ERRORS" ]; then
+            echo "::error::SheetEditor has TypeScript errors:"\n"$ERRORS"
+            exit 1
+          fi
+          echo "✅ SheetEditor type check passed"
+
       - name: Build Frontend
         working-directory: web
         run: node_modules/.bin/vite build

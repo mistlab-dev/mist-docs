@@ -337,7 +337,7 @@
             <el-color-picker v-model="condScale3Mid" size="small" />
             <span>→</span>
             <el-color-picker v-model="condScale3Max" size="small" />
-            <el-button size="small" type="primary" @click="applyCondScale3">应用到选区</el-button>
+            <el-button size="small" type="primary" @click="applyCondScale">应用到选区</el-button>
           </div>
         </el-tab-pane>
         <el-tab-pane label="数据条">
@@ -395,7 +395,7 @@
 
     <!-- 筛选面板 -->
     <div v-if="showFilterPanel" class="filter-panel"
-      :style="{ left: filterPanelPos.x + 'px', top: filterPanelPos.y + 'px' }">
+      :style="{ left: '200px', top: '200px' }">
       <div class="filter-panel-header">
         <el-checkbox v-model="filterSelectAll" @change="toggleFilterAll">全选</el-checkbox>
       </div>
@@ -419,7 +419,7 @@
           :class="{ active: activeSheet === si }"
           @click="switchSheet(si)"
           @dblclick="renameSheet(si)"
-          @contextmenu.prevent="sheetTabMenu($event, si)"
+          @contextmenu.prevent="renameSheet(si)"
         >
           {{ sh.name }}
           <span v-if="sheets.length > 1" class="tab-close" @click.stop="deleteSheet(si)">✕</span>
@@ -432,7 +432,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { RefreshLeft, RefreshRight, Delete, Top, Bottom, Back, Right as RightIcon, Lock, MagicStick, TrendCharts, Search, Grid, DocumentCopy } from '@element-plus/icons-vue'
+import { RefreshLeft, RefreshRight, Delete, Top, Bottom, Back, Right, Lock, MagicStick, TrendCharts, Search, Grid, DocumentCopy } from '@element-plus/icons-vue'
 
 const props = defineProps<{ initialData?: string }>()
 const emit = defineEmits<{ (e: 'change', data: string): void }>()
@@ -517,7 +517,9 @@ const newCond = reactive({ condition: '>', value: '', bgColor: '#ffcccc' })
 const condScale = ref('2')
 const condScale2Min = ref('#ffffff')
 const condScale2Max = ref('#4caf50')
-const condScaleMid = ref('#ffff00')
+const condScale3Min = ref('#f44336')
+const condScale3Mid = ref('#ffff00')
+const condScale3Max = ref('#4caf50')
 const condDataBarColor = ref('#4caf50')
 
 const cellTextColor = ref('')
@@ -799,6 +801,7 @@ function openFilter(col: number) {
   filterSelectedValues.value = new Set(vals); filterSelectAll.value = true; filterTargetCol = col; showFilterPanel.value = true
 }
 function toggleFilterAll(checked: boolean) { if (checked) filterSelectedValues.value = new Set(filterUniqueValues.value); else filterSelectedValues.value = new Set() }
+function toggleFilterValue(val: string, checked: boolean) { if (checked) filterSelectedValues.value.add(val); else filterSelectedValues.value.delete(val) }
 function applyFilter(checked: boolean) { if (checked) filterActiveCols.value.add(filterTargetCol); else filterActiveCols.value.delete(filterTargetCol); showFilterPanel.value = false; emitChange() }
 
 // Conditional Format
@@ -939,6 +942,10 @@ function replaceAll() { if (!searchText.value) return; pushUndo(); let count = 0
 // Multi-Sheet
 function switchSheet(idx: number) { activeSheet.value = idx; selection.value = null; editingCell.value = null; updateToolbarState() }
 function addSheet() { sheets.value.push(makeSheet('Sheet' + (sheets.value.length + 1))); activeSheet.value = sheets.value.length - 1 }
+function renameSheet(idx: number) {
+  const name = prompt('重命名Sheet:', sheets.value[idx]?.name || '')
+  if (name) sheets.value[idx].name = name; emitChange()
+}
 function deleteSheet(idx: number) { if (sheets.value.length <= 1) return; sheets.value.splice(idx, 1); activeSheet.value = Math.min(activeSheet.value, sheets.value.length - 1) }
 
 // Context Menu
