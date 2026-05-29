@@ -122,6 +122,7 @@ func main() {
 		// 公开
 		api.POST("/auth/login", handler.Login)
 		api.GET("/files/:filename", handler.GetFile)
+		api.GET("/openapi.json", handler.APIDocs)
 
 		// 公开分享链接
 		api.GET("/s/:token", handler.AccessShare)
@@ -156,6 +157,7 @@ func main() {
 			auth.PUT("/docs/folders/:id", handler.UpdateFolder)
 			auth.DELETE("/docs/folders/:id", handler.DeleteFolder)
 			auth.POST("/docs/upload", handler.UploadFile)
+			auth.POST("/docs/import", handler.BatchImport)
 			auth.GET("/docs/documents", handler.ListDocuments)
 			auth.GET("/docs/documents/search", handler.SearchDocuments)
 			auth.GET("/docs/documents/recent", handler.RecentDocuments)
@@ -175,8 +177,12 @@ func main() {
 			auth.DELETE("/docs/documents/:id", handler.DeleteDocument)
 			auth.GET("/docs/documents/:id/content", handler.GetDocumentContent)
 			auth.PUT("/docs/documents/:id/content", handler.SaveDocumentContent)
+			auth.GET("/docs/documents/:id/stats", handler.DocStats)
 			auth.GET("/docs/documents/:id/versions", handler.ListVersions)
+			auth.GET("/docs/documents/:id/versions/:ver/content", handler.GetVersionContent)
 			auth.POST("/docs/documents/:id/restore", handler.RestoreVersion)
+			auth.POST("/docs/documents/:id/lock", handler.LockDocument)
+			auth.POST("/docs/documents/:id/unlock", handler.UnlockDocument)
 			auth.GET("/docs/trash", handler.ListTrash)
 			auth.POST("/docs/trash/restore/:id", handler.RestoreFromTrash)
 			auth.DELETE("/docs/trash/purge/:id", handler.PurgeFromTrash)
@@ -198,6 +204,13 @@ func main() {
 			// 管理后台
 			auth.GET("/admin/dashboard", handler.DashboardStats)
 			auth.GET("/admin/system-info", handler.SystemInfo)
+
+			// Webhooks
+			auth.GET("/admin/webhooks", handler.ListWebhooks)
+			auth.POST("/admin/webhooks", handler.CreateWebhook)
+			auth.DELETE("/admin/webhooks/:id", handler.DeleteWebhook)
+			auth.PUT("/admin/webhooks/:id/toggle", handler.ToggleWebhook)
+			auth.GET("/admin/webhooks/:id/logs", handler.ListWebhookLogs)
 
 			// 文档分享
 			auth.POST("/docs/documents/:id/share", handler.CreateShare)

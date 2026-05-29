@@ -350,6 +350,58 @@ BY_TAG_OK=$(echo "$BY_TAG" | python3 -c "import sys,json; d=json.load(sys.stdin)
 $CURL "$BASE/api/docs/tags/$CREATE_TAG_ID" -X DELETE -H "$AUTH" > /dev/null
 ok "Delete tag"
 
+# ─── Webhooks ───
+section "Webhooks"
+
+CREATE_WH=$($CURL "$BASE/api/admin/webhooks" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"name":"Test Hook","url":"https://httpbin.org/post","events":"create,update"}')
+CREATE_WH_ID=$(echo "$CREATE_WH" | jf 'id')
+[ -n "$CREATE_WH_ID" ] && ok "Create webhook" || fail "Create webhook"
+
+LIST_WH=$($CURL "$BASE/api/admin/webhooks" -H "$AUTH")
+LIST_WH_OK=$(echo "$LIST_WH" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',[]); ids=[w['id'] for w in d]; print('ok' if '$CREATE_WH_ID' in ids else 'fail')" 2>/dev/null)
+[ "$LIST_WH_OK" = "ok" ] && ok "List webhooks" || fail "List webhooks"
+
+TOGGLE_WH=$($CURL "$BASE/api/admin/webhooks/$CREATE_WH_ID/toggle" -X PUT -H "$AUTH")
+[ -n "$(echo "$TOGGLE_WH" | jf 'message')" ] && ok "Toggle webhook" || fail "Toggle webhook"
+
+WH_LOGS=$($CURL "$BASE/api/admin/webhooks/$CREATE_WH_ID/logs" -H "$AUTH")
+WH_LOGS_OK=$(echo "$WH_LOGS" | python3 -c "import sys,json; print('ok' if isinstance(json.load(sys.stdin).get('data'), list) else 'fail')" 2>/dev/null)
+[ "$WH_LOGS_OK" = "ok" ] && ok "Webhook logs" || fail "Webhook logs"
+
+$CURL "$BASE/api/admin/webhooks/$CREATE_WH_ID" -X DELETE -H "$AUTH" > /dev/null
+ok "Delete webhook"
+
+# ─── Batch Import ───
+section "Batch Import"
+
+echo "# Import Test\nHello world" > /tmp/test-import.md
+echo "Plain text import" > /tmp/test-import.txt
+
+IMPORT=$($CURL "$BASE/api/docs/import" -H "$AUTH" -F "files=@/tmp/test-import.md" -F "files=@/tmp/test-import.txt" -F "folder_id=")
+IMPORT_OK=$(echo "$IMPORT" | python3 -c "import sys,json; d=json.load(sys.stdin); results=d.get('data',[]); created=[r for r in results if r.get('status')=='created']; print(f'ok:{len(created)}')" 2>/dev/null)
+[ "$IMPORT_OK" = "ok:2" ] && ok "Import 2 files" || fail "Import 2 files (got: $IMPORT_OK)"
+
+# Import unsupported format
+echo "data" > /tmp/test-import.json
+IMPORT_SKIP=$($CURL "$BASE/api/docs/import" -H "$AUTH" -F "files=@/tmp/test-import.json" -F "folder_id=")
+IMPORT_SKIP_OK=$(echo "$IMPORT_SKIP" | python3 -c "import sys,json; d=json.load(sys.stdin); results=d.get('data',[]); skipped=[r for r in results if r.get('status')=='skipped']; print('ok' if len(skipped)==1 else 'fail')" 2>/dev/null)
+[ "$IMPORT_SKIP_OK" = "ok" ] && ok "Import skips unsupported format" || fail "Import skips unsupported format"
+
+# ─── Word Export ───
+section "Word Export"
+
+WORD=$($CURL -o /tmp/test-word.doc "$BASE/api/docs/documents/$DOC_ID/export?format=docx" -H "$AUTH" -w "%{http_code}")
+WORD_TYPE=$(file -b /tmp/test-word.doc)
+[ "$WORD" = "200" ] && echo "$WORD_TYPE" | grep -qi "html" && ok "Export Word (.doc)" || fail "Export Word (.doc) (http=$WORD type=$WORD_TYPE)"
+
+# ─── OpenAPI ───
+section "OpenAPI"
+
+OPENAPI=$($CURL "$BASE/api/openapi.json")
+OPENAPI_OK=$(echo "$OPENAPI" | python3 -c "import sys,json; d=json.load(sys.stdin); paths=len(d.get('paths',{})); print(f'ok:{paths}') if d.get('openapi')=='3.0.0' else print('fail')" 2>/dev/null)
+[ -n "$OPENAPI_OK" ] && ok "OpenAPI spec ($OPENAPI_OK)" || fail "OpenAPI spec"
+
 # ─── WebSocket ───
 section "WebSocket"
 

@@ -64,8 +64,14 @@ func ExportDocument(c *gin.Context) {
 		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.pdf"`, fileName))
 		c.Data(http.StatusOK, "application/pdf", pdf)
 
+	case "docx":
+		// Word-compatible HTML (Office opens .doc HTML natively)
+		wordHTML := wrapWordHTML(title, htmlContent)
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.doc"`, fileName))
+		c.Data(http.StatusOK, "application/msword", []byte(wordHTML))
+
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的格式，可选: markdown, html, txt, pdf"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的格式，可选: markdown, html, txt, pdf, docx"})
 	}
 
 	// Audit
@@ -319,4 +325,43 @@ func truncateUTF8(s string, maxRunes int) string {
 		return s
 	}
 	return string(runes[:maxRunes]) + "..."
+}
+
+// wrapWordHTML generates Word-compatible HTML that Microsoft Word and WPS can open natively
+func wrapWordHTML(title, body string) string {
+	return fmt.Sprintf(`<html xmlns:o="urn:schemas-microsoft-com:office:office"
+xmlns:w="urn:schemas-microsoft-com:office:word"
+xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+<w:View>Print</w:View>
+<w:Zoom>100</w:Zoom>
+<w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+body { font-family: "Noto Sans SC", SimSun, "Microsoft YaHei", sans-serif; font-size: 12pt; line-height: 1.8; color: #333; }
+h1 { font-size: 22pt; text-align: center; margin: 20pt 0; }
+h2 { font-size: 16pt; margin-top: 16pt; border-bottom: 1pt solid #ccc; padding-bottom: 4pt; }
+h3 { font-size: 14pt; margin-top: 12pt; }
+p { margin: 6pt 0; }
+table { border-collapse: collapse; width: 100%%; }
+th, td { border: 1pt solid #999; padding: 4pt 8pt; }
+th { background: #f0f0f0; font-weight: bold; }
+code { font-family: Consolas, monospace; background: #f4f4f4; padding: 1pt 3pt; }
+pre { background: #f4f4f4; padding: 8pt; }
+blockquote { border-left: 3pt solid #ccc; padding-left: 10pt; color: #666; margin-left: 0; }
+img { max-width: 100%%; }
+</style>
+</head>
+<body>
+<h1>%s</h1>
+%s
+</body>
+</html>`, title, body)
 }

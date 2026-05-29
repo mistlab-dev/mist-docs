@@ -387,6 +387,16 @@ func SaveDocumentContent(c *gin.Context) {
 		return
 	}
 
+	// Check document lock
+	var lockedBy string
+	database.DB.QueryRowContext(c.Request.Context(), "SELECT locked_by FROM md_documents WHERE id = ?", id).Scan(&lockedBy)
+	if lockedBy != "" && lockedBy != userID && role != "super_admin" {
+		var name string
+		database.DB.QueryRowContext(c.Request.Context(), "SELECT name FROM md_users WHERE id = ?", lockedBy).Scan(&name)
+		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("文档已被 %s 锁定，无法编辑", name)})
+		return
+	}
+
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "读取内容失败"})
@@ -437,6 +447,18 @@ func RestoreVersion(c *gin.Context) {
 
 	audit(c, "restore", "document", c.Param("id"), "", fmt.Sprintf(`{"version":%d}`, req.Version))
 	c.JSON(http.StatusOK, gin.H{"message": "已恢复"})
+}
+
+// GetVersionContent GET /docs/documents/:id/versions/:ver/content
+func GetVersionContent(c *gin.Context) {
+	docID := c.Param("id")
+	ver := c.Param("ver")
+	content, _, err := service.GetVersionContent(c.Request.Context(), docID, ver)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 }
 
 // ==================== 回收站 ====================

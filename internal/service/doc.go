@@ -151,16 +151,23 @@ func CreateDocument(ctx context.Context, doc *model.Document, initialContent []b
 func GetDocumentByID(ctx context.Context, id string) (*model.Document, error) {
 	doc := &model.Document{}
 	var folderID sql.NullString
+	var lockedAt sql.NullTime
 	err := database.DB.QueryRowContext(ctx,
-		`SELECT id, folder_id, department_id, title, type, file_path, file_size, version, status, created_by, updated_by, created_at, updated_at
+		`SELECT id, folder_id, department_id, title, type, file_path, file_size, version, locked_by, locked_at, status, created_by, updated_by, created_at, updated_at
 		 FROM md_documents WHERE id = ?`, id,
 	).Scan(&doc.ID, &folderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FilePath, &doc.FileSize,
-		&doc.Version, &doc.Status, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt)
+		&doc.Version, &doc.LockedBy, &lockedAt, &doc.Status, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	doc.FolderID = ns(folderID)
+	doc.LockedAt = nt(lockedAt)
 	return doc, err
+}
+
+func nt(t sql.NullTime) *time.Time {
+	if t.Valid { return &t.Time }
+	return nil
 }
 
 func ListDocuments(ctx context.Context, folderID, deptID, docType string, page, pageSize int) ([]*model.Document, int, error) {
@@ -368,6 +375,21 @@ func RestoreVersion(ctx context.Context, docID string, version int, userID strin
 	// Save as new version
 	_, err = SaveDocumentContent(ctx, docID, data, userID)
 	return err
+}
+
+// GetVersionContent returns decrypted content of a specific version
+func GetVersionContent(ctx context.Context, docID, version string) ([]byte, string, error) {
+	doc, err := GetDocumentByID(ctx, docID)
+	if err != nil || doc == nil {
+		return nil, "", fmt.Errorf("文档不存在")
+	}
+	ver := 0
+	fmt.Sscanf(version, "%d", &ver)
+	data, err := store.ReadVersion(doc.DepartmentID, doc.ID, ver)
+	if err != nil {
+		return nil, "", fmt.Errorf("读取版本失败: %w", err)
+	}
+	return data, "text/html", nil
 }
 
 // ==================== 回收站 ====================

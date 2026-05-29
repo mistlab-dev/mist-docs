@@ -10,6 +10,9 @@
       <el-button type="success" size="small" @click="showNewSheet = true">
         <el-icon><Grid /></el-icon><span class="btn-text"> 表格</span>
       </el-button>
+      <el-button size="small" @click="showImportDialog = true">
+        <el-icon><Upload /></el-icon><span class="btn-text"> 导入</span>
+      </el-button>
       <div style="flex:1" />
       <el-input v-model="search" placeholder="搜索..." style="width:200px" clearable @keyup.enter="doSearch" @clear="clearSearch" size="small">
         <template #prefix><el-icon><Search /></el-icon></template>
@@ -199,6 +202,27 @@
       </template>
     </el-dialog>
 
+    <!-- 批量导入 -->
+    <el-dialog v-model="showImportDialog" title="批量导入" width="500">
+      <p style="color:#999;font-size:13px;margin-bottom:12px">支持 .txt、.md、.html 文件，最多20个，每个不超过2MB</p>
+      <el-upload
+        ref="importUpload"
+        :auto-upload="false"
+        :limit="20"
+        multiple
+        accept=".txt,.md,.html,.htm"
+        :on-change="onImportFileChange"
+      >
+        <el-button type="primary" size="small">选择文件</el-button>
+      </el-upload>
+      <template #footer>
+        <el-button @click="showImportDialog = false">取消</el-button>
+        <el-button type="primary" @click="doImport" :loading="importing" :disabled="!importFiles.length">
+          导入 {{ importFiles.length ? importFiles.length + ' 个文件' : '' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- 重命名 -->
     <el-dialog v-model="renameDialog" title="重命名" width="400">
       <el-input v-model="renameTitle" placeholder="新标题" />
@@ -273,6 +297,33 @@ const sidebarOpen = ref(false)
 const showNewFolder = ref(false)
 const showNewDoc = ref(false)
 const showNewSheet = ref(false)
+const showImportDialog = ref(false)
+const importFiles = ref<any[]>([])
+const importing = ref(false)
+
+function onImportFileChange(file: any, fileList: any[]) {
+  importFiles.value = fileList
+}
+
+async function doImport() {
+  if (!importFiles.value.length) return
+  importing.value = true
+  const fd = new FormData()
+  for (const f of importFiles.value) {
+    fd.append('files', f.raw)
+  }
+  fd.append('folder_id', currentFolder.value)
+  try {
+    const { data } = await http.post('/docs/import', fd)
+    ElMessage.success(data.message || '导入完成')
+    showImportDialog.value = false
+    importFiles.value = []
+    loadDocs()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || '导入失败')
+  }
+  importing.value = false
+}
 const renameDialog = ref(false)
 const renameTitle = ref('')
 const renameDoc = ref<any>(null)

@@ -8,11 +8,21 @@
       <div class="header-actions">
         <el-tag size="small">{{ doc?.type === 'sheet' ? '表格' : '文档' }}</el-tag>
         <el-tag size="small">v{{ doc?.version || 1 }}</el-tag>
+        <el-button size="small" text @click="loadAndShowStats">
+          <el-icon><DataLine /></el-icon>
+        </el-button>
         <el-tag v-if="collabUsers.length" size="small" type="success">{{ collabUsers.length + 1 }} 人在线</el-tag>
         <el-tag v-if="collabStatus === 'connected'" size="small" type="success">协同中</el-tag>
         <el-button type="primary" size="small" @click="manualSave" :loading="saving">
           <el-icon><Check /></el-icon> 保存
         </el-button>
+        <el-button v-if="doc?.locked_by && doc?.locked_by !== currentUserId" size="small" type="warning" disabled>
+          🔒 已锁定
+        </el-button>
+        <el-button v-else-if="doc?.locked_by === currentUserId" size="small" type="warning" @click="unlockDoc">
+          🔓 解锁
+        </el-button>
+        <el-button v-else size="small" @click="lockDoc">🔒 锁定</el-button>
         <el-dropdown @command="handleExport">
           <el-button size="small">导出 <el-icon><ArrowDown /></el-icon></el-button>
           <template #dropdown>
@@ -21,6 +31,7 @@
               <el-dropdown-item command="markdown">Markdown</el-dropdown-item>
               <el-dropdown-item command="txt">纯文本</el-dropdown-item>
               <el-dropdown-item command="pdf" divided>PDF</el-dropdown-item>
+              <el-dropdown-item command="docx">Word (.doc)</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -123,6 +134,7 @@
         >
           版本 v{{ v.version }}
           <span v-if="v.version === doc?.version" style="color:#409eff;font-size:12px">（当前）</span>
+          <el-button size="small" text type="primary" @click="openDiff(v.version)" style="margin-left:8px">对比</el-button>
         </el-timeline-item>
       </el-timeline>
       <template #footer>
@@ -131,6 +143,61 @@
           恢复到 v{{ versionDialog.version }}
         </el-button>
       </template>
+    </el-dialog>
+
+    <!-- 统计弹窗 -->
+    <el-dialog v-model="showStats" title="文档统计" width="500px">
+      <div v-if="stats" class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-value">{{ stats.word_count }}</div>
+          <div class="stat-label">字数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">{{ stats.char_count }}</div>
+          <div class="stat-label">字符数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">{{ stats.edit_count }}</div>
+          <div class="stat-label">编辑次数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">{{ stats.contributors }}</div>
+          <div class="stat-label">贡献者</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">{{ stats.comment_count }}</div>
+          <div class="stat-label">评论数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">{{ stats.edit_count + 1 }}</div>
+          <div class="stat-label">版本数</div>
+        </div>
+      </div>
+      <div v-if="stats?.daily_edits?.length" style="margin-top:16px">
+        <p style="color:#999;font-size:13px;margin-bottom:8px">编辑活动（近30天）</p>
+        <div class="activity-chart">
+          <div v-for="(d, i) in stats.daily_edits" :key="i" class="activity-bar"
+               :style="{ height: Math.min(d.count * 20, 60) + 'px' }"
+               :title="d.date + ': ' + d.count + ' 次'">
+          </div>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 版本对比弹窗 -->
+    <el-dialog v-model="showDiff" title="版本对比" width="700px" :fullscreen="windowWidth < 768">
+      <div class="diff-toolbar">
+        <span>版本 </span>
+        <el-select v-model="diffOld" size="small" style="width:120px">
+          <el-option v-for="v in versions" :key="v.version" :label="'v' + v.version" :value="v.version" />
+        </el-select>
+        <span style="margin:0 8px">→</span>
+        <el-select v-model="diffNew" size="small" style="width:120px">
+          <el-option v-for="v in versions" :key="v.version" :label="'v' + v.version" :value="v.version" />
+        </el-select>
+        <el-button size="small" type="primary" @click="loadDiff" :loading="diffLoading">对比</el-button>
+      </div>
+      <div v-if="diffHtml" class="diff-content" v-html="diffHtml" />
     </el-dialog>
 
     <!-- 链接弹窗 -->
@@ -422,6 +489,92 @@ async function createAndAddTag() {
 }
 
 watch(showTagDialog, (v) => { if (v) loadAllTags() })
+
+// 文档统计
+const showStats = ref(false)
+const stats = ref<any>(null)
+
+async function loadAndShowStats() {
+  try {
+    const { data } = await http.get(`/docs/documents/${docId}/stats`)
+    stats.value = data
+    showStats.value = true
+  } catch {}
+}
+
+// 版本对比
+const showDiff = ref(false)
+const diffOld = ref(0)
+const diffNew = ref(0)
+const diffHtml = ref('')
+const diffLoading = ref(false)
+const windowWidth = ref(window.innerWidth)
+
+// 锁定
+async function lockDoc() {
+  try {
+    await http.post(`/docs/documents/${docId}/lock`)
+    if (doc.value) doc.value.locked_by = currentUserId.value
+    ElMessage.success('已锁定')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || '锁定失败')
+  }
+}
+
+async function unlockDoc() {
+  try {
+    await http.post(`/docs/documents/${docId}/unlock`)
+    if (doc.value) doc.value.locked_by = ''
+    ElMessage.success('已解锁')
+  } catch { ElMessage.error('解锁失败') }
+}
+
+function openDiff(ver: number) {
+  diffOld.value = Math.max(1, ver - 1)
+  diffNew.value = ver
+  showDiff.value = true
+  loadDiff()
+}
+
+async function loadDiff() {
+  if (!diffOld.value || !diffNew.value) return
+  diffLoading.value = true
+  try {
+    const [oldResp, newResp] = await Promise.all([
+      fetch(`/api/docs/documents/${docId}/versions/${diffOld.value}/content`, { headers: authHeader() }),
+      fetch(`/api/docs/documents/${docId}/versions/${diffNew.value}/content`, { headers: authHeader() }),
+    ])
+    const oldText = await oldResp.text()
+    const newText = await newResp.text()
+    diffHtml.value = simpleDiff(oldText, newText)
+  } catch { diffHtml.value = '<p style="color:#f56c6c">加载失败</p>' }
+  diffLoading.value = false
+}
+
+function authHeader() {
+  const token = localStorage.getItem('token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+function simpleDiff(oldHtml: string, newHtml: string): string {
+  const stripTags = (s: string) => s.replace(/<[^>]+>/g, '').split(/\s+/).filter(Boolean)
+  const oldWords = stripTags(oldHtml)
+  const newWords = stripTags(newHtml)
+  const oldSet = new Set(oldWords)
+  const newSet = new Set(newWords)
+  let html = '<div style="font-size:14px;line-height:1.8">'
+  // Removed (in old but not in new)
+  const removed = oldWords.filter(w => !newSet.has(w))
+  const added = newWords.filter(w => !oldSet.has(w))
+  if (removed.length === 0 && added.length === 0) {
+    html += '<p style="color:#67c23a">✅ 两个版本内容相同</p>'
+  } else {
+    if (removed.length) html += '<p><strong style="color:#f56c6c">删除（' + removed.length + ' 词）：</strong></p><p>' + removed.slice(0, 50).map(w => `<span style="background:#fde2e2;color:#f56c6c;padding:1px 3px;border-radius:3px">${w}</span>`).join(' ') + (removed.length > 50 ? ' ...' : '') + '</p>'
+    if (added.length) html += '<p><strong style="color:#67c23a">新增（' + added.length + ' 词）：</strong></p><p>' + added.slice(0, 50).map(w => `<span style="background:#e1f3d8;color:#67c23a;padding:1px 3px;border-radius:3px">${w}</span>`).join(' ') + (added.length > 50 ? ' ...' : '') + '</p>'
+  }
+  html += '</div>'
+  return html
+}
 
 // 链接弹窗
 const linkDialog = reactive({ show: false, text: '', url: '' })
@@ -919,6 +1072,14 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .editor-page { height: 100%; display: flex; flex-direction: column; }
 .doc-tags-bar { padding: 4px 16px; background: #fafafa; border-bottom: 1px solid #eee; }
 .tag-disabled { opacity: 0.4; cursor: default !important; }
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.stat-item { text-align: center; padding: 12px; background: #f5f7fa; border-radius: 8px; }
+.stat-value { font-size: 24px; font-weight: bold; color: #409eff; }
+.stat-label { font-size: 12px; color: #999; margin-top: 4px; }
+.activity-chart { display: flex; align-items: flex-end; gap: 2px; height: 60px; }
+.activity-bar { flex: 1; background: #409eff; border-radius: 2px 2px 0 0; min-height: 2px; opacity: 0.7; }
+.diff-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.diff-content { max-height: 400px; overflow-y: auto; padding: 12px; background: #fafafa; border-radius: 8px; }
 .editor-header {
   display: flex; align-items: center; gap: 12px;
   padding: 8px 16px; border-bottom: 1px solid #e8e8e8; background: #fff;
