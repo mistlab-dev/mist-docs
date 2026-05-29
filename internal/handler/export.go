@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/store"
 	"github.com/gin-gonic/gin"
+	"github.com/jung-kurt/gofpdf"
 )
 
 // ExportDocument exports a document in the specified format.
@@ -53,8 +55,17 @@ func ExportDocument(c *gin.Context) {
 		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.txt"`, fileName))
 		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(text))
 
+	case "pdf":
+		pdf, err := htmlToPDF(title, htmlContent)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "PDF 生成失败: " + err.Error()})
+			return
+		}
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.pdf"`, fileName))
+		c.Data(http.StatusOK, "application/pdf", pdf)
+
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的格式，可选: markdown, html, txt"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的格式，可选: markdown, html, txt, pdf"})
 	}
 
 	// Audit
@@ -261,4 +272,51 @@ func stripTags(s string) string {
 		}
 	}
 	return result.String()
+}
+
+// htmlToPDF converts HTML content to PDF using gofpdf.
+func htmlToPDF(title, body string) ([]byte, error) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetAutoPageBreak(true, 20)
+	pdf.AddPage()
+
+	// Title
+	pdf.SetFont("Arial", "B", 18)
+	pdf.CellFormat(0, 12, truncateUTF8(title, 60), "", 1, "C", false, 0, "")
+	pdf.Ln(6)
+
+	// Body text (strip HTML, add as plain text)
+	text := htmlToText(body)
+	lines := strings.Split(text, "\n")
+
+	pdf.SetFont("Arial", "", 11)
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			pdf.Ln(4)
+			continue
+		}
+		// Check for heading-like lines (short + no period)
+		if len(trimmed) < 40 && !strings.Contains(trimmed, "。") && !strings.Contains(trimmed, ",") {
+			pdf.SetFont("Arial", "B", 13)
+			pdf.MultiCell(0, 7, trimmed, "", "L", false)
+			pdf.SetFont("Arial", "", 11)
+		} else {
+			pdf.MultiCell(0, 6, trimmed, "", "L", false)
+		}
+	}
+
+	buf := &bytes.Buffer{}
+	if err := pdf.Output(buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func truncateUTF8(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "..."
 }
