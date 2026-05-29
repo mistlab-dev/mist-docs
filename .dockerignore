@@ -1,0 +1,12 @@
+.git
+node_modules
+web/node_modules
+web/dist
+mist-docs
+mist-docs-test
+*.exe
+*.test
+tests/
+tmp/
+*.md
+!configs/

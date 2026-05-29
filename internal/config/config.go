@@ -73,5 +73,51 @@ func Load(path string) error {
 	if err != nil {
 		return err
 	}
-	return yaml.Unmarshal(data, &C)
+	if err := yaml.Unmarshal(data, &C); err != nil {
+		return err
+	}
+	// 环境变量覆盖
+	envOverride()
+	return nil
+}
+
+func envOverride() {
+	if v := os.Getenv("DB_HOST"); v != "" {
+		C.Database.Host = v
+	}
+	if v := os.Getenv("DB_PORT"); v != "" {
+		C.Database.Port = atoi(v, C.Database.Port)
+	}
+	if v := os.Getenv("DB_USER"); v != "" {
+		C.Database.User = v
+	}
+	if v := os.Getenv("DB_PASS"); v != "" {
+		C.Database.Password = v
+	}
+	if v := os.Getenv("DB_NAME"); v != "" {
+		C.Database.DBName = v
+	}
+	if v := os.Getenv("SERVER_PORT"); v != "" {
+		C.Server.Port = atoi(v, C.Server.Port)
+	}
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		C.JWT.Secret = v
+	}
+	if v := os.Getenv("DATA_DIR"); v != "" {
+		C.Storage.Root = v + "/files"
+	}
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		C.Log.Level = v
+	}
+}
+
+func atoi(s string, fallback int) int {
+	n := 0
+	for _, ch := range s {
+		if ch < '0' || ch > '9' {
+			return fallback
+		}
+		n = n*10 + int(ch-'0')
+	}
+	return n
 }

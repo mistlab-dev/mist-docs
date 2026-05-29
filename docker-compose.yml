@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_pass_2026}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mist_docs}
+      MYSQL_USER: ${MYSQL_USER:-mist_docs}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-mist_docs_pass}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/001-init.sql
+    ports:
+      - "${MYSQL_PORT_MAP:-3306}:3306"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: mysqladmin ping -hlocalhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8900}:8900"
+    environment:
+      GENERATE_CONFIG: "yes"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: ${MYSQL_USER:-mist_docs}
+      DB_PASS: ${MYSQL_PASSWORD:-mist_docs_pass}
+      DB_NAME: ${MYSQL_DATABASE:-mist_docs}
+      JWT_SECRET: ${JWT_SECRET:-mist-docs-jwt-secret-change-me}
+      SERVER_PORT: "8900"
+      DATA_DIR: /data
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - app_data:/data
+
+volumes:
+  mysql_data:
+  app_data:
