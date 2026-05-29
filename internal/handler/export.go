@@ -140,26 +140,14 @@ func htmlToText(html string) string {
 
 // wrapHTML creates a full HTML document.
 func wrapHTML(title, body string) string {
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<title>%s</title>
-<style>
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #333; }
-h1, h2, h3 { margin-top: 1.5em; }
-code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-pre { background: #f4f4f4; padding: 12px; border-radius: 6px; overflow-x: auto; }
-blockquote { border-left: 4px solid #ddd; padding-left: 1em; color: #666; margin-left: 0; }
-img { max-width: 100%; }
-table { border-collapse: collapse; width: 100%%; }
-th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
-</style>
-</head>
-<body>
-%s
-</body>
-</html>`, title, body)
+	css := "body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.6;color:#333}"
+	css += "h1,h2,h3{margin-top:1.5em}code{background:#f4f4f4;padding:2px 6px;border-radius:3px}"
+	css += "pre{background:#f4f4f4;padding:12px;border-radius:6px;overflow-x:auto}"
+	css += "blockquote{border-left:4px solid #ddd;padding-left:1em;color:#666;margin-left:0}"
+	css += "img{max-width:100%}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px 12px}"
+	return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>` + title +
+		`</title><style>` + css + `</style></head><body><h1>` + title +
+		`</h1>` + body + `</body></html>`
 }
 
 func sanitizeFilename(name string) string {
@@ -329,39 +317,18 @@ func truncateUTF8(s string, maxRunes int) string {
 
 // wrapWordHTML generates Word-compatible HTML that Microsoft Word and WPS can open natively
 func wrapWordHTML(title, body string) string {
-	return fmt.Sprintf(`<html xmlns:o="urn:schemas-microsoft-com:office:office"
-xmlns:w="urn:schemas-microsoft-com:office:word"
-xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<!--[if gte mso 9]>
-<xml>
-<w:WordDocument>
-<w:View>Print</w:View>
-<w:Zoom>100</w:Zoom>
-<w:DoNotOptimizeForBrowser/>
-</w:WordDocument>
-</xml>
-<![endif]-->
-<style>
-body { font-family: "Noto Sans SC", SimSun, "Microsoft YaHei", sans-serif; font-size: 12pt; line-height: 1.8; color: #333; }
-h1 { font-size: 22pt; text-align: center; margin: 20pt 0; }
-h2 { font-size: 16pt; margin-top: 16pt; border-bottom: 1pt solid #ccc; padding-bottom: 4pt; }
-h3 { font-size: 14pt; margin-top: 12pt; }
-p { margin: 6pt 0; }
-table { border-collapse: collapse; width: 100%%; }
-th, td { border: 1pt solid #999; padding: 4pt 8pt; }
-th { background: #f0f0f0; font-weight: bold; }
-code { font-family: Consolas, monospace; background: #f4f4f4; padding: 1pt 3pt; }
-pre { background: #f4f4f4; padding: 8pt; }
-blockquote { border-left: 3pt solid #ccc; padding-left: 10pt; color: #666; margin-left: 0; }
-img { max-width: 100%%; }
-</style>
-</head>
-<body>
-<h1>%s</h1>
-%s
-</body>
-</html>`, title, body)
+	css := "body{font-family:SimSun,Microsoft YaHei,sans-serif;font-size:12pt;line-height:1.8;color:#333}"
+	css += "h1{font-size:22pt;text-align:center;margin:20pt 0}"
+	css += "h2{font-size:16pt;margin-top:16pt;border-bottom:1pt solid #ccc}"
+	css += "h3{font-size:14pt;margin-top:12pt}"
+	css += "table{border-collapse:collapse;width:100%}th,td{border:1pt solid #999;padding:4pt 8pt}"
+	css += "th{background:#f0f0f0;font-weight:bold}"
+	css += "code{font-family:Consolas,monospace;background:#f4f4f4;padding:1pt 3pt}"
+	css += "pre{background:#f4f4f4;padding:8pt}"
+	css += "blockquote{border-left:3pt solid #ccc;padding-left:10pt;color:#666}"
+	css += "img{max-width:100%}"
+	return `<html><head><meta charset="UTF-8"><title>` + title +
+		`</title><style>` + css + `</style></head><body><h1>` + title +
+		`</h1>` + body + `</body></html>`
 }
+
