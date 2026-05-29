@@ -1,5 +1,5 @@
 <template>
-  <div class="sheet-container" @keydown="onGlobalKeydown">
+  <div class="sheet-container" tabindex="0" ref="containerRef" @keydown="onGlobalKeydown">
     <!-- 公式栏 -->
     <div class="formula-bar">
       <div class="cell-ref">{{ currentCellRef }}</div>
@@ -486,6 +486,7 @@ const editingValue = ref('')
 const formulaValue = ref('')
 
 const scrollRef = ref<HTMLElement>()
+const containerRef = ref<HTMLElement>()
 const chartCanvas = ref<HTMLCanvasElement>()
 const editInput = ref<HTMLInputElement[]>()
 
@@ -611,6 +612,7 @@ function selectCell(r: number, c: number, e?: MouseEvent) {
   if (e?.shiftKey && selection.value) { selection.value.endRow = r; selection.value.endCol = c }
   else { selection.value = { startRow: r, startCol: c, endRow: r, endCol: c } }
   ctxRow = r; ctxCol = c; editingCell.value = null; updateFormula(); updateToolbarState()
+  containerRef.value?.focus()
 }
 function selectRow(ri: number) { selection.value = { startRow: ri, startCol: 0, endRow: ri, endCol: colCount.value - 1 }; updateFormula() }
 function selectCol(ci: number) { selection.value = { startRow: 0, startCol: ci, endRow: rows.value.length - 1, endCol: ci }; updateFormula() }
@@ -631,9 +633,15 @@ function startEdit(r: number, c: number) {
   nextTick(() => { editInput.value?.[0]?.focus() })
 }
 function finishEdit() {
-  if (!editingCell.value) return; const { row, col } = editingCell.value; pushUndo()
+  if (!editingCell.value) return
+  const { row, col } = editingCell.value
+  const oldVal = rows.value[row]?.[col] || ''
+  if (editingValue.value !== oldVal) { pushUndo() }
   if (!rows.value[row]) rows.value[row] = Array(colCount.value).fill('')
-  rows.value[row][col] = editingValue.value; editingCell.value = null; emitChange()
+  rows.value[row][col] = editingValue.value
+  editingCell.value = null
+  if (editingValue.value !== oldVal) emitChange()
+  containerRef.value?.focus()
 }
 function cancelEdit() { editingCell.value = null; updateFormula() }
 function applyFormula() {
