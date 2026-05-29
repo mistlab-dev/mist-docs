@@ -18,6 +18,26 @@ if r is None or not isinstance(r,dict): r=d
 print(r.get('$1',''))
 " 2>/dev/null; }
 
+# Track created resources for cleanup
+CREATED_DOCS=""
+CREATED_FOLDERS=""
+CREATED_USERS=""
+
+cleanup() {
+  echo -e "\n\033[1;33m━━━ Cleanup ━━━\033[0m"
+  [ -n "$TOKEN" ] || return
+  for ID in $CREATED_DOCS; do
+    $CURL "$BASE/api/docs/documents/$ID" -X DELETE -H "$AUTH" > /dev/null 2>&1 && echo "  🗑️  Deleted doc $ID" || true
+  done
+  for ID in $CREATED_FOLDERS; do
+    $CURL "$BASE/api/docs/folders/$ID" -X DELETE -H "$AUTH" > /dev/null 2>&1 && echo "  🗑️  Deleted folder $ID" || true
+  done
+  for ID in $CREATED_USERS; do
+    $CURL "$BASE/api/users/$ID" -X DELETE -H "$AUTH" > /dev/null 2>&1 && echo "  🗑️  Deleted user $ID" || true
+  done
+}
+trap cleanup EXIT
+
 CURL="curl -sk"
 
 echo -e "\n\033[1;36m╔══════════════════════════════════╗"
@@ -48,7 +68,7 @@ DOC_COUNT=$(echo "$DOCS" | python3 -c "import sys,json; print(len(json.load(sys.
 NEW_DOC=$($CURL "$BASE/api/docs/documents" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"title":"集成测试文档","type":"doc","folder_id":""}')
 NEW_DOC_ID=$(echo "$NEW_DOC" | jf 'id')
-[ -n "$NEW_DOC_ID" ] && ok "Create document" || fail "Create document"
+[ -n "$NEW_DOC_ID" ] && { ok "Create document"; CREATED_DOCS="$CREATED_DOCS $NEW_DOC_ID"; } || fail "Create document"
 
 GET_DOC=$($CURL "$BASE/api/docs/documents/$NEW_DOC_ID" -H "$AUTH")
 GET_TITLE=$(echo "$GET_DOC" | jf 'title')
@@ -69,7 +89,7 @@ section "Folders"
 
 NEW_FOLDER=$($CURL "$BASE/api/docs/folders" -X POST -H "$AUTH" -H 'Content-Type: application/json' -d '{"name":"测试文件夹"}')
 FOLDER_ID=$(echo "$NEW_FOLDER" | jf 'id')
-[ -n "$FOLDER_ID" ] && ok "Create folder" || fail "Create folder"
+[ -n "$FOLDER_ID" ] && { ok "Create folder"; CREATED_FOLDERS="$CREATED_FOLDERS $FOLDER_ID"; } || fail "Create folder"
 
 TREE=$($CURL "$BASE/api/docs/tree" -H "$AUTH")
 TREE_OK=$(echo "$TREE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if isinstance(d.get('data'), list) else 'fail')" 2>/dev/null)
@@ -188,7 +208,7 @@ section "Permissions"
 TEST_USER=$($CURL "$BASE/api/users" -X POST -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"username":"test_perm_user","name":"权限测试用户","password":"Test@2026","role":"member","department_id":""}')
 TEST_UID=$(echo "$TEST_USER" | jf 'id')
-[ -n "$TEST_UID" ] && ok "Create test user for permissions" || fail "Create test user"
+[ -n "$TEST_UID" ] && { ok "Create test user for permissions"; CREATED_USERS="$CREATED_USERS $TEST_UID"; } || fail "Create test user"
 
 PERMS=$($CURL "$BASE/api/permissions?resource_type=document&resource_id=$DOC_ID" -H "$AUTH")
 PERM_OK=$(echo "$PERMS" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if isinstance(d.get('data'), list) else 'fail')" 2>/dev/null)
@@ -205,9 +225,6 @@ CHK_PERM=$(echo "$CHK" | jf 'permission')
 
 $CURL "$BASE/api/permissions/$SET_PERM_ID" -X DELETE -H "$AUTH" > /dev/null
 ok "Remove permission"
-
-$CURL "$BASE/api/users/$TEST_UID" -X DELETE -H "$AUTH" > /dev/null
-ok "Cleanup test user"
 
 # ─── Audits ───
 section "Audits"
