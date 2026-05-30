@@ -1004,7 +1004,14 @@ function onCellMouseEnter(r: number, c: number, _e: MouseEvent) {
   selection.value.endCol = c
 }
 
-function stopDrag() { isDragging = false }
+function stopDrag() {
+  isDragging = false
+  // 公式范围模式：补上后缀（如 ) ）
+  if (formulaRangeMode && formulaInsertPos.end) {
+    const val = formulaValue.value
+    if (!val.endsWith(formulaInsertPos.end)) formulaValue.value = val + formulaInsertPos.end
+  }
+}
 function updateFormula() { if (!selection.value) return; formulaValue.value = rows.value[selection.value.startRow]?.[selection.value.startCol] || '' }
 function updateToolbarState() {
   if (!selection.value) return
@@ -1150,13 +1157,14 @@ function onFormulaInput() {
 function updateFormulaRangeMode() {
   const val = formulaValue.value
   if (!val.startsWith('=')) { formulaRangeMode = false; return }
-  // 只有末尾是 ( 或 , 或已经有引用时才进入范围选择模式
   const trimmed = val.replace(/\s+$/, '')
   const lastChar = trimmed[trimmed.length - 1]
   if (lastChar === '(' || lastChar === ',') {
     formulaRangeMode = true
-  } else if (/[A-Z]\d+$/i.test(trimmed)) {
-    // 末尾已经有单元格引用，也保持模式（方便拖动修改范围）
+  } else if (/\(\)$/.test(trimmed)) {
+    // 空括号如 SUM()，替换末尾 ) 为范围引用
+    formulaRangeMode = true
+  } else if (/[A-Z]+\d+$/i.test(trimmed)) {
     formulaRangeMode = true
   } else {
     formulaRangeMode = false
@@ -1189,17 +1197,16 @@ function onFormulaBlur() {
 function getFormulaInsertParts(): { start: string; end: string } {
   const val = formulaValue.value
   if (!val.startsWith('=')) return { start: val, end: '' }
-  // 找到最后一个未匹配的 ( 或 , 之后的位置
   const lastOpen = val.lastIndexOf('(')
   const lastComma = val.lastIndexOf(',')
   const splitAt = Math.max(lastOpen, lastComma)
   if (splitAt < 0) return { start: val, end: '' }
-  // 检查 splitAt 之后是否有引用需要替换
   const afterSplit = val.slice(splitAt + 1)
+  // 空括号: afterSplit === ')'
+  if (afterSplit === ')') return { start: val.slice(0, splitAt + 1), end: ')' }
+  // 已有引用: A1 或 A1:B2
   const refMatch = afterSplit.match(/^([A-Z]+\d+(?::[A-Z]+\d+)?)?$/i)
-  if (refMatch) {
-    return { start: val.slice(0, splitAt + 1), end: '' }
-  }
+  if (refMatch) return { start: val.slice(0, splitAt + 1), end: '' }
   return { start: val, end: '' }
 }
 
