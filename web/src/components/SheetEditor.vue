@@ -129,6 +129,15 @@
             <button class="rb-btn" @click="toggleBorder('none')" title="清除边框">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="14" height="14" stroke-dasharray="2 2"/></svg>
             </button>
+            <button class="rb-btn" @click="setRotate(-90)" title="竖排文字">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M10 17V3"/><path d="M7 6l3-3 3 3"/></svg>
+            </button>
+            <button class="rb-btn" @click="setRotate(-45)" title="倾斜45°">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 16L16 4"/></svg>
+            </button>
+            <button class="rb-btn" @click="setRotate(0)" title="正常角度">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 10h14"/><path d="M14 7l3 3-3 3"/></svg>
+            </button>
             <div class="rb-vsep" />
             <button class="rb-btn" :class="{active:getMetaProp('valign')==='top'}" @click="setVAlign('top')" title="顶端对齐" style="font-size:10px">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="3" y1="3" x2="17" y2="3"/><rect x="5" y="5" width="10" height="4" rx="0.5"/></svg>
@@ -271,21 +280,34 @@
       </div>
     </div>
 
+    <!-- Sheet Tab 右键菜单 -->
+    <div v-if="tabMenu.show" class="ctx-menu" :style="{ left: tabMenu.x + 'px', top: tabMenu.y + 'px' }">
+      <div class="ctx-item" @click="renameSheet(tabMenu.idx); tabMenu.show = false">重命名</div>
+      <div class="ctx-item" @click="setTabColor('#1a73e8')">🔵 蓝色</div>
+      <div class="ctx-item" @click="setTabColor('#34a853')">🟢 绿色</div>
+      <div class="ctx-item" @click="setTabColor('#ea4335')">🔴 红色</div>
+      <div class="ctx-item" @click="setTabColor('#fbbc04')">🟡 黄色</div>
+      <div class="ctx-item" @click="setTabColor('#9334e6')">🟣 紫色</div>
+      <div class="ctx-item" @click="setTabColor('')">无颜色</div>
+    </div>
+
     <!-- 表格区域 -->
     <div class="grid-area" ref="scrollRef" @contextmenu.prevent="showContextMenu" @click="hideContextMenu">
       <table class="grid-table" ref="tableRef">
         <colgroup>
           <col style="width:46px" />
-          <col v-for="(w, c) in colWidths" :key="c" :style="{ width: w + 'px' }" />
+          <col v-for="(w, c) in colWidths" :key="c" :style="{ width: hiddenCols.has(c) ? '0px' : w + 'px' }" />
         </colgroup>
         <thead>
           <tr>
             <th class="corner-cell"></th>
             <th v-for="c in colCount" :key="c"
+              v-show="!hiddenCols.has(c - 1)"
               class="col-hdr"
-              :class="{ sel: isColSelected(c - 1), sorted: sortCol === c - 1, 'frozen-col-hdr': freezeRows > 0 }"
+              :class="{ sel: isColSelected(c - 1), sorted: sortCol === c - 1, 'frozen-col-hdr': freezeRows > 0, 'drag-over': colDragOver === c - 1 }"
               @click="selectCol(c - 1)"
               @dblclick="autoFitCol(c - 1)"
+              @mousedown="startColDrag(c - 1, $event)"
             >
               <div class="col-hdr-inner">
                 <span class="col-letter">{{ colName(c - 1) }}</span>
@@ -310,7 +332,7 @@
         </thead>
         <tbody>
           <template v-for="(row, ri) in currentSheetRows" :key="ri">
-            <tr v-show="!isRowFiltered(ri)" :style="{ height: (rowHeights[ri] || 26) + 'px' }" :class="{'wrap-row': hasRowWrap(ri)}">
+            <tr v-show="!isRowFiltered(ri) && !hiddenRows.has(ri)" :style="{ height: (rowHeights[ri] || 26) + 'px' }" :class="{'wrap-row': hasRowWrap(ri)}">
               <td class="row-hdr" :class="{ sel: isRowSelected(ri), 'drag-over': rowDragOver === ri }" @click="selectRow(ri)" @mousedown.prevent="startRowDrag(ri, $event)">
                 <div class="row-hdr-inner">
                   {{ ri + 1 }}
@@ -318,6 +340,7 @@
                 </div>
               </td>
               <td v-for="c in colCount" :key="c"
+                v-show="!hiddenCols.has(c - 1)"
                 class="cell"
                 :class="{
                   sel: isSelected(ri, c - 1),
@@ -329,7 +352,6 @@
                 :style="getCellStyle(ri, c - 1)"
                 :colspan="getColspan(ri, c - 1)"
                 :rowspan="getRowspan(ri, c - 1)"
-                v-show="!isCellHidden(ri, c - 1)"
                 @mousedown.prevent="onCellMouseDown(ri, c - 1, $event)"
                 @mouseenter="onCellMouseEnter(ri, c - 1, $event); showCellComment(ri, c - 1, $event)"
                 @dblclick="startEdit(ri, c - 1)"
@@ -340,7 +362,12 @@
                     @keydown.enter.prevent="onEditEnter($event)"
                     @keydown.tab.prevent="finishEdit(); moveNext()"
                     @keydown.escape="cancelEdit"
-                    @keydown="handleEditKey" />
+                    @keydown="handleEditKey"
+                    @input="updateAutocomplete" />
+                  <!-- 输入联想 -->
+                  <div v-if="acItems.length" class="ac-dropdown">
+                    <div v-for="(item, i) in acItems" :key="i" class="ac-item" :class="{'ac-active': i === acIndex}" @mousedown.prevent="acceptAutocomplete(item)">{{ item }}</div>
+                  </div>
                 </template>
                 <template v-else>
                   <span class="cell-val" :style="getCellTextStyle(ri, c - 1)">{{ getCellDisplay(ri, c - 1) }}</span>
@@ -366,6 +393,9 @@
       <div class="ctx-item" @click="ctxCut"><span class="ctx-icon">✂</span> 剪切<span class="ctx-key">Ctrl+X</span></div>
       <div class="ctx-item" @click="ctxCopy"><span class="ctx-icon">📋</span> 复制<span class="ctx-key">Ctrl+C</span></div>
       <div class="ctx-item" @click="ctxPaste"><span class="ctx-icon">📄</span> 粘贴<span class="ctx-key">Ctrl+V</span></div>
+      <div class="ctx-item" @click="ctxPasteValues">只粘贴值</div>
+      <div class="ctx-item" @click="ctxPasteFormat">只粘贴格式</div>
+      <div class="ctx-item" @click="ctxPasteTranspose">转置粘贴</div>
       <div class="ctx-sep" />
       <div class="ctx-item" @click="ctxInsertRowAbove">↑ 上方插入行</div>
       <div class="ctx-item" @click="ctxInsertRowBelow">↓ 下方插入行</div>
@@ -374,11 +404,15 @@
       <div class="ctx-sep" />
       <div class="ctx-item" @click="ctxDeleteRow">🗑 删除行</div>
       <div class="ctx-item" @click="ctxDeleteCol">🗑 删除列</div>
+      <div class="ctx-item" @click="ctxHideRows">隐藏行</div>
+      <div class="ctx-item" @click="ctxHideCols">隐藏列</div>
+      <div class="ctx-item" @click="ctxUnhideAll">显示所有隐藏</div>
       <div class="ctx-sep" />
       <div class="ctx-item" @click="ctxClearCells">清空内容</div>
       <div class="ctx-item" @click="ctxMergeToggle">{{ hasMerge ? '取消合并' : '合并单元格' }}</div>
       <div class="ctx-sep" />
       <div class="ctx-item" @click="ctxAddComment">💬 {{ getComment(ctxRow, ctxCol) ? '编辑批注' : '添加批注' }}</div>
+      <div class="ctx-item" @click="ctxSetLink">🔗 {{ getCellMeta(ctxRow, ctxCol).link ? '编辑链接' : '插入链接' }}</div>
       <div v-if="getComment(ctxRow, ctxCol)" class="ctx-item" @click="ctxDeleteComment">🗑 删除批注</div>
       <div class="ctx-sep" />
       <div class="ctx-item" @click="ctxSetValidation">📝 数据验证</div>
@@ -477,6 +511,16 @@
       <template #footer>
         <el-button size="small" @click="showCommentDialog = false">取消</el-button>
         <el-button size="small" type="primary" @click="saveComment">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 链接编辑 -->
+    <el-dialog v-model="showLinkDialog" title="插入链接" width="400px">
+      <el-input v-model="linkText" placeholder="https://..." />
+      <template #footer>
+        <el-button size="small" @click="showLinkDialog = false">取消</el-button>
+        <el-button size="small" @click="removeLink" type="danger">删除链接</el-button>
+        <el-button size="small" type="primary" @click="saveLink">保存</el-button>
       </template>
     </el-dialog>
 
@@ -622,7 +666,9 @@
       <div class="tabs-scroll">
         <div v-for="(sh, si) in sheets" :key="si"
           class="tab" :class="{ active: activeSheet === si }"
-          @click="switchSheet(si)" @dblclick="renameSheet(si)" @contextmenu.prevent="renameSheet(si)">
+          :style="{ borderTopColor: sh.tabColor || undefined }"
+          @click="switchSheet(si)" @dblclick="renameSheet(si)" @contextmenu.prevent="showTabMenu($event, si)">
+          <span v-if="sh.tabColor" class="tab-dot" :style="{ background: sh.tabColor }"></span>
           {{ sh.name }}
           <span v-if="sheets.length > 1" class="tab-x" @click.stop="deleteSheet(si)">×</span>
         </div>
@@ -644,7 +690,7 @@ interface CellMeta {
   color?: string; bgColor?: string; align?: string; valign?: string; wrap?: boolean
   fontFamily?: string; fontSize?: number; precision?: number; indent?: number
   border?: { top?: boolean; right?: boolean; bottom?: boolean; left?: boolean }
-  comment?: string; locked?: boolean
+  comment?: string; locked?: boolean; link?: string; rotate?: number
   validation?: { type: 'list'|'number'|'text'; options?: string; min?: number; max?: number }
 }
 interface SheetData {
@@ -653,7 +699,9 @@ interface SheetData {
   cellMeta: Record<string, CellMeta>
   merges: { row: number; col: number; rowspan: number; colspan: number }[]
   frozenRows: number; frozenCols: number; protected?: boolean
+  hiddenRows: Set<number>; hiddenCols: Set<number>
   groups: { type: 'row'|'col'; start: number; end: number; collapsed: boolean }[]
+  tabColor?: string
 }
 interface CondRule { condition: string; value: string; bgColor: string }
 
@@ -669,7 +717,7 @@ function makeSheet(name: string, rows = 50, cols = 26): SheetData {
   return { name, rows: Array.from({ length: rows }, () => Array(cols).fill('')),
     colCount: cols, colWidths: Array(cols).fill(120), colTypes: Array(cols).fill('auto'),
     rowHeights: Array(rows).fill(26), cellMeta: {}, merges: [],
-    frozenRows: 0, frozenCols: 0, groups: [] }
+    frozenRows: 0, frozenCols: 0, hiddenRows: new Set(), hiddenCols: new Set(), groups: [] }
 }
 
 const sheet = computed(() => sheets.value[activeSheet.value] || makeSheet('Sheet1'))
@@ -680,6 +728,8 @@ const colTypes = computed(() => sheet.value.colTypes)
 const rowHeights = computed(() => sheet.value.rowHeights)
 const freezeRows = computed(() => sheet.value.frozenRows)
 const freezeCols = computed(() => sheet.value.frozenCols)
+const hiddenRows = computed(() => sheet.value.hiddenRows || new Set<number>())
+const hiddenCols = computed(() => sheet.value.hiddenCols || new Set<number>())
 const currentSheetRows = computed(() => rows.value)
 
 const selection = ref<{ startRow: number; startCol: number; endRow: number; endCol: number } | null>(null)
@@ -697,6 +747,9 @@ const showCondDialog = ref(false)
 const showSearchDialog = ref(false)
 const showFilterPanel = ref(false)
 const showCommentDialog = ref(false)
+const showLinkDialog = ref(false)
+const linkText = ref('')
+let linkRow = 0, linkCol = 0
 const showValidationDialog = ref(false)
 
 const chartType = ref('bar')
@@ -705,6 +758,7 @@ const chartTitle = ref('')
 const chartTooltip = reactive({ show: false, x: 0, y: 0, text: '' })
 
 const contextMenu = reactive({ show: false, x: 0, y: 0 })
+const tabMenu = reactive({ show: false, x: 0, y: 0, idx: 0 })
 let ctxRow = 0, ctxCol = 0
 
 const sortCol = ref(-1)
@@ -774,7 +828,9 @@ function loadData() {
       colTypes: d.colTypes || Array(cols).fill('auto'),
       rowHeights: d.rowHeights || Array(rowCount).fill(26),
       cellMeta: {}, merges: d.merges || [],
-      frozenRows: d.freezeRows || 0, frozenCols: d.freezeCols || 0, groups: []
+      frozenRows: d.freezeRows || 0, frozenCols: d.freezeCols || 0,
+      hiddenRows: new Set(d.hiddenRows || []), hiddenCols: new Set(d.hiddenCols || []),
+      protected: d.protected || false, groups: d.groups || []
     }
     if (d.cellMeta && Array.isArray(d.cellMeta)) { (d.cellMeta as [string, CellMeta][]).forEach(([k, v]) => s.cellMeta[k] = v) }
     else if (d.cellMeta && typeof d.cellMeta === 'object') { s.cellMeta = d.cellMeta }
@@ -818,6 +874,8 @@ function isSelectionHead(r: number, c: number): boolean { return selection.value
 function isRowSelected(ri: number): boolean { if (!selection.value) return false; return ri >= Math.min(selection.value.startRow, selection.value.endRow) && ri <= Math.max(selection.value.startRow, selection.value.endRow) }
 function isColSelected(ci: number): boolean { if (!selection.value) return false; return ci >= Math.min(selection.value.startCol, selection.value.endCol) && ci <= Math.max(selection.value.startCol, selection.value.endCol) }
 function selectCell(r: number, c: number, e?: MouseEvent) {
+  // Ctrl+点击链接时打开
+  if (e?.ctrlKey || e?.metaKey) { const link = getCellMeta(r, c).link; if (link) { window.open(link, '_blank'); return } }
   if (editingCell.value) finishEdit()
   if (e?.shiftKey && selection.value) { selection.value.endRow = r; selection.value.endCol = c }
   else { selection.value = { startRow: r, startCol: c, endRow: r, endCol: c } }
@@ -829,6 +887,7 @@ function selectCol(ci: number) { if (editingCell.value) finishEdit(); selection.
 
 // ── 行拖拽排序 ──
 const rowDragOver = ref(-1)
+const colDragOver = ref(-1)
 function startRowDrag(ri: number, e: MouseEvent) {
   if (e.button !== 0) return
   selectRow(ri)
@@ -859,8 +918,37 @@ function startRowDrag(ri: number, e: MouseEvent) {
   }
   document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up)
 }
-
-// ── 拖选逻辑 ──
+// ── 列拖拽排序 ──
+function startColDrag(ci: number, e: MouseEvent) {
+  // 不拦截 dropdown 按钮
+  if ((e.target as HTMLElement).closest('.hdr-menu, .el-dropdown')) return
+  if (e.button !== 0) return
+  selectCol(ci)
+  const startX = e.clientX, startCi = ci
+  const mv = (ev: MouseEvent) => {
+    const thead = containerRef.value?.querySelector('thead')
+    if (!thead) return
+    const ths = thead.querySelectorAll('th')
+    for (let i = 1; i < ths.length; i++) { // skip corner
+      const rect = ths[i].getBoundingClientRect()
+      if (ev.clientX >= rect.left && ev.clientX <= rect.right) { colDragOver.value = i - 1; break }
+    }
+  }
+  const up = () => {
+    document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up)
+    const target = colDragOver.value
+    colDragOver.value = -1
+    if (target < 0 || target === startCi) return
+    pushUndo()
+    // 移动列：数据 + 宽度 + 类型
+    rows.value.forEach(r => { const v = r.splice(startCi, 1)[0]; r.splice(target, 0, v) })
+    const w = colWidths.value.splice(startCi, 1)[0]; colWidths.value.splice(target, 0, w)
+    const t = colTypes.value.splice(startCi, 1)[0]; colTypes.value.splice(target, 0, t)
+    selection.value = { startRow: 0, startCol: target, endRow: rows.value.length - 1, endCol: target }
+    emitChange()
+  }
+  document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up)
+}
 let isDragging = false
 let formulaRangeMode = false // 公式范围选择模式
 let formulaInsertPos = { start: 0, end: 0 } // 插入位置
@@ -935,6 +1023,7 @@ function startEdit(r: number, c: number) {
   nextTick(() => { editInput.value?.[0]?.focus() })
 }
 function finishEdit() {
+  acItems.value = []
   if (!editingCell.value) return
   const { row, col } = editingCell.value
   const oldVal = rows.value[row]?.[col] || ''
@@ -975,6 +1064,8 @@ const showFxPanel = ref(false)
 const fxSearch = ref('')
 const fxIndex = ref(0)
 const fxSearchRef = ref<HTMLInputElement | null>(null)
+const acItems = ref<string[]>([])
+const acIndex = ref(0)
 const fxHint = ref<{name:string;args:string;desc:string}|null>(null)
 
 interface FxDef { name: string; args: string; desc: string; template: string }
@@ -1153,8 +1244,29 @@ function updateFxHint() {
 }
 
 function handleEditKey(e: KeyboardEvent) {
+  if (acItems.value.length) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); acIndex.value = Math.min(acIndex.value + 1, acItems.value.length - 1); return }
+    if (e.key === 'ArrowUp') { e.preventDefault(); acIndex.value = Math.max(acIndex.value - 1, 0); return }
+    if (e.key === 'Enter' || e.key === 'Tab') { acceptAutocomplete(acItems.value[acIndex.value]); return }
+  }
   if (e.key === 'ArrowUp') { e.preventDefault(); finishEdit(); if (selection.value && selection.value.startRow > 0) selectCell(selection.value.startRow - 1, selection.value.startCol) }
   if (e.key === 'ArrowDown') { e.preventDefault(); finishEdit(); if (selection.value) selectCell(Math.min(selection.value.startRow + 1, rows.value.length - 1), selection.value.startCol) }
+}
+function updateAutocomplete() {
+  acItems.value = []; acIndex.value = 0
+  if (!editingCell.value || !editingValue.value || editingValue.value.length < 1) return
+  const c = editingCell.value.col, val = editingValue.value.toLowerCase()
+  const seen = new Set<string>()
+  for (let r = 0; r < rows.value.length; r++) {
+    if (r === editingCell.value.row) continue
+    const cv = rows.value[r]?.[c]
+    if (cv && cv.toLowerCase().startsWith(val) && !seen.has(cv)) { seen.add(cv); acItems.value.push(cv) }
+    if (acItems.value.length >= 8) break
+  }
+}
+function acceptAutocomplete(val: string) {
+  if (val) editingValue.value = val
+  acItems.value = []; acIndex.value = 0
 }
 
 // Cell Display
@@ -1187,6 +1299,8 @@ function getCellTextStyle(r: number, c: number): Record<string, string> {
     if (m.border.bottom) s.borderBottom = bStyle; if (m.border.left) s.borderLeft = bStyle
   }
   if (m.locked && sheet.value.protected) s.background = '#f0f0f0'
+  if (m.link) { s.color = '#1a73e8'; s.textDecoration = (s.textDecoration ? s.textDecoration + ' ' : '') + 'underline'; s.cursor = 'pointer' }
+  if (m.rotate) { s.transform = `rotate(${m.rotate}deg)`; s.transformOrigin = 'center center' }
   if ((m as any).indent) s.paddingLeft = ((m as any).indent * 16) + 'px'
   return s
 }
@@ -1251,6 +1365,7 @@ function toggleBorder(mode: 'all' | 'outer' | 'none') {
   }
   emitChange()
 }
+function setRotate(deg: number) { if (!selection.value) return; applyToSelection('rotate', deg) }
 function applyToSelection(prop: string, val: any) {
   if (!selection.value) return; pushUndo()
   const { startRow, startCol, endRow, endCol } = selection.value
@@ -1503,6 +1618,9 @@ function hideCellComment() { hoverComment.show = false }
 function ctxAddComment() { hideContextMenu(); commentRow = ctxRow; commentCol = ctxCol; commentText.value = getComment(ctxRow, ctxCol) || ''; showCommentDialog.value = true }
 function ctxDeleteComment() { hideContextMenu(); pushUndo(); const k = metaKey(ctxRow, ctxCol); if (sheet.value.cellMeta[k]) { delete sheet.value.cellMeta[k].comment }; emitChange() }
 function saveComment() { pushUndo(); setCellMeta(commentRow, commentCol, { comment: commentText.value || undefined }); showCommentDialog.value = false; emitChange() }
+function ctxSetLink() { hideContextMenu(); linkRow = ctxRow; linkCol = ctxCol; linkText.value = getCellMeta(ctxRow, ctxCol).link || ''; showLinkDialog.value = true }
+function saveLink() { pushUndo(); setCellMeta(linkRow, linkCol, { link: linkText.value || undefined }); showLinkDialog.value = false; emitChange() }
+function removeLink() { pushUndo(); setCellMeta(linkRow, linkCol, { link: undefined }); showLinkDialog.value = false; emitChange() }
 
 // Validation
 function ctxSetValidation() {
@@ -1540,16 +1658,24 @@ function deleteSheet(idx: number) { if (sheets.value.length <= 1) return; sheets
 
 // Context Menu
 function showContextMenu(e: MouseEvent) { ctxRow = selection.value?.startRow ?? 0; ctxCol = selection.value?.startCol ?? 0; contextMenu.show = true; contextMenu.x = e.clientX; contextMenu.y = e.clientY }
-function hideContextMenu() { contextMenu.show = false }
+function hideContextMenu() { contextMenu.show = false; tabMenu.show = false }
+function showTabMenu(e: MouseEvent, idx: number) { tabMenu.show = true; tabMenu.x = e.clientX; tabMenu.y = e.clientY; tabMenu.idx = idx }
+function setTabColor(color: string) { sheets.value[tabMenu.idx].tabColor = color || undefined; tabMenu.show = false; emitChange() }
 function ctxCut() { hideContextMenu(); clipCut() }
 function ctxCopy() { hideContextMenu(); clipCopy() }
 function ctxPaste() { hideContextMenu(); clipPaste() }
+function ctxPasteValues() { hideContextMenu(); if (!clipData || !selection.value) return; pushUndo(); const r0 = selection.value.startRow, c0 = selection.value.startCol; for (let r = 0; r < clipData.data.length; r++) for (let c = 0; c < clipData.data[r].length; c++) { if (!rows.value[r0 + r]) rows.value[r0 + r] = makeRow(colCount.value); rows.value[r0 + r][c0 + c] = clipData.data[r][c] }; emitChange() }
+function ctxPasteFormat() { hideContextMenu(); if (!selection.value) return; pushUndo(); const { startRow, startCol, endRow, endCol } = selection.value; const src = clipData ? { r: 0, c: 0 } : null; if (!src) return; const r0 = selection.value.startRow, c0 = selection.value.startCol; for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++) for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) { const sr = r - r0, sc = c - c0; if (sr < clipData!.data.length && sc < clipData!.data[sr].length) { const srcMeta = getCellMeta(r0 + sr, c0 + sc); setCellMeta(r, c, { ...srcMeta }) } }; emitChange() }
+function ctxPasteTranspose() { hideContextMenu(); if (!clipData || !selection.value) return; pushUndo(); const r0 = selection.value.startRow, c0 = selection.value.startCol; const transposed = clipData.data[0].map((_, c) => clipData.data.map(row => row[c])); for (let r = 0; r < transposed.length; r++) for (let c = 0; c < transposed[r].length; c++) { if (!rows.value[r0 + r]) rows.value[r0 + r] = makeRow(colCount.value); rows.value[r0 + r][c0 + c] = transposed[r][c] }; emitChange() }
 function ctxInsertRowAbove() { hideContextMenu(); addRowAbove() }
 function ctxInsertRowBelow() { hideContextMenu(); addRowBelow() }
 function ctxInsertColLeft() { hideContextMenu(); addColLeft() }
 function ctxInsertColRight() { hideContextMenu(); addColRight() }
 function ctxDeleteRow() { hideContextMenu(); deleteRow() }
 function ctxDeleteCol() { hideContextMenu(); deleteCol() }
+function ctxHideRows() { hideContextMenu(); if (!selection.value) return; pushUndo(); const { startRow, endRow } = selection.value; for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++) hiddenRows.value.add(r); emitChange() }
+function ctxHideCols() { hideContextMenu(); if (!selection.value) return; pushUndo(); const { startCol, endCol } = selection.value; for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) hiddenCols.value.add(c); emitChange() }
+function ctxUnhideAll() { hideContextMenu(); pushUndo(); sheet.value.hiddenRows = new Set(); sheet.value.hiddenCols = new Set(); emitChange() }
 function ctxClearCells() { hideContextMenu(); if (!selection.value) return; pushUndo(); const { startRow, startCol, endRow, endCol } = selection.value; for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++) for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) rows.value[r][c] = ''; emitChange() }
 function ctxMergeToggle() { hideContextMenu(); toggleMerge() }
 
@@ -1615,7 +1741,21 @@ function evalArg(a: string): any {
   a = a.trim()
   if ((a.startsWith('"') && a.endsWith('"')) || (a.startsWith("'") && a.endsWith("'"))) return a.slice(1, -1)
   const crossRef = a.match(/^(\w+)!(.+)$/i)
-  if (crossRef) { const si = sheets.value.findIndex(s => s.name.toLowerCase() === crossRef[1].toLowerCase()); if (si >= 0) { const s = sheets.value[si]; const cr = crossRef[2].match(/^([A-Z]+)(\d+)$/); if (cr) { return s.rows[parseInt(cr[2]) - 1]?.[colIndex(cr[1])] || '' } }; return '#REF!' }
+  if (crossRef) {
+    const si = sheets.value.findIndex(s => s.name.toLowerCase() === crossRef[1].toLowerCase())
+    if (si < 0) return '#REF!'
+    const s = sheets.value[si]
+    const ref = crossRef[2].toUpperCase()
+    const rng = ref.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+    if (rng) {
+      const c1 = colIndex(rng[1]), r1 = parseInt(rng[2]) - 1, c2 = colIndex(rng[3]), r2 = parseInt(rng[4]) - 1
+      const res: any[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = s.rows[r]?.[c]; if (v !== undefined && v !== '') { const n = parseFloat(v); res.push(isNaN(n) ? v : n) } else res.push('') }
+      return res
+    }
+    const cr = ref.match(/^([A-Z]+)(\d+)$/)
+    if (cr) { const v = s.rows[parseInt(cr[2]) - 1]?.[colIndex(cr[1])]; if (v === undefined || v === '') return ''; const n = parseFloat(v); return isNaN(n) ? v : n }
+    return '#REF!'
+  }
   const cr = a.match(/^([A-Z]+)(\d+)$/); if (cr) return getCellVal(cr[1], parseInt(cr[2]))
   const rng = a.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/); if (rng) return getRange(a)
   if (!isNaN(Number(a))) return Number(a)
@@ -1628,6 +1768,18 @@ function getRange(rangeStr: string): any[] { const m = rangeStr.match(/^([A-Z]+)
 interface RC { r: number; c: number }
 function getRangeData(arg: string): RC[] { const m = arg.trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/); if (!m) return []; const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: RC[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) res.push({ r, c }); return res }
 function numArray(arg: string, countNonNum = false, raw = false): number[] {
+  const crossRange = arg.trim().match(/^(\w+)!([A-Z]+\d+:[A-Z]+\d+)$/i)
+  if (crossRange) {
+    const si = sheets.value.findIndex(s => s.name.toLowerCase() === crossRange[1].toLowerCase())
+    if (si < 0) return []
+    const s = sheets.value[si], rangeStr = crossRange[2].toUpperCase()
+    const mr = rangeStr.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+    if (!mr) return []
+    const c1 = colIndex(mr[1]), r1 = parseInt(mr[2]) - 1, c2 = colIndex(mr[3]), r2 = parseInt(mr[4]) - 1
+    const res: number[] = []
+    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = s.rows[r]?.[c]; if (countNonNum) { if (v !== undefined && v !== '') res.push(raw ? parseFloat(v) || 0 : 1) } else { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } }
+    return res
+  }
   const m = arg.trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
   if (m) { const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: number[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = rows.value[r]?.[c]; if (countNonNum) { if (v !== undefined && v !== '') res.push(raw ? parseFloat(v) || 0 : 1) } else { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } }; return res }
   return arg.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
@@ -2101,6 +2253,9 @@ defineExpose({ getData })
 .wrap-row { height: auto !important; }
 .wrap-row .cell-val { white-space: normal; word-break: break-all; line-height: 1.4; }
 .cell-input { width: 100%; height: 100%; border: none; outline: none; padding: 0 6px; font-size: 13px; font-family: inherit; background: #fff; }
+.ac-dropdown { position: absolute; top: 100%; left: 0; background: #fff; border: 1px solid #d0d0d0; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 100; max-height: 200px; overflow-y: auto; min-width: 120px; }
+.ac-item { padding: 4px 10px; font-size: 13px; cursor: pointer; color: #333; }
+.ac-item:hover, .ac-item.ac-active { background: #e8f0fe; color: #1a73e8; }
 
 /* Fill & Move handles */
 .fill-h { position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px; background: #1a73e8; cursor: crosshair; z-index: 2; border-radius: 0; }
@@ -2136,6 +2291,7 @@ defineExpose({ getData })
 .tab { display: inline-flex; align-items: center; gap: 4px; padding: 4px 14px; font-size: 12px; cursor: pointer; border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0; color: #555; user-select: none; background: transparent; height: 26px; transition: all 0.1s; white-space: nowrap; }
 .tab:hover { background: #e5e5e5; }
 .tab.active { background: #fff; border-color: #d6d6d6; color: #1a73e8; font-weight: 600; border-bottom: 1px solid #fff; margin-bottom: -1px; }
+.tab-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .tab-x { font-size: 14px; color: #999; margin-left: 2px; line-height: 1; }
 .tab-x:hover { color: #e53935; }
 .tab-add { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; font-size: 16px; color: #666; transition: all 0.1s; }
