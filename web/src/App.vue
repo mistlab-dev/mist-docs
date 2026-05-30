@@ -80,6 +80,8 @@ html.dark .list-header-row { background: #16213e; border-color: #363660; color: 
 html.dark .login-container { background: #0f0f23; }
 html.dark .login-card { background: #1a1a2e; }
 html.dark .login-card h2 { color: #e0e0e0; }
+html.dark .login-card .title { color: #e0e0e0; }
+html.dark .login-card .subtitle { color: #909399; }
 
 html.dark .el-table { --el-table-bg-color: #1a1a2e; --el-table-tr-bg-color: #1a1a2e; --el-table-header-bg-color: #16213e; --el-table-row-hover-bg-color: #16213e; --el-table-border-color: #363660; }
 html.dark .el-dialog { background: #1a1a2e; }

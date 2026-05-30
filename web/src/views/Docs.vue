@@ -97,7 +97,10 @@
         </div>
 
         <!-- 空状态 -->
-        <div v-if="!docs.length" class="empty-state">
+        <div v-if="loading" class="loading-state">
+          <el-skeleton :rows="5" animated />
+        </div>
+        <div v-else-if="!docs.length" class="empty-state">
           <el-icon :size="48" color="#ccc"><Document /></el-icon>
           <p v-if="viewMode === 'recent'">还没有打开过文档</p>
           <p v-else-if="viewMode === 'favorites'">还没有收藏文档</p>
@@ -349,6 +352,7 @@ const batchMoveTarget = ref('')
 const sidebarTags = ref<any[]>([])
 const currentFolder = ref<string | null>(null)
 const viewMode = ref('all')
+const loading = ref(false)
 const search = ref('')
 const searchMode = ref(false)
 const favoriteIds = ref<Set<string>>(new Set())
@@ -440,20 +444,29 @@ async function loadTree() {
 }
 
 async function loadDocs(folderId?: string) {
-  const params: any = {}
-  if (folderId) params.folder_id = folderId
-  const { data } = await http.get('/docs/documents', { params })
-  setDocs(data.data || [])
+  loading.value = true
+  try {
+    const params: any = {}
+    if (folderId) params.folder_id = folderId
+    const { data } = await http.get('/docs/documents', { params })
+    setDocs(data.data || [])
+  } finally { loading.value = false }
 }
 
 async function loadRecent() {
-  const { data } = await http.get('/docs/documents/recent')
-  setDocs(data.data || [])
+  loading.value = true
+  try {
+    const { data } = await http.get('/docs/documents/recent')
+    setDocs(data.data || [])
+  } finally { loading.value = false }
 }
 
 async function loadFavorites() {
-  const { data } = await http.get('/docs/favorites')
-  setDocs(data.data || [])
+  loading.value = true
+  try {
+    const { data } = await http.get('/docs/favorites')
+    setDocs(data.data || [])
+  } finally { loading.value = false }
 }
 
 async function loadFavoriteIds() {
@@ -706,6 +719,7 @@ async function filterByTag(tagId: string) {
   justify-content: center; height: 300px; color: #999;
 }
 .empty-state p { margin-top: 12px; font-size: 14px; }
+.loading-state { padding: 40px 20px; }
 
 /* 文档卡片网格 */
 .doc-grid {
