@@ -5,7 +5,7 @@
       <div class="cell-ref">{{ currentCellRef }}</div>
       <button class="formula-fx-btn" @click="toggleFxPanel" :class="{active: showFxPanel}">fx</button>
       <div class="formula-input-wrap">
-        <input class="formula-input" v-model="formulaValue" @input="onFormulaInput" @keydown="onFormulaKeydown" @focus="onFormulaFocus"
+        <input class="formula-input" v-model="formulaValue" @input="onFormulaInput" @keydown="onFormulaKeydown" @focus="onFormulaFocus" @blur="onFormulaBlur"
           @keydown.enter="applyFormula" @keydown.escape="cancelFormula" placeholder="输入内容或公式..." />
         <!-- 函数自动补全 -->
         <div v-if="showFxPanel" class="fx-panel">
@@ -794,11 +794,28 @@ function selectCol(ci: number) { if (editingCell.value) finishEdit(); selection.
 
 // ── 拖选逻辑 ──
 let isDragging = false
+let formulaRangeMode = false // 公式范围选择模式
+let formulaInsertPos = { start: 0, end: 0 } // 插入位置
+
+function isFormulaRangeEditing(): boolean {
+  if (!formulaValue.value.startsWith('=')) return false
+  // 检查公式栏是否聚焦或正在输入
+  return formulaRangeMode
+}
 
 function onCellMouseDown(r: number, c: number, e: MouseEvent) {
-  if (e.button !== 0) return // 只处理左键
+  if (e.button !== 0) return
+  // 公式范围选择模式：拖选单元格直接填入范围引用
+  if (formulaRangeMode) {
+    const parts = getFormulaInsertParts()
+    formulaInsertPos = parts
+    const ref = colName(c) + (r + 1)
+    formulaValue.value = parts.start + ref
+    isDragging = true
+    document.addEventListener('mouseup', stopDrag, { once: true })
+    return
+  }
   if (e.shiftKey && selection.value) {
-    // Shift+点击：扩展选区
     selection.value.endRow = r
     selection.value.endCol = c
   } else {
@@ -809,7 +826,24 @@ function onCellMouseDown(r: number, c: number, e: MouseEvent) {
 }
 
 function onCellMouseEnter(r: number, c: number, _e: MouseEvent) {
-  if (!isDragging || !selection.value) return
+  if (!isDragging) return
+  // 公式范围模式：扩展范围引用
+  if (formulaRangeMode) {
+    // 找到第一个被选中的起始单元格（上一次 mousedown 的）
+    const startRef = formulaValue.value.match(/([A-Z]+\d+)$/)?.[1]
+    if (startRef) {
+      const m = startRef.match(/^([A-Z]+)(\d+)$/)
+      if (m) {
+        const sc = colIndex(m[1]), sr = parseInt(m[2]) - 1
+        const endRef = colName(c) + (r + 1)
+        const rangeStr = colName(Math.min(sc, c)) + (Math.min(sr, r) + 1) + ':' + colName(Math.max(sc, c)) + (Math.max(sr, r) + 1)
+        // 替换末尾的引用为范围
+        formulaValue.value = formulaValue.value.replace(/([A-Z]+\d+)$/, rangeStr)
+      }
+    }
+    return
+  }
+  if (!selection.value) return
   selection.value.endRow = r
   selection.value.endCol = c
 }
@@ -939,6 +973,7 @@ function onFormulaInput() {
 
 function onFormulaFocus() {
   if (formulaValue.value.startsWith('=')) {
+    formulaRangeMode = true
     const after = formulaValue.value.slice(1)
     const m = after.match(/([A-Z]+)$/i)
     if (m) {
@@ -947,6 +982,29 @@ function onFormulaFocus() {
       fxIndex.value = 0
     }
   }
+}
+
+function onFormulaBlur() {
+  // 延迟退出，避免拖选时失焦
+  setTimeout(() => { formulaRangeMode = false }, 200)
+}
+
+// 当公式以 ( 或 , 结尾时，记录插入点用于范围选择
+function getFormulaInsertParts(): { start: string; end: string } {
+  const val = formulaValue.value
+  if (!val.startsWith('=')) return { start: val, end: '' }
+  // 找到最后一个未匹配的 ( 或 , 之后的位置
+  const lastOpen = val.lastIndexOf('(')
+  const lastComma = val.lastIndexOf(',')
+  const splitAt = Math.max(lastOpen, lastComma)
+  if (splitAt < 0) return { start: val, end: '' }
+  // 检查 splitAt 之后是否有引用需要替换
+  const afterSplit = val.slice(splitAt + 1)
+  const refMatch = afterSplit.match(/^([A-Z]+\d+(?::[A-Z]+\d+)?)?$/i)
+  if (refMatch) {
+    return { start: val.slice(0, splitAt + 1), end: '' }
+  }
+  return { start: val, end: '' }
 }
 
 function insertFunction(fn: FxDef) {
