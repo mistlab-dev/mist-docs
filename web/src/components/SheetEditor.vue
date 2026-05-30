@@ -955,6 +955,7 @@ function toggleFxPanel() {
 }
 
 function onFormulaInput() {
+  updateFormulaRangeMode()
   if (formulaValue.value.startsWith('=')) {
     const after = formulaValue.value.slice(1)
     // 提取正在输入的函数名
@@ -968,12 +969,29 @@ function onFormulaInput() {
     }
   } else {
     showFxPanel.value = false
+    formulaRangeMode = false
+  }
+}
+
+function updateFormulaRangeMode() {
+  const val = formulaValue.value
+  if (!val.startsWith('=')) { formulaRangeMode = false; return }
+  // 只有末尾是 ( 或 , 或已经有引用时才进入范围选择模式
+  const trimmed = val.replace(/\s+$/, '')
+  const lastChar = trimmed[trimmed.length - 1]
+  if (lastChar === '(' || lastChar === ',') {
+    formulaRangeMode = true
+  } else if (/[A-Z]\d+$/i.test(trimmed)) {
+    // 末尾已经有单元格引用，也保持模式（方便拖动修改范围）
+    formulaRangeMode = true
+  } else {
+    formulaRangeMode = false
   }
 }
 
 function onFormulaFocus() {
+  updateFormulaRangeMode()
   if (formulaValue.value.startsWith('=')) {
-    formulaRangeMode = true
     const after = formulaValue.value.slice(1)
     const m = after.match(/([A-Z]+)$/i)
     if (m) {
@@ -985,8 +1003,12 @@ function onFormulaFocus() {
 }
 
 function onFormulaBlur() {
-  // 延迟退出，避免拖选时失焦
-  setTimeout(() => { formulaRangeMode = false }, 200)
+  // 拖选进行中不退出 range mode
+  if (isDragging) {
+    setTimeout(() => { if (!isDragging) formulaRangeMode = false }, 300)
+    return
+  }
+  formulaRangeMode = false
 }
 
 // 当公式以 ( 或 , 结尾时，记录插入点用于范围选择
@@ -1022,6 +1044,7 @@ function insertFunction(fn: FxDef) {
   }
   showFxPanel.value = false
   fxHint.value = fn
+  updateFormulaRangeMode()
 }
 
 function onFormulaKeydown(e: KeyboardEvent) {
