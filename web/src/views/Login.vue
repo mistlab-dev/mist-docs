@@ -52,24 +52,39 @@ async function handleLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1d1e2c 0%, #2a3a5c 100%);
+  background: linear-gradient(135deg, #1d1e2c 0%, #2a3a5c 50%, #1d1e2c 100%);
+  background-size: 200% 200%;
+  animation: gradientShift 8s ease infinite;
+}
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 .login-card {
   width: 380px;
   padding: 40px;
   background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 .title {
   text-align: center;
   font-size: 28px;
   margin: 0 0 4px;
   color: #1d1e2c;
+  letter-spacing: -0.5px;
 }
 .subtitle {
   text-align: center;
   color: #999;
   margin: 0 0 32px;
+  font-size: 14px;
+}
+.login-card :deep(.el-input__wrapper) {
+  border-radius: 8px;
+}
+.login-card :deep(.el-button) {
+  border-radius: 8px;
+  font-size: 15px;
 }
 </style>

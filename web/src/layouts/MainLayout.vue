@@ -7,7 +7,7 @@
     <el-aside :width="collapsed ? '64px' : '220px'" class="sidebar" :class="{ open: mobileMenu }">
       <div class="logo" @click="collapsed = !collapsed">
         <span v-if="!collapsed" class="logo-text">MistDocs</span>
-        <span v-else class="logo-icon">📄</span>
+        <svg v-else class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       </div>
       <el-menu
         :default-active="route.path"
@@ -282,6 +282,7 @@ onMounted(() => {
 }
 .logo-text { letter-spacing: 2px; }
 .logo-icon { font-size: 24px; }
+.logo-svg { width: 24px; height: 24px; }
 .topbar {
   display: flex;
   align-items: center;

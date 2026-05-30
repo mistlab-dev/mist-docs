@@ -166,9 +166,11 @@ onMounted(loadStats)
 .stat-value { font-size: 24px; font-weight: 700; color: #303133; }
 .stat-label { font-size: 13px; color: #909399; margin-top: 4px; }
 
+.stat-card :deep(.el-card__body) { display: flex; align-items: center; gap: 16px; width: 100%; }
+
 .chart-container { display: flex; align-items: flex-end; gap: 8px; height: 160px; padding-top: 20px; }
 .chart-bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-.chart-bar { width: 100%; background: linear-gradient(to top, #409eff, #79bbff); border-radius: 4px 4px 0 0; position: relative; min-height: 4px; }
+.chart-bar { width: 100%; background: linear-gradient(to top, #409eff, #79bbff); border-radius: 4px 4px 0 0; position: relative; min-height: 4px; transition: height 0.3s ease; }
 .chart-count { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #606266; }
 .chart-label { font-size: 11px; color: #909399; margin-top: 4px; }
 .no-data { color: #c0c4cc; text-align: center; padding: 40px 0; }
