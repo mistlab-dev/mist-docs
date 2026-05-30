@@ -1550,6 +1550,16 @@ function clipPaste() {
 }
 
 // Fill Handle
+// ── 填充柄逻辑 ──
+function adjustFormulaRefs(formula: string, rowOffset: number, colOffset: number): string {
+  // 替换公式中的相对引用 A1 → A(rowOffset+1) 等
+  return formula.replace(/([A-Z]+)(\d+)/gi, (match, col, row) => {
+    const r = parseInt(row) + rowOffset
+    const c = colIndex(col) + colOffset
+    return colName(c) + r
+  })
+}
+
 function startFill(e: MouseEvent) {
   if (!selection.value) return; e.preventDefault()
   const sr = selection.value.startRow, sc = selection.value.startCol, er = selection.value.endRow, ec = selection.value.endCol
@@ -1564,9 +1574,15 @@ function startFill(e: MouseEvent) {
       if (r >= srcR1 && r <= srcR2) continue
       const srcR = srcR1 + ((r - srcR1) % (srcR2 - srcR1 + 1))
       const sv = rows.value[srcR]?.[c] || ''
-      const sn = parseFloat(sv)
-      if (!isNaN(sn) && sv === String(sn)) rows.value[r][c] = String(sn + (r - srcR1))
-      else { const wIdx = weekDays.indexOf(sv); if (wIdx >= 0) rows.value[r][c] = weekDays[(wIdx + r - srcR1) % 7]; else { const mIdx = months.indexOf(sv); if (mIdx >= 0) rows.value[r][c] = months[(mIdx + r - srcR1) % 12]; else rows.value[r][c] = sv } }
+      if (sv.startsWith('=')) {
+        // 公式：调整引用
+        const rowOff = r - srcR
+        rows.value[r][c] = adjustFormulaRefs(sv, rowOff, 0)
+      } else {
+        const sn = parseFloat(sv)
+        if (!isNaN(sn) && sv === String(sn)) rows.value[r][c] = String(sn + (r - srcR1))
+        else { const wIdx = weekDays.indexOf(sv); if (wIdx >= 0) rows.value[r][c] = weekDays[(wIdx + r - srcR1) % 7]; else { const mIdx = months.indexOf(sv); if (mIdx >= 0) rows.value[r][c] = months[(mIdx + r - srcR1) % 12]; else rows.value[r][c] = sv } }
+      }
     }
     emitChange()
   }
@@ -1591,9 +1607,13 @@ function autoFillDown() {
   for (let r = srcR2 + 1; r <= lastRow; r++) for (let c = srcC1; c <= srcC2; c++) {
     const srcR = srcR1 + ((r - srcR1) % (srcR2 - srcR1 + 1))
     const sv = rows.value[srcR]?.[c] || ''
-    const sn = parseFloat(sv)
-    if (!isNaN(sn) && sv === String(sn)) rows.value[r][c] = String(sn + (r - srcR1))
-    else { const wIdx = weekDays.indexOf(sv); if (wIdx >= 0) rows.value[r][c] = weekDays[(wIdx + r - srcR1) % 7]; else { const mIdx = months.indexOf(sv); if (mIdx >= 0) rows.value[r][c] = months[(mIdx + r - srcR1) % 12]; else rows.value[r][c] = sv } }
+    if (sv.startsWith('=')) {
+      rows.value[r][c] = adjustFormulaRefs(sv, r - srcR, 0)
+    } else {
+      const sn = parseFloat(sv)
+      if (!isNaN(sn) && sv === String(sn)) rows.value[r][c] = String(sn + (r - srcR1))
+      else { const wIdx = weekDays.indexOf(sv); if (wIdx >= 0) rows.value[r][c] = weekDays[(wIdx + r - srcR1) % 7]; else { const mIdx = months.indexOf(sv); if (mIdx >= 0) rows.value[r][c] = months[(mIdx + r - srcR1) % 12]; else rows.value[r][c] = sv } }
+    }
   }
   selection.value = { startRow: srcR1, startCol: srcC1, endRow: lastRow, endCol: srcC2 }
   emitChange()
