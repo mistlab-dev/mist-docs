@@ -41,13 +41,13 @@
             <button class="rb-btn" :class="{active:getMetaProp('strike')}" @click="toggleFormat('strike')" title="删除线" style="text-decoration:line-through;font-size:12px">ab</button>
             <div class="rb-vsep" />
             <div class="color-btn-wrap" title="字体颜色">
-              <button class="rb-btn" @click="$refs.textColorPicker?.show()" style="font-weight:800;font-size:13px">A
+              <button class="rb-btn" @click="($refs.textColorPicker as any)?.show()" style="font-weight:800;font-size:13px">A
                 <span class="color-indicator" :style="{background: cellTextColor || '#FF0000'}" />
               </button>
               <el-color-picker ref="textColorPicker" v-model="cellTextColor" @change="applyTextColor" size="small" :predefine="['#000000','#444444','#888888','#FF0000','#FF6600','#FFCC00','#33CC33','#00B0F0','#3366FF','#9933FF','#CC00CC','#C00000']" class="hidden-picker" />
             </div>
             <div class="color-btn-wrap" title="填充颜色">
-              <button class="rb-btn" @click="$refs.bgColorPicker?.show()" style="padding:0">
+              <button class="rb-btn" @click="($refs.bgColorPicker as any)?.show()" style="padding:0">
                 <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 14l4-10h1l4 10"/><path d="M4.5 11h5"/><rect x="13" y="4" width="4" height="6" rx="0.5" :fill="cellBgColor || '#FFFF00'" stroke="#888" stroke-width="0.8"/></svg>
               </button>
               <el-color-picker ref="bgColorPicker" v-model="cellBgColor" @change="applyBgColor" size="small" :predefine="['#FFFFFF','#FFFF00','#CCFFCC','#CCFFFF','#FFCCCC','#FFCCFF','#FFE0B2','#B3E5FC','#D1C4E9','#F8BBD0','#C8E6C9','#FFD700']" class="hidden-picker" />
@@ -588,7 +588,7 @@ const emit = defineEmits<{ (e: 'change', data: string): void }>()
 
 interface CellMeta {
   bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean
-  color?: string; bgColor?: string; align?: string; wrap?: boolean
+  color?: string; bgColor?: string; align?: string; valign?: string; wrap?: boolean
   fontFamily?: string; fontSize?: number; precision?: number; indent?: number
   border?: { top?: boolean; right?: boolean; bottom?: boolean; left?: boolean }
   comment?: string

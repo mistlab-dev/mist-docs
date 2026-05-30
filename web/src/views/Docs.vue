@@ -14,7 +14,20 @@
         <el-icon><Upload /></el-icon><span class="btn-text"> 导入</span>
       </el-button>
       <div style="flex:1" />
-      <el-input v-model="search" placeholder="搜索..." style="width:200px" clearable @keyup.enter="doSearch" @clear="clearSearch" size="small">
+      <el-select v-model="sortBy" size="small" style="width:120px" @change="sortDocs">
+        <el-option label="更新时间" value="updated" />
+        <el-option label="创建时间" value="created" />
+        <el-option label="标题" value="title" />
+      </el-select>
+      <el-button-group style="margin-left:8px">
+        <el-button size="small" :type="layoutMode === 'grid' ? 'primary' : ''" @click="layoutMode = 'grid'">
+          <el-icon><Monitor /></el-icon>
+        </el-button>
+        <el-button size="small" :type="layoutMode === 'list' ? 'primary' : ''" @click="layoutMode = 'list'">
+          <el-icon><List /></el-icon>
+        </el-button>
+      </el-button-group>
+      <el-input v-model="search" placeholder="搜索..." style="width:200px;margin-left:8px" clearable @keyup.enter="doSearch" @clear="clearSearch" size="small">
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
     </div>
@@ -57,7 +70,7 @@
         </div>
 
         <!-- 文件夹树 -->
-        <div class="tree-header">文件夹</div>
+        <div class="tree-header">文件夹 <el-button size="small" text @click="showNewFolder = true" style="float:right;padding:0">+ 新建</el-button></div>
         <el-tree
           :data="treeData"
           :props="{ label: 'name', children: 'children' }"
@@ -91,11 +104,21 @@
           <p v-else>暂无文档，点击上方按钮创建</p>
         </div>
 
-        <!-- 文档卡片网格 -->
-        <div v-else class="doc-grid">
+        <!-- 文档卡片网格/列表 -->
+        <div v-else :class="layoutMode === 'grid' ? 'doc-grid' : 'doc-list-view'">
+          <!-- 列表头 -->
+          <div v-if="layoutMode === 'list'" class="list-row list-header-row">
+            <div class="list-col list-col-check"><el-checkbox /></div>
+            <div class="list-col list-col-title">标题</div>
+            <div class="list-col list-col-type">类型</div>
+            <div class="list-col list-col-version">版本</div>
+            <div class="list-col list-col-time">更新时间</div>
+            <div class="list-col list-col-actions">操作</div>
+          </div>
           <div
             v-for="doc in docs"
             :key="doc.id"
+            v-show="layoutMode === 'grid'"
             class="doc-card"
             :class="{ selected: selectedDocs.includes(doc.id) }"
             @click="openDoc(doc)"
@@ -138,6 +161,42 @@
                     <el-dropdown-item @click="deleteDoc(doc)" divided>
                       <span style="color:#f56c6c">删除</span>
                     </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </div>
+          <!-- 列表模式行 -->
+          <div
+            v-for="doc in docs" :key="doc.id + '-list'"
+            v-if="layoutMode === 'list'"
+            class="list-row"
+            @click="openDoc(doc)"
+          >
+            <div class="list-col list-col-check" @click.stop="toggleSelect(doc.id)">
+              <el-checkbox :model-value="selectedDocs.includes(doc.id)" />
+            </div>
+            <div class="list-col list-col-title">
+              <el-icon style="vertical-align:middle;margin-right:4px"><Document v-if="doc.type==='doc'" /><Grid v-else /></el-icon>
+              {{ doc.title }}
+            </div>
+            <div class="list-col list-col-type">
+              <el-tag :type="doc.type === 'doc' ? '' : 'success'" size="small">{{ doc.type === 'doc' ? '文档' : '表格' }}</el-tag>
+            </div>
+            <div class="list-col list-col-version">v{{ doc.version }}</div>
+            <div class="list-col list-col-time">{{ formatTime(doc.updated_at) }}</div>
+            <div class="list-col list-col-actions" @click.stop>
+              <el-icon :size="16" :class="{ 'fav-active': doc.is_favorite }" @click="toggleFavorite(doc)" style="cursor:pointer">
+                <StarFilled v-if="doc.is_favorite" /><Star v-else />
+              </el-icon>
+              <el-dropdown trigger="click">
+                <el-icon :size="16" style="cursor:pointer;margin-left:6px"><MoreFilled /></el-icon>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item @click="openDoc(doc)">打开</el-dropdown-item>
+                    <el-dropdown-item @click="showRename(doc)">重命名</el-dropdown-item>
+                    <el-dropdown-item @click="showMove(doc)">移动到...</el-dropdown-item>
+                    <el-dropdown-item @click="deleteDoc(doc)" divided><span style="color:#f56c6c">删除</span></el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -278,7 +337,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Star, StarFilled, Clock, Files, MoreFilled, Operation } from '@element-plus/icons-vue'
+import { Star, StarFilled, Clock, Files, MoreFilled, Operation, Monitor, List } from '@element-plus/icons-vue'
 import http from '@/utils/http'
 
 const router = useRouter()
@@ -313,7 +372,7 @@ async function doImport() {
   for (const f of importFiles.value) {
     fd.append('files', f.raw)
   }
-  fd.append('folder_id', currentFolder.value)
+  if (currentFolder.value) fd.append('folder_id', currentFolder.value)
   try {
     const { data } = await http.post('/docs/import', fd)
     ElMessage.success(data.message || '导入完成')
@@ -334,6 +393,8 @@ const moveTargetFolder = ref('')
 const newFolderName = ref('')
 const newDocTitle = ref('')
 const newDocTemplate = ref('')
+const layoutMode = ref<'grid'|'list'>('grid')
+const sortBy = ref('updated')
 
 const templates: Record<string, string> = {
   meeting: '<h2>会议纪要</h2><p><strong>日期：</strong>' + new Date().toLocaleDateString() + '</p><h3>讨论内容</h3><ul><li></li></ul><h3>决议</h3><ul><li></li></ul><h3>待办事项</h3><table><thead><tr><th>任务</th><th>负责人</th><th>截止日期</th><th>状态</th></tr></thead><tbody><tr><td></td><td></td><td></td><td></td></tr></tbody></table>',
@@ -341,6 +402,24 @@ const templates: Record<string, string> = {
   requirement: '<h2>需求文档</h2><h3>1. 背景与目标</h3><p></p><h3>2. 用户故事</h3><p><strong>作为</strong> ___ <strong>我希望</strong> ___ <strong>以便</strong> ___</p><h3>3. 功能需求</h3><table><thead><tr><th>编号</th><th>功能</th><th>优先级</th><th>描述</th></tr></thead><tbody><tr><td>F-001</td><td></td><td></td><td></td></tr></tbody></table><h3>4. 非功能需求</h3><ul><li>性能：</li><li>安全：</li><li>兼容性：</li></ul><h3>5. 验收标准</h3><ul><li></li></ul>',
   api: '<h2>API 文档</h2><h3>接口信息</h3><table><thead><tr><th>项目</th><th>内容</th></tr></thead><tbody><tr><td>Method</td><td>GET/POST/PUT/DELETE</td></tr><tr><td>Path</td><td>/api/v1/resource</td></tr><tr><td>认证</td><td>Bearer Token</td></tr></tbody></table><h3>请求参数</h3><table><thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead><tbody><tr><td></td><td></td><td></td><td></td></tr></tbody></table><h3>响应示例</h3><pre><code>{"code":200,"data":{}}</code></pre>',
   readme: '<h1>项目名称</h1><p>项目简介描述</p><h2>快速开始</h2><pre><code>npm install\nnpm run dev</code></pre><h2>功能特性</h2><ul><li></li></ul><h2>技术栈</h2><ul><li></li></ul><h2>许可证</h2><p>MIT</p>',
+}
+
+function sortDocs() {
+  if (sortBy.value === 'title') {
+    docs.value.sort((a, b) => a.title.localeCompare(b.title))
+  } else if (sortBy.value === 'created') {
+    docs.value.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  } else {
+    docs.value.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+  }
+}
+
+function setDocs(list: any[]) {
+  docs.value = list.map((d: any) => ({
+    ...d,
+    is_favorite: favoriteIds.value.has(d.id),
+  }))
+  sortDocs()
 }
 
 function formatTime(t: string): string {
@@ -364,26 +443,17 @@ async function loadDocs(folderId?: string) {
   const params: any = {}
   if (folderId) params.folder_id = folderId
   const { data } = await http.get('/docs/documents', { params })
-  docs.value = (data.data || []).map((d: any) => ({
-    ...d,
-    is_favorite: favoriteIds.value.has(d.id),
-  }))
+  setDocs(data.data || [])
 }
 
 async function loadRecent() {
   const { data } = await http.get('/docs/documents/recent')
-  docs.value = (data.data || []).map((d: any) => ({
-    ...d,
-    is_favorite: favoriteIds.value.has(d.id),
-  }))
+  setDocs(data.data || [])
 }
 
 async function loadFavorites() {
   const { data } = await http.get('/docs/favorites')
-  docs.value = (data.data || []).map((d: any) => ({
-    ...d,
-    is_favorite: true,
-  }))
+  setDocs(data.data || [])
 }
 
 async function loadFavoriteIds() {
@@ -412,10 +482,7 @@ async function doSearch() {
   if (!search.value) return
   searchMode.value = true
   const { data } = await http.get('/docs/documents/search', { params: { q: search.value } })
-  docs.value = (data.data || []).map((d: any) => ({
-    ...d,
-    is_favorite: favoriteIds.value.has(d.id),
-  }))
+  setDocs(data.data || [])
 }
 
 function clearSearch() {
@@ -584,7 +651,7 @@ async function filterByTag(tagId: string) {
   try {
     searchMode.value = true
     const { data } = await http.get(`/docs/tags/${tagId}/documents`)
-    docs.value = data || []
+    setDocs(data || [])
   } catch {}
 }
 </script>
@@ -742,4 +809,23 @@ async function filterByTag(tagId: string) {
 .tpl-card.active { border-color: #409eff; background: #ecf5ff; }
 .tpl-icon { font-size: 24px; margin-bottom: 4px; }
 .tpl-label { font-size: 12px; color: #606266; }
+
+/* List view */
+.doc-list-view { width: 100%; }
+.list-row {
+  display: flex; align-items: center; padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.15s;
+}
+.list-row:hover { background: #f5f7fa; }
+.list-header-row {
+  font-weight: 600; font-size: 12px; color: #909399;
+  background: #fafafa; cursor: default; border-bottom: 1px solid #e8e8e8;
+}
+.list-col { flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-col-check { width: 36px; }
+.list-col-title { flex: 1; min-width: 0; font-size: 14px; }
+.list-col-type { width: 70px; text-align: center; }
+.list-col-version { width: 50px; text-align: center; color: #999; font-size: 12px; }
+.list-col-time { width: 100px; color: #999; font-size: 12px; }
+.list-col-actions { width: 70px; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
 </style>

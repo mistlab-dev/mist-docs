@@ -57,6 +57,25 @@ html.dark .sheet-table td { background: #1a1a2e; color: #e0e0e0; border-color: #
 html.dark .sheet-table td.selected { background: #2a2a4a; }
 html.dark .sheet-table td.editing { background: #16213e; }
 html.dark .formula-bar { background: #16213e; border-color: #363660; color: #e0e0e0; }
+html.dark .ribbon { background: #1e1e34; border-color: #363660; }
+html.dark .rb-btn { color: #ccc; }
+html.dark .rb-btn:hover:not(:disabled) { background: #2a2a4a; border-color: #4a4a7a; }
+html.dark .rb-btn.active { background: #2a2a4a; border-color: #5a5aaa; color: #8ab4f8; }
+html.dark .rb-sep { background: #363660; }
+html.dark .rb-vsep { background: #363660; }
+html.dark .ribbon-section-label { color: #777; }
+html.dark .cell { background: #1a1a2e; color: #e0e0e0; }
+html.dark .cell.sel { background: #2a2a4a !important; }
+html.dark .col-hdr { background: linear-gradient(180deg, #1e1e34, #16213e); color: #999; border-color: #363660; }
+html.dark .row-hdr { background: linear-gradient(90deg, #1e1e34, #16213e); color: #999; border-color: #363660; }
+html.dark .corner-cell { background: #16213e; border-color: #363660; }
+html.dark .grid-area { background: #0f0f23; }
+html.dark .docs-page .sidebar { background: #1a1a2e; border-color: #363660; }
+html.dark .section-item { color: #aaa; }
+html.dark .section-item:hover, html.dark .section-item.active { background: #2a2a4a; color: #8ab4f8; }
+html.dark .tree-header { background: #16213e; border-color: #363660; color: #ccc; }
+html.dark .list-row:hover { background: #1e1e34; }
+html.dark .list-header-row { background: #16213e; border-color: #363660; color: #909399; }
 
 html.dark .login-container { background: #0f0f23; }
 html.dark .login-card { background: #1a1a2e; }

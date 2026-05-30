@@ -117,7 +117,7 @@
 
     <!-- 文档编辑器 -->
     <div v-if="doc?.type === 'doc' && editor" class="editor-body with-outline">
-      <editor-content :editor="editor" class="tiptap-editor" />
+      <editor-content :editor="editor as any" class="tiptap-editor" />
       <!-- 大纲导航 -->
       <div v-if="outlineItems.length" class="outline-panel">
         <div class="outline-title">大纲</div>
@@ -513,6 +513,7 @@ function scrollToHeading(id: string) {
 }
 const replyParent = ref('')
 const currentUserId = ref('')
+const currentUser = ref('')
 
 // 协同编辑
 const collabStatus = ref<'connecting' | 'connected' | 'disconnected'>('disconnected')
@@ -636,7 +637,7 @@ async function loadDiff() {
   diffLoading.value = false
 }
 
-function authHeader() {
+function authHeader(): Record<string, string> {
   const token = localStorage.getItem('token')
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
@@ -742,7 +743,7 @@ function initEditor(initialContent: string) {
         extensions: [
           StarterKit.configure({
             codeBlock: false,
-            history: false, // Yjs handles history
+            // history: false, // Yjs handles history — removed: not in StarterKitOptions
           }),
           Underline,
           TaskList,
@@ -1040,9 +1041,9 @@ async function handleExport(format: string) {
       wrapper.style.cssText = 'padding:20px;font-family:"Noto Sans SC",sans-serif;font-size:14px;line-height:1.8;color:#333'
       wrapper.innerHTML = `<h1 style="text-align:center;font-size:22px;margin-bottom:16px">${doc.value?.title || ''}</h1>` + editorEl.innerHTML
       const opt = {
-        margin: [10, 10, 10, 10],
+        margin: [10, 10, 10, 10] as [number, number, number, number],
         filename: `${doc.value?.title || 'export'}.pdf`,
-        image: { type: 'jpeg', quality: 0.95 },
+        image: { type: 'jpeg' as const, quality: 0.95 },
         html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
       }
@@ -1107,6 +1108,7 @@ onMounted(async () => {
   try {
     const { data: me } = await http.get('/auth/me')
     currentUserId.value = me.data?.id || ''
+    currentUser.value = me.data?.name || ''
   } catch {}
   // Load comment count
   loadComments()
