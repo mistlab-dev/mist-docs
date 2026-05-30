@@ -1,6 +1,8 @@
 <template>
-  <div>
-    <h3 style="margin:0 0 20px">系统概览</h3>
+  <div class="admin-page">
+    <div class="page-header">
+      <h2 class="page-title">系统概览</h2>
+    </div>
 
     <!-- 统计卡片 -->
     <el-row :gutter="16" class="stat-cards">
@@ -158,6 +160,10 @@ onMounted(loadStats)
 </script>
 
 <style scoped>
+.admin-page { height: 100%; overflow-y: auto; }
+.page-header { margin-bottom: 20px; }
+.page-title { font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0; }
+
 .stat-cards .el-col { margin-bottom: 8px; }
 .stat-card { display: flex; align-items: center; gap: 16px; padding: 8px; }
 .stat-card.small { justify-content: center; }
