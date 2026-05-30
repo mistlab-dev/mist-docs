@@ -1,65 +1,77 @@
 <template>
   <div class="editor-page">
+    <!-- 顶部导航栏 -->
     <div class="editor-header">
-      <el-button @click="router.push('/docs')" text>
-        <el-icon><ArrowLeft /></el-icon> 返回
-      </el-button>
-      <el-input v-model="title" class="title-input" @blur="saveTitle" />
-      <div class="header-actions">
-        <el-tag size="small">{{ doc?.type === 'sheet' ? '表格' : '文档' }}</el-tag>
-        <el-tag size="small">v{{ doc?.version || 1 }}</el-tag>
-        <el-button size="small" text @click="loadAndShowStats">
-          <el-icon><DataLine /></el-icon>
+      <div class="header-left">
+        <el-button @click="router.push('/docs')" text size="small">
+          <el-icon><ArrowLeft /></el-icon> 返回
         </el-button>
-        <el-tag v-if="collabUsers.length" size="small" type="success">{{ collabUsers.length + 1 }} 人在线</el-tag>
-        <el-tag v-if="collabStatus === 'connected'" size="small" type="success">协同中</el-tag>
-        <el-button type="primary" size="small" @click="manualSave" :loading="saving">
-          <el-icon><Check /></el-icon> 保存
-        </el-button>
-        <span v-if="saveStatus === 'saving'" class="save-indicator saving">⏳ 保存中...</span>
-        <span v-else-if="saveStatus === 'saved'" class="save-indicator saved">✅ 已保存</span>
-        <span v-else-if="saveStatus === 'error'" class="save-indicator error">❌ 保存失败</span>
+        <el-input v-model="title" class="title-input" @blur="saveTitle" />
+        <div class="doc-badges">
+          <el-tag size="small" effect="plain" round>{{ doc?.type === 'sheet' ? '表格' : '文档' }}</el-tag>
+          <el-tag size="small" effect="plain" round type="info">v{{ doc?.version || 1 }}</el-tag>
+          <el-tag v-if="collabUsers.length" size="small" effect="plain" round type="success">
+            <svg class="tag-icon" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="8" r="3"/><circle cx="12" cy="8" r="3" opacity="0.5"/></svg>
+            {{ collabUsers.length + 1 }} 人在线
+          </el-tag>
+        </div>
+      </div>
+      <div class="header-right">
+        <span v-if="saveStatus === 'saving'" class="save-indicator saving">保存中...</span>
+        <span v-else-if="saveStatus === 'saved'" class="save-indicator saved">已保存</span>
+        <span v-else-if="saveStatus === 'error'" class="save-indicator error">保存失败</span>
+
         <el-button v-if="doc?.locked_by && doc?.locked_by !== currentUserId" size="small" type="warning" disabled>
-          🔒 已锁定
+          <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg>
+          已锁定
         </el-button>
         <el-button v-else-if="doc?.locked_by === currentUserId" size="small" type="warning" @click="unlockDoc">
-          🔓 解锁
+          <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2zm-2 4a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1z"/></svg>
+          解锁
         </el-button>
-        <el-button v-else size="small" @click="lockDoc">🔒 锁定</el-button>
-        <el-dropdown @command="handleExport">
-          <el-button size="small">导出 <el-icon><ArrowDown /></el-icon></el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="html">HTML</el-dropdown-item>
-              <el-dropdown-item command="markdown">Markdown</el-dropdown-item>
-              <el-dropdown-item command="txt">纯文本</el-dropdown-item>
-              <el-dropdown-item command="pdf" divided>PDF</el-dropdown-item>
-              <el-dropdown-item command="docx">Word (.doc)</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-        <el-button size="small" @click="showMoveDialog = true">
-          <el-icon><FolderOpened /></el-icon> 移动
+        <el-button v-else size="small" @click="lockDoc">
+          <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M5 8V6a5 5 0 0110 0v2h1a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1h1zm2-2a3 3 0 016 0v2H7V6z"/></svg>
+          <span class="btn-label">锁定</span>
         </el-button>
-        <el-button size="small" @click="showShareDialog = true">
-          <el-icon><Share /></el-icon> 分享
+
+        <el-button type="primary" size="small" @click="manualSave" :loading="saving">
+          <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 00-1 1v2H4a1 1 0 000 2h5a1 1 0 000-2H8V4h8v3a1 1 0 102 0V4a1 1 0 00-1-1H7zM5 10a1 1 0 00-1 1v5a1 1 0 001 1h10a1 1 0 001-1v-5a1 1 0 10-2 0v4H6v-4a1 1 0 00-1-1z"/></svg>
+          保存
         </el-button>
-        <el-button size="small" @click="toggleWatermark" :type="showWatermark ? 'warning' : ''">
-          <el-icon><Stamp /></el-icon> 水印
-        </el-button>
-        <el-badge :value="commentCount" :hidden="commentCount === 0" :max="99">
-          <el-button size="small" @click="showComments = true">
-            <el-icon><ChatDotRound /></el-icon> 评论
-          </el-button>
-        </el-badge>
-        <el-dropdown @command="handleVersion">
+
+        <el-dropdown @command="handleMore">
           <el-button size="small">
-            版本 <el-icon><ArrowDown /></el-icon>
+            <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/></svg>
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item v-for="v in versions" :key="v.version" :command="v.version">
-                v{{ v.version }} - {{ formatTime(v.created_at) }}
+              <el-dropdown-item command="share">
+                <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.247l4.959 2.479A3 3 0 1015 12a3 3 0 00-2.965 2.574l-4.96-2.48a3.013 3.013 0 000-2.188l4.96-2.48A3 3 0 1015 8z"/></svg>
+                分享
+              </el-dropdown-item>
+              <el-dropdown-item command="move">
+                <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
+                移动
+              </el-dropdown-item>
+              <el-dropdown-item command="watermark">
+                <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 2a6 6 0 016 6h-2a4 4 0 00-4-4V4z"/></svg>
+                {{ showWatermark ? '关闭水印' : '水印' }}
+              </el-dropdown-item>
+              <el-dropdown-item command="comments">
+                <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H6l-3 3V5z"/></svg>
+                评论
+              </el-dropdown-item>
+              <el-dropdown-item command="stats">
+                <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                统计
+              </el-dropdown-item>
+              <el-dropdown-item command="versions" divided>
+                <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z"/></svg>
+                版本历史
+              </el-dropdown-item>
+              <el-dropdown-item command="export" divided>
+                <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
+                导出
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -67,53 +79,110 @@
       </div>
     </div>
 
-    <!-- TipTap 工具栏 -->
+        <!-- TipTap 工具栏 -->
     <div v-if="editor" class="toolbar">
-      <el-button-group>
-        <el-button size="small" @click="editor.chain().focus().toggleBold().run()" :type="editor.isActive('bold') ? 'primary' : ''"><strong>B</strong></el-button>
-        <el-button size="small" @click="editor.chain().focus().toggleItalic().run()" :type="editor.isActive('italic') ? 'primary' : ''"><em>I</em></el-button>
-        <el-button size="small" @click="editor.chain().focus().toggleStrike().run()" :type="editor.isActive('strike') ? 'primary' : ''"><s>S</s></el-button>
-        <el-button size="small" @click="editor.chain().focus().toggleUnderline().run()" :type="editor.isActive('underline') ? 'primary' : ''"><u>U</u></el-button>
-      </el-button-group>
-      <el-button-group style="margin-left:8px">
-        <el-button size="small" @click="editor.chain().focus().toggleHeading({ level: 1 }).run()" :type="editor.isActive('heading', { level: 1 }) ? 'primary' : ''">H1</el-button>
-        <el-button size="small" @click="editor.chain().focus().toggleHeading({ level: 2 }).run()" :type="editor.isActive('heading', { level: 2 }) ? 'primary' : ''">H2</el-button>
-        <el-button size="small" @click="editor.chain().focus().toggleHeading({ level: 3 }).run()" :type="editor.isActive('heading', { level: 3 }) ? 'primary' : ''">H3</el-button>
-      </el-button-group>
-      <el-button-group style="margin-left:8px">
-        <el-button size="small" @click="editor.chain().focus().toggleBulletList().run()" :type="editor.isActive('bulletList') ? 'primary' : ''">• 列表</el-button>
-        <el-button size="small" @click="editor.chain().focus().toggleOrderedList().run()" :type="editor.isActive('orderedList') ? 'primary' : ''">1. 有序</el-button>
-        <el-button size="small" @click="editor.chain().focus().toggleTaskList().run()" :type="editor.isActive('taskList') ? 'primary' : ''">☑ 任务</el-button>
-        <el-button size="small" @click="editor.chain().focus().toggleBlockquote().run()" :type="editor.isActive('blockquote') ? 'primary' : ''">引用</el-button>
-      </el-button-group>
-      <el-button-group style="margin-left:8px">
-        <el-button size="small" @click="toggleCodeBlock" :type="editor.isActive('codeBlock') ? 'primary' : ''">代码块</el-button>
-        <el-button size="small" @click="editor.chain().focus().toggleCode().run()" :type="editor.isActive('code') ? 'primary' : ''">行内代码</el-button>
-      </el-button-group>
-      <el-button-group style="margin-left:8px">
-        <el-button size="small" @click="insertLink" :type="editor.isActive('link') ? 'primary' : ''">🔗 链接</el-button>
-        <el-button size="small" @click="triggerImageUpload">🖼 图片</el-button>
-        <el-button size="small" @click="insertTable">📋 表格</el-button>
-        <el-button size="small" @click="editor.chain().focus().setHorizontalRule().run()">— 线</el-button>
-      </el-button-group>
-      <el-button-group v-if="editor.isActive('table')" style="margin-left:8px">
-        <el-button size="small" @click="editor.chain().focus().addRowBefore().run()">+ 行上</el-button>
-        <el-button size="small" @click="editor.chain().focus().addRowAfter().run()">+ 行下</el-button>
-        <el-button size="small" @click="editor.chain().focus().addColumnBefore().run()">+ 列左</el-button>
-        <el-button size="small" @click="editor.chain().focus().addColumnAfter().run()">+ 列右</el-button>
-        <el-button size="small" type="danger" @click="editor.chain().focus().deleteRow().run()">删行</el-button>
-        <el-button size="small" type="danger" @click="editor.chain().focus().deleteColumn().run()">删列</el-button>
-        <el-button size="small" type="danger" @click="editor.chain().focus().deleteTable().run()">删表</el-button>
-        <el-button size="small" @click="editor.chain().focus().mergeCells().run()">合并</el-button>
-        <el-button size="small" @click="editor.chain().focus().splitCell().run()">拆分</el-button>
-      </el-button-group>
-      <el-button-group style="margin-left:8px">
-        <el-button size="small" @click="editor.chain().focus().undo().run()">↩ 撤销</el-button>
-        <el-button size="small" @click="editor.chain().focus().redo().run()">↪ 重做</el-button>
-      </el-button-group>
+      <div class="tb-group">
+        <button class="tb-btn" :class="{active: editor.isActive('bold')}" @click="editor.chain().focus().toggleBold().run()" title="粗体">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M6 4h5.5a3.5 3.5 0 012.5 6 3.5 3.5 0 01-2.5 6H6V4zm2 2v3h3.5a1.5 1.5 0 000-3H8zm0 5v3h3.5a1.5 1.5 0 000-3H8z"/></svg>
+        </button>
+        <button class="tb-btn" :class="{active: editor.isActive('italic')}" @click="editor.chain().focus().toggleItalic().run()" title="斜体">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 4h7v2h-2.5l-2 8H13v2H6v-2h2.5l2-8H8V4z"/></svg>
+        </button>
+        <button class="tb-btn" :class="{active: editor.isActive('strike')}" @click="editor.chain().focus().toggleStrike().run()" title="删除线">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 9h12v2H4V9zm4-3a2 2 0 114 0h2a4 4 0 10-8 0h2zm4 8a2 2 0 11-4 0H4a4 4 0 108 0h-2z"/></svg>
+        </button>
+        <button class="tb-btn" :class="{active: editor.isActive('underline')}" @click="editor.chain().focus().toggleUnderline().run()" title="下划线">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M6 4v5a4 4 0 008 0V4h2v5a6 6 0 01-12 0V4h2zm-2 13h12v2H4v-2z"/></svg>
+        </button>
+      </div>
+
+      <div class="tb-sep"></div>
+
+      <div class="tb-group">
+        <button class="tb-btn" :class="{active: editor.isActive('heading', {level:1})}" @click="editor.chain().focus().toggleHeading({level:1}).run()" title="标题 1">H1</button>
+        <button class="tb-btn" :class="{active: editor.isActive('heading', {level:2})}" @click="editor.chain().focus().toggleHeading({level:2}).run()" title="标题 2">H2</button>
+        <button class="tb-btn" :class="{active: editor.isActive('heading', {level:3})}" @click="editor.chain().focus().toggleHeading({level:3}).run()" title="标题 3">H3</button>
+      </div>
+
+      <div class="tb-sep"></div>
+
+      <div class="tb-group">
+        <button class="tb-btn" :class="{active: editor.isActive('bulletList')}" @click="editor.chain().focus().toggleBulletList().run()" title="无序列表">
+          <svg viewBox="0 0 20 20" fill="currentColor"><circle cx="4" cy="5" r="1.5"/><circle cx="4" cy="10" r="1.5"/><circle cx="4" cy="15" r="1.5"/><rect x="8" y="4" width="10" height="2" rx="1"/><rect x="8" y="9" width="10" height="2" rx="1"/><rect x="8" y="14" width="10" height="2" rx="1"/></svg>
+        </button>
+        <button class="tb-btn" :class="{active: editor.isActive('orderedList')}" @click="editor.chain().focus().toggleOrderedList().run()" title="有序列表">
+          <svg viewBox="0 0 20 20" fill="currentColor"><text x="2" y="7" font-size="6" font-weight="bold">1</text><text x="2" y="12" font-size="6" font-weight="bold">2</text><text x="2" y="17" font-size="6" font-weight="bold">3</text><rect x="8" y="4" width="10" height="2" rx="1"/><rect x="8" y="9" width="10" height="2" rx="1"/><rect x="8" y="14" width="10" height="2" rx="1"/></svg>
+        </button>
+        <button class="tb-btn" :class="{active: editor.isActive('taskList')}" @click="editor.chain().focus().toggleTaskList().run()" title="任务列表">
+          <svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="4" width="5" height="5" rx="1" stroke="currentColor" fill="none" stroke-width="1.5"/><path d="M3.5 6.5L5 8l3-3.5" stroke="currentColor" fill="none" stroke-width="1.5"/><rect x="10" y="5" width="8" height="2" rx="1"/><rect x="2" y="11" width="5" height="5" rx="1" stroke="currentColor" fill="none" stroke-width="1.5"/><rect x="10" y="12.5" width="8" height="2" rx="1"/></svg>
+        </button>
+        <button class="tb-btn" :class="{active: editor.isActive('blockquote')}" @click="editor.chain().focus().toggleBlockquote().run()" title="引用">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4h4v4H6l-1 3H3l1-3V4zm8 0h4v4h-2l-1 3h-2l1-3V4z"/></svg>
+        </button>
+      </div>
+
+      <div class="tb-sep"></div>
+
+      <div class="tb-group">
+        <button class="tb-btn" :class="{active: editor.isActive('codeBlock')}" @click="toggleCodeBlock" title="代码块">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M6.707 4.293a1 1 0 010 1.414L3.414 9l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0zm6.586 0a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L16.586 9l-3.293-3.293a1 1 0 010-1.414z"/></svg>
+        </button>
+        <button class="tb-btn" :class="{active: editor.isActive('code')}" @click="editor.chain().focus().toggleCode().run()" title="行内代码">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M7.4 4.3L2.7 9l4.7 4.7-1.4 1.4L0 9l6-6 1.4 1.3zm5.2 0L17.3 9l-4.7 4.7 1.4 1.4L20 9l-6-6-1.4 1.3z"/></svg>
+        </button>
+      </div>
+
+      <div class="tb-sep"></div>
+
+      <div class="tb-group">
+        <button class="tb-btn" :class="{active: editor.isActive('link')}" @click="insertLink" title="链接">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M12.586 4.586a2 2 0 112.828 2.828l-3.879 3.879a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3.879-3.879a4 4 0 00-5.656-5.656L8.12 5.464a1 1 0 001.414 1.414l3.052-3.292z"/><path d="M7.414 15.414a2 2 0 11-2.828-2.828l3.879-3.879a2 2 0 012.828 0 1 1 0 001.414-1.414 4 4 0 00-5.656 0L3.172 11.17a4 4 0 005.656 5.656l2.828-2.828a1 1 0 10-1.414-1.414l-2.828 2.83z"/></svg>
+        </button>
+        <button class="tb-btn" @click="triggerImageUpload" title="图片">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-6 3 4 2-3 3 5z"/><circle cx="13" cy="7" r="2"/></svg>
+        </button>
+        <button class="tb-btn" @click="insertTable" title="表格">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4h14a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V5a1 1 0 011-1zm1 2v3h5V6H4zm0 5v3h5v-3H4zm7-5v3h5V6h-5zm0 5v3h5v-3h-5z"/></svg>
+        </button>
+        <button class="tb-btn" @click="editor.chain().focus().setHorizontalRule().run()" title="分割线">
+          <svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="9" width="16" height="2" rx="1"/></svg>
+        </button>
+      </div>
+
+      <!-- 表格操作（仅选中表格时显示） -->
+      <template v-if="editor.isActive('table')">
+        <div class="tb-sep"></div>
+        <div class="tb-group">
+          <button class="tb-btn" @click="editor.chain().focus().addRowBefore().run()" title="上方插入行">
+            <svg viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="3" width="14" height="14" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="5" x2="10" y2="15" stroke="currentColor" stroke-width="1.5"/><path d="M7 8h6M10 5v6" stroke="currentColor" stroke-width="1.5"/></svg>
+          </button>
+          <button class="tb-btn" @click="editor.chain().focus().addRowAfter().run()" title="下方插入行">
+            <svg viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="3" width="14" height="14" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="5" x2="10" y2="15" stroke="currentColor" stroke-width="1.5"/><path d="M7 12h6M10 9v6" stroke="currentColor" stroke-width="1.5"/></svg>
+          </button>
+          <button class="tb-btn" @click="editor.chain().focus().deleteRow().run()" title="删除行" class-name="danger">
+            <svg viewBox="0 0 20 20" fill="#f56c6c"><rect x="3" y="3" width="14" height="14" rx="1" fill="none" stroke="#f56c6c" stroke-width="1.5"/><line x1="10" y1="3" x2="10" y2="17" stroke="#f56c6c" stroke-width="1.5"/><line x1="6" y1="10" x2="14" y2="10" stroke="#f56c6c" stroke-width="2"/></svg>
+          </button>
+          <button class="tb-btn" @click="editor.chain().focus().mergeCells().run()" title="合并单元格">合</button>
+          <button class="tb-btn" @click="editor.chain().focus().splitCell().run()" title="拆分单元格">拆</button>
+          <button class="tb-btn" @click="editor.chain().focus().deleteTable().run()" title="删除表格" style="color:#f56c6c">
+            <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4.707 3.293a1 1 0 00-1.414 1.414L8.586 10l-5.293 5.293a1 1 0 001.414 1.414L10 11.414l5.293 5.293a1 1 0 001.414-1.414L11.414 10l5.293-5.293a1 1 0 00-1.414-1.414L10 8.586 4.707 3.293z"/></svg>
+          </button>
+        </div>
+      </template>
+
+      <div style="flex:1"></div>
+
+      <div class="tb-group">
+        <button class="tb-btn" @click="editor.chain().focus().undo().run()" title="撤销">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 8l4-4v3h6a3 3 0 010 6H9v-2h4a1 1 0 000-2H7v3L3 8z"/></svg>
+        </button>
+        <button class="tb-btn" @click="editor.chain().focus().redo().run()" title="重做">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M17 8l-4-4v3H7a3 3 0 000 6h4v-2H7a1 1 0 010-2h6v3l4-4z"/></svg>
+        </button>
+      </div>
     </div>
 
-    <input type="file" ref="imageInput" style="display:none" accept="image/*" @change="handleImageUpload" />
+        <input type="file" ref="imageInput" style="display:none" accept="image/*" @change="handleImageUpload" />
 
     <!-- 文档编辑器 -->
     <div v-if="doc?.type === 'doc' && editor" class="editor-body with-outline">
@@ -1029,6 +1098,22 @@ async function deleteShare(id: string) {
 }
 
 // === 导出 ===
+function handleMore(cmd: string) {
+  switch (cmd) {
+    case 'share': showShareDialog.value = true; break
+    case 'move': showMoveDialog.value = true; break
+    case 'watermark': toggleWatermark(); break
+    case 'comments': showComments.value = true; break
+    case 'stats': loadAndShowStats(); break
+    case 'versions':
+      if (versions.value.length) handleVersion(versions.value[0].version)
+      break
+    case 'export':
+      handleExport('html')
+      break
+  }
+}
+
 async function handleExport(format: string) {
   try {
     if (format === 'pdf') {
@@ -1165,142 +1250,134 @@ document.addEventListener('keydown', handleGlobalKeydown)
 </script>
 
 <style scoped>
-.editor-page { height: 100%; display: flex; flex-direction: column; }
-.doc-tags-bar { padding: 4px 16px; background: #fafafa; border-bottom: 1px solid #eee; }
-.tag-disabled { opacity: 0.4; cursor: default !important; }
-.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.stat-item { text-align: center; padding: 12px; background: #f5f7fa; border-radius: 8px; }
-.stat-value { font-size: 24px; font-weight: bold; color: #409eff; }
-.stat-label { font-size: 12px; color: #999; margin-top: 4px; }
-.activity-chart { display: flex; align-items: flex-end; gap: 2px; height: 60px; }
-.activity-bar { flex: 1; background: #409eff; border-radius: 2px 2px 0 0; min-height: 2px; opacity: 0.7; }
-.diff-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-.diff-content { max-height: 400px; overflow-y: auto; padding: 12px; background: #fafafa; border-radius: 8px; }
+/* ── 顶部导航栏 ── */
 .editor-header {
-  display: flex; align-items: center; gap: 12px;
-  padding: 8px 16px; border-bottom: 1px solid #e8e8e8; background: #fff;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px; border-bottom: 1px solid #e8ecf0;
+  background: #fff; gap: 12px; flex-shrink: 0;
 }
-.title-input { flex: 1; font-size: 18px; font-weight: bold; }
-.title-input :deep(.el-input__wrapper) { box-shadow: none !important; background: transparent; }
-.header-actions { display: flex; align-items: center; gap: 8px; }
+.header-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
+.title-input { flex: 1; max-width: 300px; }
+.title-input :deep(.el-input__wrapper) { box-shadow: none; background: transparent; font-size: 16px; font-weight: 600; }
+.title-input :deep(.el-input__wrapper:hover),
+.title-input :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px #dcdfe6 inset; background: #fff; }
+.doc-badges { display: flex; align-items: center; gap: 4px; }
+.tag-icon { width: 12px; height: 12px; margin-right: 2px; }
+.btn-icon { width: 16px; height: 16px; }
+.btn-label { }
+.menu-icon { width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; }
+
+.save-indicator { font-size: 12px; color: #999; white-space: nowrap; }
+.save-indicator.saving { color: #e6a23c; }
+.save-indicator.saved { color: #67c23a; }
+.save-indicator.error { color: #f56c6c; }
+
+/* ── 工具栏 ── */
 .toolbar {
-  display: flex; align-items: center; padding: 6px 16px;
-  border-bottom: 1px solid #e8e8e8; background: #fafafa;
-  flex-wrap: wrap; gap: 4px;
+  display: flex; align-items: center; padding: 4px 12px;
+  background: #fafbfc; border-bottom: 1px solid #e8ecf0;
+  gap: 2px; flex-shrink: 0; flex-wrap: wrap;
 }
-.editor-body { flex: 1; overflow-y: auto; background: #fff; }
-.editor-body.with-outline { display: flex; }
-.editor-body.with-outline .tiptap-editor { flex: 1; }
+.tb-group { display: flex; align-items: center; gap: 1px; }
+.tb-sep { width: 1px; height: 20px; background: #e0e0e0; margin: 0 6px; }
+.tb-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border: none; border-radius: 4px;
+  background: transparent; cursor: pointer; color: #555; font-size: 12px;
+  font-weight: 600; transition: all 0.15s;
+}
+.tb-btn svg { width: 16px; height: 16px; }
+.tb-btn:hover { background: #ecf5ff; color: #409eff; }
+.tb-btn.active { background: #409eff; color: #fff; }
+
+/* ── 编辑器主体 ── */
+.editor-page { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.editor-body { flex: 1; display: flex; overflow: hidden; }
+.editor-body.with-outline { gap: 0; }
+.sheet-body { flex: 1; }
+
+.tiptap-editor { flex: 1; padding: 24px 32px; overflow-y: auto; }
+.tiptap-editor :deep(.tiptap) { outline: none; max-width: 800px; margin: 0 auto; min-height: 300px; }
+.tiptap-editor :deep(.tiptap p.is-editor-empty:first-child::before) {
+  content: attr(data-placeholder); color: #adb5bd; pointer-events: none;
+}
+.tiptap-editor :deep(.tiptap h1) { font-size: 28px; font-weight: 700; margin: 24px 0 12px; }
+.tiptap-editor :deep(.tiptap h2) { font-size: 22px; font-weight: 600; margin: 20px 0 10px; }
+.tiptap-editor :deep(.tiptap h3) { font-size: 18px; font-weight: 600; margin: 16px 0 8px; }
+.tiptap-editor :deep(.tiptap pre) { background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 16px; overflow-x: auto; }
+.tiptap-editor :deep(.tiptap code) { background: #f0f2f5; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+.tiptap-editor :deep(.tiptap blockquote) { border-left: 4px solid #409eff; padding-left: 16px; margin: 12px 0; color: #666; }
+.tiptap-editor :deep(.tiptap table) { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.tiptap-editor :deep(.tiptap table td), .tiptap-editor :deep(.tiptap table th) {
+  border: 1px solid #dcdfe6; padding: 8px 12px; min-width: 80px;
+}
+.tiptap-editor :deep(.tiptap table th) { background: #f5f7fa; font-weight: 600; }
+
+/* 大纲 */
 .outline-panel {
-  width: 200px; min-width: 200px; border-left: 1px solid #e8e8e8;
-  background: #fafafa; padding: 12px 0; overflow-y: auto; font-size: 13px;
+  width: 200px; border-left: 1px solid #e8ecf0; padding: 16px 12px;
+  overflow-y: auto; flex-shrink: 0; background: #fafbfc;
 }
-.outline-title { font-weight: bold; padding: 0 12px 8px; color: #333; border-bottom: 1px solid #eee; margin-bottom: 4px; }
-.outline-item {
-  padding: 4px 12px; cursor: pointer; color: #666; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; transition: all .15s;
-}
-.outline-item:hover { color: #1a73e8; background: #e8f0fe; }
-.outline-h1 { font-weight: 600; }
-.outline-h2 { padding-left: 20px; }
-.outline-h3 { padding-left: 28px; font-size: 12px; }
-.save-indicator { font-size: 12px; margin-left: 8px; }
-.save-indicator.saving { color: #E6A23C; }
-.save-indicator.saved { color: #67C23A; }
-.save-indicator.error { color: #F56C6C; }
+.outline-title { font-size: 12px; font-weight: 600; color: #909399; text-transform: uppercase; margin-bottom: 8px; }
+.outline-item { font-size: 13px; color: #666; padding: 4px 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outline-item:hover { color: #409eff; }
+.outline-h2 { padding-left: 8px; }
+.outline-h3 { padding-left: 16px; }
+
+/* 水印 */
 .watermark-layer {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  pointer-events: none; z-index: 9999; overflow: hidden;
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  pointer-events: none; z-index: 9999; display: flex; flex-wrap: wrap;
+  align-items: center; justify-content: center; gap: 80px;
+  transform: rotate(-25deg); opacity: 0.06;
 }
-.watermark-text {
-  display: inline-block; width: 280px; text-align: center;
-  transform: rotate(-30deg); font-size: 14px; color: rgba(0,0,0,.06);
-  padding: 40px 20px; user-select: none; white-space: nowrap;
-}
-.sheet-body { overflow: hidden; }
-.tiptap-editor { padding: 24px 48px; min-height: 100%; }
-.tiptap-editor :deep(.ProseMirror) { outline: none; min-height: 60vh; }
-.tiptap-editor :deep(.ProseMirror p.is-editor-empty:first-child::before) {
-  color: #adb5bd; content: attr(data-placeholder);
-  float: left; height: 0; pointer-events: none;
-}
-.tiptap-editor :deep(.ProseMirror h1) { font-size: 2em; margin: 1em 0 0.5em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
-.tiptap-editor :deep(.ProseMirror h2) { font-size: 1.5em; margin: 1em 0 0.5em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
-.tiptap-editor :deep(.ProseMirror h3) { font-size: 1.25em; margin: 1em 0 0.5em; }
-.tiptap-editor :deep(.ProseMirror p) { margin: 0.5em 0; line-height: 1.7; }
-.tiptap-editor :deep(.ProseMirror ul), .tiptap-editor :deep(.ProseMirror ol) { padding-left: 1.5em; margin: 0.5em 0; }
-.tiptap-editor :deep(.ProseMirror ul[data-type="taskList"]) { list-style: none; padding-left: 0; }
-.tiptap-editor :deep(.ProseMirror ul[data-type="taskList"] li) { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0; }
-.tiptap-editor :deep(.ProseMirror ul[data-type="taskList"] li label) { margin-top: 4px; }
-.tiptap-editor :deep(.ProseMirror blockquote) { border-left: 4px solid #409eff; padding: 8px 16px; margin: 0.5em 0; background: #f0f7ff; border-radius: 0 4px 4px 0; color: #555; }
-.tiptap-editor :deep(.ProseMirror code) { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em; color: #c7254e; }
-.tiptap-editor :deep(.ProseMirror pre) { background: #1e1e2e; color: #cdd6f4; padding: 16px 20px; border-radius: 8px; overflow-x: auto; margin: 1em 0; font-size: 14px; line-height: 1.6; font-family: 'SF Mono', Monaco, monospace; }
-.tiptap-editor :deep(.ProseMirror pre code) { background: none; color: inherit; padding: 0; font-size: inherit; }
-.tiptap-editor :deep(.editor-link) { color: #409eff; text-decoration: underline; cursor: pointer; }
-.tiptap-editor :deep(.editor-image) { max-width: 100%; height: auto; border-radius: 6px; margin: 1em 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-.tiptap-editor :deep(.ProseMirror img) { max-width: 100%; height: auto; border-radius: 6px; margin: 1em 0; }
-.tiptap-editor :deep(.ProseMirror table) { border-collapse: collapse; width: 100%; margin: 1em 0; }
-.tiptap-editor :deep(.ProseMirror table td), .tiptap-editor :deep(.ProseMirror table th) { border: 1px solid #d0d3d8; padding: 8px 12px; min-width: 80px; vertical-align: top; }
-.tiptap-editor :deep(.ProseMirror table th) { background: #f5f7fa; font-weight: 600; text-align: left; }
-.tiptap-editor :deep(.ProseMirror table .selectedCell) { background: #e8f0fe; }
-.tiptap-editor :deep(.ProseMirror hr) { border: none; border-top: 2px solid #e8e8e8; margin: 1.5em 0; }
+.watermark-text { font-size: 16px; color: #000; white-space: nowrap; }
 
-/* Collaboration cursors */
-.tiptap-editor :deep(.collaboration-cursor__caret) {
-  border-left: 1px solid #0d0d0d;
-  border-right: 1px solid #0d0d0d;
-  margin-left: -1px;
-  margin-right: -1px;
-  pointer-events: none;
-  position: relative;
-  word-break: normal;
-}
-.tiptap-editor :deep(.collaboration-cursor__label) {
-  border-radius: 3px 3px 3px 0;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  left: -1px;
-  line-height: normal;
-  padding: 2px 6px;
-  position: absolute;
-  top: -1.4em;
-  user-select: none;
-  white-space: nowrap;
-}
+/* 版本弹窗 */
+.diff-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.diff-content { border: 1px solid #e8ecf0; border-radius: 8px; padding: 16px; max-height: 400px; overflow-y: auto; }
+.diff-content :deep(.diff-add) { background: #f0f9eb; }
+.diff-content :deep(.diff-remove) { background: #fef0f0; text-decoration: line-through; }
 
-/* 移动端适配 */
-@media (max-width: 768px) {
-  .editor-header { gap: 6px; padding: 6px 10px; }
-  .title-input { font-size: 15px; }
-  .header-actions .el-tag { display: none; }
-  .header-actions .el-button span { display: none; }
-  .toolbar {
-    padding: 4px 8px;
-    gap: 2px;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-  }
-  .toolbar .el-button-group { flex-shrink: 0; }
-  .toolbar .el-button { padding: 4px 8px; font-size: 12px; }
-  .tiptap-editor { padding: 12px 16px; }
-  .editor-body { -webkit-overflow-scrolling: touch; }
-}
+/* 统计 */
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center; }
+.stat-item { background: #f5f7fa; border-radius: 8px; padding: 16px; }
+.stat-value { font-size: 24px; font-weight: 700; color: #303133; }
+.stat-label { font-size: 13px; color: #909399; margin-top: 4px; }
+.activity-chart { display: flex; align-items: flex-end; gap: 3px; height: 80px; }
+.activity-bar { flex: 1; background: #409eff; border-radius: 2px 2px 0 0; min-height: 2px; }
 
 /* 评论 */
 .comment-input { margin-bottom: 16px; }
-.mention-dropdown {
-  position: absolute; top: 100%; left: 0; z-index: 10;
-  background: #fff; border: 1px solid #ddd; border-radius: 4px;
-  max-height: 200px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,.1);
-}
-.mention-item { padding: 6px 12px; cursor: pointer; font-size: 13px; }
-.mention-item:hover { background: #e8f0fe; }
-.comment-item { padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
-.comment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.comment-time { font-size: 12px; color: #c0c4cc; }
-.comment-content { font-size: 14px; line-height: 1.6; }
+.comment-list { display: flex; flex-direction: column; gap: 12px; }
+.comment-item { padding: 12px 0; border-bottom: 1px solid #f0f2f5; }
+.comment-item:last-child { border-bottom: none; }
+.comment-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.comment-header strong { font-size: 14px; }
+.comment-time { font-size: 12px; color: #999; }
+.comment-content { font-size: 14px; color: #333; line-height: 1.6; }
 .comment-actions { margin-top: 4px; display: flex; gap: 8px; }
-.comment-reply { margin-left: 24px; padding: 8px 0; border-top: 1px dashed #eee; }
-.no-data { text-align: center; padding: 40px; color: #c0c4cc; }
+.comment-reply { margin-left: 24px; padding-top: 8px; border-left: 2px solid #f0f2f5; padding-left: 12px; }
+.mention-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #e8ecf0; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-height: 160px; overflow-y: auto; z-index: 10; }
+.mention-item { padding: 6px 12px; cursor: pointer; font-size: 13px; }
+.mention-item:hover { background: #f5f7fa; }
+.no-data { text-align: center; color: #c0c4cc; padding: 24px; }
+
+/* 标签栏 */
+.doc-tags-bar { padding: 8px 16px; border-bottom: 1px solid #e8ecf0; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.tag-disabled { opacity: 0.4; }
+
+/* 移动端 */
+@media (max-width: 768px) {
+  .editor-header { flex-wrap: wrap; padding: 8px; }
+  .header-left { flex: 1 1 100%; }
+  .header-right { width: 100%; justify-content: flex-end; }
+  .title-input { max-width: none; }
+  .doc-badges { display: none; }
+  .btn-label { display: none; }
+  .toolbar { padding: 2px 4px; overflow-x: auto; flex-wrap: nowrap; }
+  .outline-panel { display: none; }
+  .tiptap-editor { padding: 16px; }
+}
 </style>
