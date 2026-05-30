@@ -803,9 +803,13 @@ async function filterByTag(tagId: string) {
   .sidebar-inner { width: 100%; height: 100%; overflow-y: auto; background: #fafafa; }
 
   .doc-grid { grid-template-columns: 1fr; }
-  .doc-card { padding: 12px; }
-  .card-icon .el-icon { font-size: 24px; }
-  .card-actions { opacity: 1; }
+  .doc-card { padding: 12px; display: flex; align-items: center; gap: 10px; }
+  .card-checkbox { position: static; }
+  .card-icon { margin-bottom: 0; flex-shrink: 0; }
+  .card-icon .el-icon { font-size: 22px; }
+  .card-body { flex: 1; min-width: 0; }
+  .card-title { font-size: 14px; }
+  .card-actions { opacity: 1; position: static; }
 }
 
 /* PC端隐藏菜单按钮 */
