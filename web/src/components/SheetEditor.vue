@@ -829,7 +829,7 @@ function loadData() {
       rowHeights: d.rowHeights || Array(rowCount).fill(26),
       cellMeta: {}, merges: d.merges || [],
       frozenRows: d.freezeRows || 0, frozenCols: d.freezeCols || 0,
-      hiddenRows: new Set(d.hiddenRows || []), hiddenCols: new Set(d.hiddenCols || []),
+      hiddenRows: new Set(Array.isArray(d.hiddenRows) ? d.hiddenRows : []), hiddenCols: new Set(Array.isArray(d.hiddenCols) ? d.hiddenCols : []),
       protected: d.protected || false, groups: d.groups || []
     }
     if (d.cellMeta && Array.isArray(d.cellMeta)) { (d.cellMeta as [string, CellMeta][]).forEach(([k, v]) => s.cellMeta[k] = v) }
@@ -2170,7 +2170,15 @@ const _origGetCellTextStyle = getCellTextStyle
 
 // Emit
 function emitChange() { emit('change', getData()) }
-function getData(): string { return JSON.stringify(sheets.value) }
+function getData(): string {
+  // 序列化时 Set → Array
+  const data = sheets.value.map(s => ({
+    ...s,
+    hiddenRows: Array.from(s.hiddenRows || []),
+    hiddenCols: Array.from(s.hiddenCols || []),
+  }))
+  return JSON.stringify(data)
+}
 
 // Lifecycle
 loadData()
