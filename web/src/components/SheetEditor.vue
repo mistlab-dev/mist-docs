@@ -118,7 +118,16 @@
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="3" y1="5" x2="17" y2="5"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="5" y1="15" x2="17" y2="15"/></svg>
             </button>
             <button class="rb-btn" :class="{active:getMetaProp('wrap')}" @click="toggleWrap" title="自动换行">
-              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 5h14M3 10h9l-2.5 2.5M3 15h14"/></svg>
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 5h12M4 10h8M4 15h10"/><path d="M16 10v0" stroke-width="2"/></svg>
+            </button>
+            <button class="rb-btn" @click="toggleBorder('all')" title="所有边框">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="14" height="14"/><line x1="10" y1="3" x2="10" y2="17"/><line x1="3" y1="10" x2="17" y2="10"/></svg>
+            </button>
+            <button class="rb-btn" @click="toggleBorder('outer')" title="外边框">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="14" height="14" stroke-width="2"/></svg>
+            </button>
+            <button class="rb-btn" @click="toggleBorder('none')" title="清除边框">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="14" height="14" stroke-dasharray="2 2"/></svg>
             </button>
             <div class="rb-vsep" />
             <button class="rb-btn" :class="{active:getMetaProp('valign')==='top'}" @click="setVAlign('top')" title="顶端对齐" style="font-size:10px">
@@ -144,6 +153,7 @@
               <el-option label="百分比" value="percent" />
               <el-option label="货币 ¥" value="currency" />
               <el-option label="日期" value="date" />
+              <el-option label="科学" value="scientific" />
             </el-select>
           </div>
           <div class="ribbon-section-buttons">
@@ -214,8 +224,9 @@
               </button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="row">{{ freezeRows > 0 ? '✓ ' : '' }}冻结首行</el-dropdown-item>
-                  <el-dropdown-item command="col">{{ freezeCols > 0 ? '✓ ' : '' }}冻结首列</el-dropdown-item>
+                  <el-dropdown-item command="row">{{ freezeRows > 0 && freezeCols === 0 ? '✓ ' : '' }}冻结首行</el-dropdown-item>
+                  <el-dropdown-item command="col">{{ freezeCols > 0 && freezeRows === 0 ? '✓ ' : '' }}冻结首列</el-dropdown-item>
+                  <el-dropdown-item command="here">冻结到当前位置</el-dropdown-item>
                   <el-dropdown-item command="none" divided>取消冻结</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -286,20 +297,21 @@
                     <el-dropdown-menu>
                       <el-dropdown-item command="sort-asc">↑ 升序排列</el-dropdown-item>
                       <el-dropdown-item command="sort-desc">↓ 降序排列</el-dropdown-item>
-                      <el-dropdown-item command="sort-clear" divided>取消排序</el-dropdown-item>
+                      <el-dropdown-item command="sort-multi" divided>多列排序...</el-dropdown-item>
+                      <el-dropdown-item command="sort-clear">取消排序</el-dropdown-item>
                       <el-dropdown-item command="filter" divided>{{ filterActiveCols.has(c - 1) ? '✓ ' : '' }}筛选此列</el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
-                <div class="col-resize" @mousedown.stop="startColResize(c - 1, $event)" />
+                <div class="col-resize" @mousedown.stop="startColResize(c - 1, $event)" @dblclick.stop="autoFitCol(c - 1)" />
               </div>
             </th>
           </tr>
         </thead>
         <tbody>
           <template v-for="(row, ri) in currentSheetRows" :key="ri">
-            <tr v-show="!isRowFiltered(ri)" :style="{ height: (rowHeights[ri] || 26) + 'px' }">
-              <td class="row-hdr" :class="{ sel: isRowSelected(ri) }" @click="selectRow(ri)">
+            <tr v-show="!isRowFiltered(ri)" :style="{ height: (rowHeights[ri] || 26) + 'px' }" :class="{'wrap-row': hasRowWrap(ri)}">
+              <td class="row-hdr" :class="{ sel: isRowSelected(ri), 'drag-over': rowDragOver === ri }" @click="selectRow(ri)" @mousedown.prevent="startRowDrag(ri, $event)">
                 <div class="row-hdr-inner">
                   {{ ri + 1 }}
                   <div class="row-resize" @mousedown.stop="startRowResize(ri, $event)" />
@@ -325,7 +337,7 @@
               >
                 <template v-if="editingCell?.row === ri && editingCell?.col === c - 1">
                   <input ref="editInput" class="cell-input" v-model="editingValue"
-                    @keydown.enter.prevent="finishEdit"
+                    @keydown.enter.prevent="onEditEnter($event)"
                     @keydown.tab.prevent="finishEdit(); moveNext()"
                     @keydown.escape="cancelEdit"
                     @keydown="handleEditKey" />
@@ -333,7 +345,7 @@
                 <template v-else>
                   <span class="cell-val" :style="getCellTextStyle(ri, c - 1)">{{ getCellDisplay(ri, c - 1) }}</span>
                 </template>
-                <div v-if="isSelectionHead(ri, c - 1) && !editingCell" class="fill-h" @mousedown.stop="startFill($event)" />
+                <div v-if="isSelectionHead(ri, c - 1) && !editingCell" class="fill-h" @mousedown.stop="startFill($event)" @dblclick.stop="autoFillDown" />
                 <div v-if="isSelectionHead(ri, c - 1) && !editingCell && selection && isMultiCellSelection"
                   class="move-h" @mousedown.stop="startMove($event)" />
                 <div v-if="getComment(ri, c - 1)" class="comment-flag" />
@@ -370,6 +382,8 @@
       <div v-if="getComment(ctxRow, ctxCol)" class="ctx-item" @click="ctxDeleteComment">🗑 删除批注</div>
       <div class="ctx-sep" />
       <div class="ctx-item" @click="ctxSetValidation">📝 数据验证</div>
+      <div class="ctx-item" @click="ctxToggleLock">{{ getCellMeta(ctxRow, ctxCol).locked ? '🔓 解锁单元格' : '🔒 锁定单元格' }}</div>
+      <div class="ctx-item" @click="ctxToggleProtect">{{ sheet.protected ? '🔓 取消保护' : '🔐 保护工作表' }}</div>
       <div class="ctx-item" @click="ctxGroupRows">📁 分组折叠</div>
     </div>
 
@@ -543,6 +557,25 @@
       </template>
     </el-dialog>
 
+    <!-- 多列排序对话框 -->
+    <el-dialog v-model="showMultiSortDialog" title="多列排序" width="460px">
+      <div v-for="(rule, i) in multiSortRules" :key="i" style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <el-select v-model="rule.col" size="small" placeholder="选择列" style="width:160px">
+          <el-option v-for="c in colCount" :key="c" :label="colName(c - 1)" :value="c - 1" />
+        </el-select>
+        <el-select v-model="rule.dir" size="small" style="width:120px">
+          <el-option label="升序 ↑" value="asc" />
+          <el-option label="降序 ↓" value="desc" />
+        </el-select>
+        <el-button size="small" text type="danger" @click="multiSortRules.splice(i, 1)" :disabled="multiSortRules.length <= 1">✕</el-button>
+      </div>
+      <el-button size="small" @click="multiSortRules.push({ col: 0, dir: 'asc' })">+ 添加级别</el-button>
+      <template #footer>
+        <el-button size="small" @click="showMultiSortDialog = false">取消</el-button>
+        <el-button size="small" type="primary" @click="doMultiSort">排序</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 数据透视对话框 -->
     <el-dialog v-model="showPivotDialog" title="数据透视" width="500px">
       <div style="display:flex;gap:12px;margin-bottom:12px">
@@ -611,7 +644,7 @@ interface CellMeta {
   color?: string; bgColor?: string; align?: string; valign?: string; wrap?: boolean
   fontFamily?: string; fontSize?: number; precision?: number; indent?: number
   border?: { top?: boolean; right?: boolean; bottom?: boolean; left?: boolean }
-  comment?: string
+  comment?: string; locked?: boolean
   validation?: { type: 'list'|'number'|'text'; options?: string; min?: number; max?: number }
 }
 interface SheetData {
@@ -619,7 +652,7 @@ interface SheetData {
   colWidths: number[]; colTypes: string[]; rowHeights: number[]
   cellMeta: Record<string, CellMeta>
   merges: { row: number; col: number; rowspan: number; colspan: number }[]
-  frozenRows: number; frozenCols: number
+  frozenRows: number; frozenCols: number; protected?: boolean
   groups: { type: 'row'|'col'; start: number; end: number; collapsed: boolean }[]
 }
 interface CondRule { condition: string; value: string; bgColor: string }
@@ -676,6 +709,8 @@ let ctxRow = 0, ctxCol = 0
 
 const sortCol = ref(-1)
 const sortDir = ref<'asc'|'desc'>('asc')
+const showMultiSortDialog = ref(false)
+const multiSortRules = reactive<{ col: number; dir: 'asc' | 'desc' }[]>([{ col: 0, dir: 'asc' }])
 const filterActiveCols = ref(new Set<number>())
 const filterUniqueValues = ref<string[]>([])
 const filterSelectedValues = ref(new Set<string>())
@@ -792,6 +827,39 @@ function selectCell(r: number, c: number, e?: MouseEvent) {
 function selectRow(ri: number) { if (editingCell.value) finishEdit(); selection.value = { startRow: ri, startCol: 0, endRow: ri, endCol: colCount.value - 1 }; updateFormula() }
 function selectCol(ci: number) { if (editingCell.value) finishEdit(); selection.value = { startRow: 0, startCol: ci, endRow: rows.value.length - 1, endCol: ci }; updateFormula() }
 
+// ── 行拖拽排序 ──
+const rowDragOver = ref(-1)
+function startRowDrag(ri: number, e: MouseEvent) {
+  if (e.button !== 0) return
+  selectRow(ri)
+  const startY = e.clientY, startRi = ri
+  const mv = (ev: MouseEvent) => {
+    // 根据鼠标位置计算目标行
+    const tbody = containerRef.value?.querySelector('tbody')
+    if (!tbody) return
+    const rows_ = tbody.querySelectorAll('tr')
+    for (let i = 0; i < rows_.length; i++) {
+      const rect = rows_[i].getBoundingClientRect()
+      if (ev.clientY >= rect.top && ev.clientY <= rect.bottom) { rowDragOver.value = i; break }
+    }
+  }
+  const up = () => {
+    document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up)
+    const target = rowDragOver.value
+    rowDragOver.value = -1
+    if (target < 0 || target === startRi) return
+    pushUndo()
+    // 移动行
+    const movedRows = rows.value.splice(startRi, 1)
+    rows.value.splice(target, 0, ...movedRows)
+    const movedHeights = rowHeights.value.splice(startRi, 1)
+    rowHeights.value.splice(target, 0, ...movedHeights)
+    selection.value = { startRow: target, startCol: 0, endRow: target, endCol: colCount.value - 1 }
+    emitChange()
+  }
+  document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up)
+}
+
 // ── 拖选逻辑 ──
 let isDragging = false
 let formulaRangeMode = false // 公式范围选择模式
@@ -862,6 +930,7 @@ function moveNext() { if (!selection.value) return; const nc = selection.value.s
 // Editing
 function startEdit(r: number, c: number) {
   if (editingCell.value?.row === r && editingCell.value?.col === c) return
+  if (sheet.value.protected && getCellMeta(r, c).locked) return
   finishEdit(); editingCell.value = { row: r, col: c }; editingValue.value = rows.value[r]?.[c] || ''
   nextTick(() => { editInput.value?.[0]?.focus() })
 }
@@ -877,6 +946,20 @@ function finishEdit() {
   containerRef.value?.focus()
 }
 function cancelEdit() { editingCell.value = null; updateFormula() }
+function onEditEnter(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && isMultiCellSelection.value) {
+    // Ctrl+Enter：填入选区所有格
+    if (!editingCell.value || !selection.value) return
+    const val = editingValue.value
+    pushUndo()
+    const { startRow, startCol, endRow, endCol } = selection.value
+    for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++)
+      for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) rows.value[r][c] = val
+    editingCell.value = null; emitChange()
+  } else {
+    finishEdit()
+  }
+}
 function applyFormula() {
   if (editingCell.value) { editingCell.value = null } // 结束编辑
   if (!selection.value) return; pushUndo()
@@ -1080,10 +1163,15 @@ function getCellDisplay(r: number, c: number): string {
   if (raw.startsWith('=')) return computeFormula(raw)
   const t = colTypes.value[c] || 'auto'
   if (t === 'percent' && raw !== '') { const n = parseFloat(raw); return isNaN(n) ? raw : (n * 100).toFixed(2) + '%' }
-  if (t === 'currency' && raw !== '') { const n = parseFloat(raw); return isNaN(n) ? raw : '¥' + n.toFixed(2) }
+  if (t === 'currency' && raw !== '') { const n = parseFloat(raw); return isNaN(n) ? raw : '¥' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
   if (t === 'number' && raw !== '') { const n = parseFloat(raw); return isNaN(n) ? raw : n.toLocaleString() }
+  if (t === 'scientific' && raw !== '') { const n = parseFloat(raw); return isNaN(n) ? raw : n.toExponential(2) }
   return raw
 }
+function hasRowWrap(r: number): boolean {
+  for (let c = 0; c < colCount.value; c++) { if (getCellMeta(r, c).wrap) return true } return false
+}
+
 function getCellTextStyle(r: number, c: number): Record<string, string> {
   const m = getCellMeta(r, c); const s: Record<string, string> = {}
   if (m.bold) s.fontWeight = 'bold'; if (m.italic) s.fontStyle = 'italic'
@@ -1092,6 +1180,13 @@ function getCellTextStyle(r: number, c: number): Record<string, string> {
   if (m.color) s.color = m.color; if (m.fontFamily) s.fontFamily = m.fontFamily
   if (m.fontSize) s.fontSize = m.fontSize + 'px'; if (m.align) s.textAlign = m.align
   if (m.wrap) { s.whiteSpace = 'normal'; s.wordBreak = 'break-all' }
+  // 边框样式
+  if (m.border) {
+    const bStyle = '1px solid #333'
+    if (m.border.top) s.borderTop = bStyle; if (m.border.right) s.borderRight = bStyle
+    if (m.border.bottom) s.borderBottom = bStyle; if (m.border.left) s.borderLeft = bStyle
+  }
+  if (m.locked && sheet.value.protected) s.background = '#f0f0f0'
   if ((m as any).indent) s.paddingLeft = ((m as any).indent * 16) + 'px'
   return s
 }
@@ -1139,6 +1234,23 @@ function applyFontSize(s: number) { applyToSelection('fontSize', s) }
 function setAlign(a: string) { applyToSelection('align', a) }
 function setVAlign(v: string) { applyToSelection('valign', v) }
 function toggleWrap() { if (!selection.value) return; applyToSelection('wrap', !getMetaProp('wrap')) }
+function toggleBorder(mode: 'all' | 'outer' | 'none') {
+  if (!selection.value) return; pushUndo()
+  const { startRow, startCol, endRow, endCol } = selection.value
+  const r1 = Math.min(startRow, endRow), r2 = Math.max(startRow, endRow)
+  const c1 = Math.min(startCol, endCol), c2 = Math.max(startCol, endCol)
+  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) {
+    if (mode === 'none') { setCellMeta(r, c, { border: undefined }) }
+    else if (mode === 'all') { setCellMeta(r, c, { border: { top: true, right: true, bottom: true, left: true } }) }
+    else if (mode === 'outer') {
+      const b: any = {}
+      if (r === r1) b.top = true; if (r === r2) b.bottom = true
+      if (c === c1) b.left = true; if (c === c2) b.right = true
+      setCellMeta(r, c, { border: b })
+    }
+  }
+  emitChange()
+}
 function applyToSelection(prop: string, val: any) {
   if (!selection.value) return; pushUndo()
   const { startRow, startCol, endRow, endCol } = selection.value
@@ -1201,6 +1313,9 @@ function autoFitCol(col: number) { let maxW = 40; for (const row of rows.value) 
 function toggleFreeze(cmd: string) {
   if (cmd === 'row') sheet.value.frozenRows = sheet.value.frozenRows > 0 ? 0 : 1
   else if (cmd === 'col') sheet.value.frozenCols = sheet.value.frozenCols > 0 ? 0 : 1
+  else if (cmd === 'here') {
+    if (selection.value) { sheet.value.frozenRows = selection.value.startRow; sheet.value.frozenCols = selection.value.startCol }
+  }
   else { sheet.value.frozenRows = 0; sheet.value.frozenCols = 0 }; emitChange()
 }
 
@@ -1208,6 +1323,7 @@ function toggleFreeze(cmd: string) {
 function handleColMenu(cmd: string, col: number) {
   if (cmd === 'sort-asc') { sortCol.value = col; sortDir.value = 'asc'; sortRows() }
   else if (cmd === 'sort-desc') { sortCol.value = col; sortDir.value = 'desc'; sortRows() }
+  else if (cmd === 'sort-multi') { multiSortRules.length = 0; multiSortRules.push({ col, dir: 'asc' }); showMultiSortDialog.value = true }
   else if (cmd === 'sort-clear') { sortCol.value = -1 }
   else if (cmd === 'filter') openFilter(col)
 }
@@ -1216,6 +1332,23 @@ function sortRows() {
   const c = sortCol.value, d = sortDir.value === 'asc' ? 1 : -1
   rows.value.sort((a, b) => { const va = a[c] || '', vb = b[c] || ''; const na = parseFloat(va), nb = parseFloat(vb); if (!isNaN(na) && !isNaN(nb)) return (na - nb) * d; return va.localeCompare(vb) * d })
   emitChange()
+}
+function doMultiSort() {
+  if (!multiSortRules.length) return; pushUndo()
+  rows.value.sort((a, b) => {
+    for (const rule of multiSortRules) {
+      const d = rule.dir === 'asc' ? 1 : -1
+      const va = a[rule.col] || '', vb = b[rule.col] || ''
+      const na = parseFloat(va), nb = parseFloat(vb)
+      let cmp: number
+      if (!isNaN(na) && !isNaN(nb)) cmp = (na - nb) * d
+      else cmp = va.localeCompare(vb) * d
+      if (cmp !== 0) return cmp
+    }
+    return 0
+  })
+  sortCol.value = multiSortRules[0].col; sortDir.value = multiSortRules[0].dir
+  showMultiSortDialog.value = false; emitChange()
 }
 function isRowFiltered(ri: number): boolean {
   if (!filterActiveCols.value.size) return false
@@ -1318,6 +1451,32 @@ function startFill(e: MouseEvent) {
   document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up)
 }
 
+// 双击填充柄：自动填充到相邻列最后一个非空行
+function autoFillDown() {
+  if (!selection.value) return
+  const sr = selection.value.startRow, sc = selection.value.startCol, er = selection.value.endRow, ec = selection.value.endCol
+  const srcR1 = Math.min(sr, er), srcR2 = Math.max(sr, er), srcC1 = Math.min(sc, ec), srcC2 = Math.max(sc, ec)
+  // 找相邻列最后有数据的行
+  let lastRow = srcR2
+  for (let c = 0; c < colCount.value; c++) {
+    if (c >= srcC1 && c <= srcC2) continue
+    for (let r = rows.value.length - 1; r > lastRow; r--) {
+      if (rows.value[r]?.[c] && rows.value[r][c] !== '') { lastRow = Math.max(lastRow, r); break }
+    }
+  }
+  if (lastRow <= srcR2) return
+  pushUndo()
+  for (let r = srcR2 + 1; r <= lastRow; r++) for (let c = srcC1; c <= srcC2; c++) {
+    const srcR = srcR1 + ((r - srcR1) % (srcR2 - srcR1 + 1))
+    const sv = rows.value[srcR]?.[c] || ''
+    const sn = parseFloat(sv)
+    if (!isNaN(sn) && sv === String(sn)) rows.value[r][c] = String(sn + (r - srcR1))
+    else { const wIdx = weekDays.indexOf(sv); if (wIdx >= 0) rows.value[r][c] = weekDays[(wIdx + r - srcR1) % 7]; else { const mIdx = months.indexOf(sv); if (mIdx >= 0) rows.value[r][c] = months[(mIdx + r - srcR1) % 12]; else rows.value[r][c] = sv } }
+  }
+  selection.value = { startRow: srcR1, startCol: srcC1, endRow: lastRow, endCol: srcC2 }
+  emitChange()
+}
+
 // Move Handle
 function startMove(e: MouseEvent) {
   if (!selection.value) return; e.preventDefault()
@@ -1356,6 +1515,9 @@ function ctxSetValidation() {
 function saveValidation() { pushUndo(); setCellMeta(validationRow, validationCol, { validation: { type: validationType.value, options: validationOptions.value, min: validationMin.value, max: validationMax.value } }); showValidationDialog.value = false; emitChange() }
 
 // Grouping
+function ctxToggleLock() { hideContextMenu(); pushUndo(); const locked = !getCellMeta(ctxRow, ctxCol).locked; applyToSelection('locked', locked); emitChange() }
+function ctxToggleProtect() { hideContextMenu(); sheet.value.protected = !sheet.value.protected; emitChange() }
+
 function ctxGroupRows() { hideContextMenu(); if (!selection.value) return; pushUndo(); const { startRow, endRow } = selection.value; sheet.value.groups.push({ type: 'row', start: Math.min(startRow, endRow), end: Math.max(startRow, endRow), collapsed: false }); emitChange() }
 
 // Search/Replace
@@ -1498,8 +1660,8 @@ watch([showChart, chartType, chartDataRange, chartTitle, selection], () => { if 
 
 // Global Keyboard
 function onGlobalKeydown(e: KeyboardEvent) {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return }
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { if (!editingCell.value) { e.preventDefault(); undo() } return }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { if (!editingCell.value) { e.preventDefault(); redo() } return }
   if ((e.ctrlKey || e.metaKey) && e.key === 'c') { if (!editingCell.value) { e.preventDefault(); clipCopy() } return }
   if ((e.ctrlKey || e.metaKey) && e.key === 'x') { if (!editingCell.value) { e.preventDefault(); clipCut() } return }
   if ((e.ctrlKey || e.metaKey) && e.key === 'v') { if (!editingCell.value) { e.preventDefault(); clipPaste() } return }
@@ -1923,6 +2085,7 @@ defineExpose({ getData })
 .row-hdr { background: linear-gradient(90deg, #fafafa, #eee); text-align: center; color: #555; font-weight: 600; position: sticky; left: 0; z-index: 2; cursor: pointer; user-select: none; font-size: 12px; border-right: 1px solid #c0c0c0; min-width: 46px; overflow: visible; }
 .row-hdr:hover { background: linear-gradient(90deg, #e8e8e8, #ddd); }
 .row-hdr.sel { background: linear-gradient(90deg, #d6e4f9, #c2d8f0); color: #1a73e8; }
+.row-hdr.drag-over { border-top: 2px solid #1a73e8; }
 .row-hdr-inner { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 .row-resize { position: absolute; bottom: -2px; left: 0; right: 0; height: 5px; cursor: row-resize; z-index: 3; }
 
@@ -1935,6 +2098,8 @@ defineExpose({ getData })
 .cell.frozen { background: #fafafa; }
 
 .cell-val { display: block; padding: 0 6px; line-height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wrap-row { height: auto !important; }
+.wrap-row .cell-val { white-space: normal; word-break: break-all; line-height: 1.4; }
 .cell-input { width: 100%; height: 100%; border: none; outline: none; padding: 0 6px; font-size: 13px; font-family: inherit; background: #fff; }
 
 /* Fill & Move handles */
