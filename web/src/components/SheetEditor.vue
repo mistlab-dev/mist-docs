@@ -8,122 +8,235 @@
         @keydown.escape="cancelFormula" placeholder="输入内容或公式..." />
     </div>
 
-    <!-- 工具栏 -->
-    <div class="toolbar">
-      <div class="tb-group">
-        <button class="tb-btn" :disabled="!canUndo" @click="undo" title="撤销"><span class="icon-undo" /></button>
-        <button class="tb-btn" :disabled="!canRedo" @click="redo" title="重做"><span class="icon-redo" /></button>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <el-select size="small" v-model="cellFontFamily" @change="applyFontFamily" class="tb-select" style="width:120px" title="字体">
-          <el-option v-for="f in fontList" :key="f" :label="f" :value="f" :style="{fontFamily:f}" />
-        </el-select>
-        <el-select size="small" v-model="cellFontSize" @change="applyFontSize" class="tb-select" style="width:64px" title="字号">
-          <el-option v-for="s in fontSizes" :key="s" :label="s" :value="s" />
-        </el-select>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <button class="tb-btn" :class="{active:getMetaProp('bold')}" @click="toggleFormat('bold')" title="加粗 (Ctrl+B)"><b>B</b></button>
-        <button class="tb-btn" :class="{active:getMetaProp('italic')}" @click="toggleFormat('italic')" title="斜体 (Ctrl+I)"><i style="font-family:serif">I</i></button>
-        <button class="tb-btn" :class="{active:getMetaProp('underline')}" @click="toggleFormat('underline')" title="下划线 (Ctrl+U)"><u>U</u></button>
-        <button class="tb-btn" :class="{active:getMetaProp('strike')}" @click="toggleFormat('strike')" title="删除线"><s>abc</s></button>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <el-color-picker size="small" v-model="cellTextColor" @change="applyTextColor" title="字体颜色" />
-        <el-color-picker size="small" v-model="cellBgColor" @change="applyBgColor" title="填充颜色" />
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <el-dropdown trigger="click" @command="applyBorder" title="边框">
-          <button class="tb-btn"><span class="icon-border" /></button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="all">全部边框</el-dropdown-item>
-              <el-dropdown-item command="outer">外边框</el-dropdown-item>
-              <el-dropdown-item command="none">无边框</el-dropdown-item>
-              <el-dropdown-item command="top" divided>上边框</el-dropdown-item>
-              <el-dropdown-item command="bottom">下边框</el-dropdown-item>
-              <el-dropdown-item command="left">左边框</el-dropdown-item>
-              <el-dropdown-item command="right">右边框</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <button class="tb-btn" :class="{active:getMetaProp('align')==='left'}" @click="setAlign('left')" title="左对齐">≡</button>
-        <button class="tb-btn" :class="{active:getMetaProp('align')==='center'}" @click="setAlign('center')" title="居中对齐">☰</button>
-        <button class="tb-btn" :class="{active:getMetaProp('align')==='right'}" @click="setAlign('right')" title="右对齐">≡</button>
-        <button class="tb-btn" :class="{active:getMetaProp('wrap')}" @click="toggleWrap" title="自动换行">⏎</button>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <button class="tb-btn" @click="changePrecision(-1)" title="减少小数位">.0</button>
-        <button class="tb-btn" @click="changePrecision(1)" title="增加小数位">.00</button>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <el-select size="small" v-model="currentColType" @change="setColType" class="tb-select" style="width:90px" title="数字格式">
-          <el-option label="常规" value="auto" />
-          <el-option label="文本" value="text" />
-          <el-option label="数字" value="number" />
-          <el-option label="百分比" value="percent" />
-          <el-option label="货币 ¥" value="currency" />
-          <el-option label="日期" value="date" />
-        </el-select>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <button class="tb-btn" @click="addRowAbove" title="插入行（上）"><span class="icon-row-add" /></button>
-        <button class="tb-btn" @click="addColRight" title="插入列（右）"><span class="icon-col-add" /></button>
-        <button class="tb-btn" @click="deleteRow" title="删除行"><span class="icon-row-del" /></button>
-        <button class="tb-btn" @click="deleteCol" title="删除列"><span class="icon-col-del" /></button>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <el-dropdown trigger="click" @command="toggleFreeze">
-          <button class="tb-btn" title="冻结窗格"><span class="icon-freeze" /></button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="row">{{ freezeRows > 0 ? '✓ ' : '' }}冻结首行</el-dropdown-item>
-              <el-dropdown-item command="col">{{ freezeCols > 0 ? '✓ ' : '' }}冻结首列</el-dropdown-item>
-              <el-dropdown-item command="none" divided>取消冻结</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-        <button class="tb-btn" @click="showCondDialog = true" title="条件格式"><span class="icon-cond" /></button>
-        <button class="tb-btn" :class="{active:showChart}" @click="showChart = !showChart" title="插入图表"><span class="icon-chart" /></button>
-        <button class="tb-btn" :class="{active:showSearchDialog}" @click="showSearchDialog = !showSearchDialog" title="查找替换 (Ctrl+F)"><span class="icon-search" /></button>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <button class="tb-btn" @click="increaseIndent" title="增加缩进">→→</button>
-        <button class="tb-btn" @click="decreaseIndent" title="减少缩进">←←</button>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <el-dropdown trigger="click" @command="applyStylePreset">
-          <button class="tb-btn" title="单元格样式">🎨<span style="font-size:10px">▼</span></button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item v-for="(_, name) in stylePresets" :key="name" :command="name">{{ name }}</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <button class="tb-btn" @click="openSplitColDialog" title="分列">⬡</button>
-        <button class="tb-btn" @click="removeDuplicates" title="去重">⧸⧸</button>
-        <button class="tb-btn" @click="openPivotDialog" title="数据透视">⊞</button>
-      </div>
-      <div class="tb-sep" />
-      <div class="tb-group">
-        <button class="tb-btn" @click="exportCSV" title="导出CSV">📥</button>
-        <button class="tb-btn" @click="printSheet" title="打印">🖨</button>
+    <!-- 工具栏（Excel Ribbon 两行布局） -->
+    <div class="ribbon">
+      <!-- 第一行：剪贴板 | 字体 | 对齐 -->
+      <div class="ribbon-row">
+        <div class="ribbon-section">
+          <div class="ribbon-section-buttons">
+            <button class="rb-btn" :disabled="!canUndo" @click="undo" title="撤销 (Ctrl+Z)">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10a3 3 0 010 6H8"/><path d="M6 5L3 8l3 3"/></svg>
+            </button>
+            <button class="rb-btn" :disabled="!canRedo" @click="redo" title="重做 (Ctrl+Y)">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M17 8H7a3 3 0 000 6h5"/><path d="M14 5l3 3-3 3"/></svg>
+            </button>
+          </div>
+          <div class="ribbon-section-label">撤销</div>
+        </div>
+        <div class="rb-sep" />
+
+        <div class="ribbon-section">
+          <div class="ribbon-section-buttons">
+            <el-select size="small" v-model="cellFontFamily" @change="applyFontFamily" class="rb-select" style="width:108px">
+              <el-option v-for="f in fontList" :key="f" :label="f" :value="f" :style="{fontFamily:f}" />
+            </el-select>
+            <el-select size="small" v-model="cellFontSize" @change="applyFontSize" class="rb-select" style="width:52px">
+              <el-option v-for="s in fontSizes" :key="s" :label="s" :value="s" />
+            </el-select>
+          </div>
+          <div class="ribbon-section-buttons">
+            <button class="rb-btn" :class="{active:getMetaProp('bold')}" @click="toggleFormat('bold')" title="加粗 (Ctrl+B)" style="font-weight:800;font-size:14px">B</button>
+            <button class="rb-btn" :class="{active:getMetaProp('italic')}" @click="toggleFormat('italic')" title="斜体 (Ctrl+I)" style="font-style:italic;font-family:serif;font-size:14px">I</button>
+            <button class="rb-btn" :class="{active:getMetaProp('underline')}" @click="toggleFormat('underline')" title="下划线 (Ctrl+U)" style="text-decoration:underline;font-size:13px">U</button>
+            <button class="rb-btn" :class="{active:getMetaProp('strike')}" @click="toggleFormat('strike')" title="删除线" style="text-decoration:line-through;font-size:12px">ab</button>
+            <div class="rb-vsep" />
+            <div class="color-btn-wrap" title="字体颜色">
+              <button class="rb-btn" @click="$refs.textColorPicker?.show()" style="font-weight:800;font-size:13px">A
+                <span class="color-indicator" :style="{background: cellTextColor || '#FF0000'}" />
+              </button>
+              <el-color-picker ref="textColorPicker" v-model="cellTextColor" @change="applyTextColor" size="small" :predefine="['#000000','#444444','#888888','#FF0000','#FF6600','#FFCC00','#33CC33','#00B0F0','#3366FF','#9933FF','#CC00CC','#C00000']" class="hidden-picker" />
+            </div>
+            <div class="color-btn-wrap" title="填充颜色">
+              <button class="rb-btn" @click="$refs.bgColorPicker?.show()" style="padding:0">
+                <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 14l4-10h1l4 10"/><path d="M4.5 11h5"/><rect x="13" y="4" width="4" height="6" rx="0.5" :fill="cellBgColor || '#FFFF00'" stroke="#888" stroke-width="0.8"/></svg>
+              </button>
+              <el-color-picker ref="bgColorPicker" v-model="cellBgColor" @change="applyBgColor" size="small" :predefine="['#FFFFFF','#FFFF00','#CCFFCC','#CCFFFF','#FFCCCC','#FFCCFF','#FFE0B2','#B3E5FC','#D1C4E9','#F8BBD0','#C8E6C9','#FFD700']" class="hidden-picker" />
+            </div>
+          </div>
+          <div class="ribbon-section-label">字体</div>
+        </div>
+        <div class="rb-sep" />
+
+        <div class="ribbon-section">
+          <div class="ribbon-section-buttons">
+            <el-dropdown trigger="click" @command="applyBorder" title="边框">
+              <button class="rb-btn">
+                <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="14" height="14" rx="0.5"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="10" y1="3" x2="10" y2="17"/></svg>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="all">全部边框</el-dropdown-item>
+                  <el-dropdown-item command="outer">外边框</el-dropdown-item>
+                  <el-dropdown-item command="none">无边框</el-dropdown-item>
+                  <el-dropdown-item command="top" divided>上边框</el-dropdown-item>
+                  <el-dropdown-item command="bottom">下边框</el-dropdown-item>
+                  <el-dropdown-item command="left">左边框</el-dropdown-item>
+                  <el-dropdown-item command="right">右边框</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <button class="rb-btn" @click="increaseIndent" title="增加缩进">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="7" y1="4" x2="17" y2="4"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/><path d="M2 4v12"/><path d="M2 10l3-3M2 10l3 3"/></svg>
+            </button>
+            <button class="rb-btn" @click="decreaseIndent" title="减少缩进">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="7" y1="4" x2="17" y2="4"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/><path d="M5 4v12"/><path d="M5 10l-3-3M5 10l-3 3"/></svg>
+            </button>
+          </div>
+          <div class="ribbon-section-label">边框</div>
+        </div>
+        <div class="rb-sep" />
+
+        <div class="ribbon-section">
+          <div class="ribbon-section-buttons">
+            <button class="rb-btn" :class="{active:getMetaProp('align')==='left'}" @click="setAlign('left')" title="左对齐">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="13" y2="10"/><line x1="3" y1="15" x2="15" y2="15"/></svg>
+            </button>
+            <button class="rb-btn" :class="{active:getMetaProp('align')==='center'}" @click="setAlign('center')" title="居中对齐">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="3" y1="5" x2="17" y2="5"/><line x1="5" y1="10" x2="15" y2="10"/><line x1="4" y1="15" x2="16" y2="15"/></svg>
+            </button>
+            <button class="rb-btn" :class="{active:getMetaProp('align')==='right'}" @click="setAlign('right')" title="右对齐">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="3" y1="5" x2="17" y2="5"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="5" y1="15" x2="17" y2="15"/></svg>
+            </button>
+            <button class="rb-btn" :class="{active:getMetaProp('wrap')}" @click="toggleWrap" title="自动换行">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 5h14M3 10h9l-2.5 2.5M3 15h14"/></svg>
+            </button>
+            <div class="rb-vsep" />
+            <button class="rb-btn" :class="{active:getMetaProp('valign')==='top'}" @click="setVAlign('top')" title="顶端对齐" style="font-size:10px">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="3" y1="3" x2="17" y2="3"/><rect x="5" y="5" width="10" height="4" rx="0.5"/></svg>
+            </button>
+            <button class="rb-btn" :class="{active:getMetaProp('valign')==='middle'||!getMetaProp('valign')}" @click="setVAlign('middle')" title="垂直居中" style="font-size:10px">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="3" y1="3" x2="17" y2="3"/><rect x="5" y="8" width="10" height="4" rx="0.5"/></svg>
+            </button>
+            <button class="rb-btn" :class="{active:getMetaProp('valign')==='bottom'}" @click="setVAlign('bottom')" title="底端对齐" style="font-size:10px">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="3" y1="3" x2="17" y2="3"/><rect x="5" y="11" width="10" height="4" rx="0.5"/></svg>
+            </button>
+          </div>
+          <div class="ribbon-section-label">对齐方式</div>
+        </div>
+        <div class="rb-sep" />
+
+        <div class="ribbon-section">
+          <div class="ribbon-section-buttons">
+            <el-select size="small" v-model="currentColType" @change="setColType" class="rb-select" style="width:72px">
+              <el-option label="常规" value="auto" />
+              <el-option label="文本" value="text" />
+              <el-option label="数字" value="number" />
+              <el-option label="百分比" value="percent" />
+              <el-option label="货币 ¥" value="currency" />
+              <el-option label="日期" value="date" />
+            </el-select>
+          </div>
+          <div class="ribbon-section-buttons">
+            <button class="rb-btn" @click="changePrecision(-1)" title="减少小数位" style="font-size:11px">.0→</button>
+            <button class="rb-btn" @click="changePrecision(1)" title="增加小数位" style="font-size:11px">.00→</button>
+          </div>
+          <div class="ribbon-section-label">数字</div>
+        </div>
+        <div class="rb-sep" />
+
+        <!-- 样式 -->
+        <div class="ribbon-section">
+          <div class="ribbon-section-buttons">
+            <el-dropdown trigger="click" @command="applyStylePreset" title="单元格样式">
+              <button class="rb-btn" style="flex-direction:column;gap:0;padding:1px 4px">
+                <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.2" style="width:18px;height:18px"><rect x="2" y="2" width="16" height="7" fill="currentColor" opacity="0.15"/><rect x="2" y="11" width="16" height="7"/></svg>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-for="(_, name) in stylePresets" :key="name" :command="name">{{ name }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <button class="rb-btn" @click="showCondDialog = true" title="条件格式">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="16" height="16" rx="1"/><line x1="2" y1="7.5" x2="18" y2="7.5"/><line x1="2" y1="13" x2="18" y2="13"/><rect x="2" y="2" width="10" height="5.5" fill="currentColor" opacity="0.15"/></svg>
+            </button>
+          </div>
+          <div class="ribbon-section-label">样式</div>
+        </div>
+        <div class="rb-sep" />
+
+        <!-- 单元格 -->
+        <div class="ribbon-section">
+          <div class="ribbon-section-buttons">
+            <el-dropdown trigger="click" title="插入">
+              <button class="rb-btn">
+                <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="16" height="16" rx="1"/><line x1="10" y1="6" x2="10" y2="14"/><line x1="6" y1="10" x2="14" y2="10"/></svg>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="addRowAbove">上方插入行</el-dropdown-item>
+                  <el-dropdown-item @click="addRowBelow">下方插入行</el-dropdown-item>
+                  <el-dropdown-item @click="addColLeft" divided>左侧插入列</el-dropdown-item>
+                  <el-dropdown-item @click="addColRight">右侧插入列</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <button class="rb-btn" @click="deleteRow" title="删除行">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="16" height="16" rx="1"/><line x1="6" y1="10" x2="14" y2="10"/></svg>
+            </button>
+            <button class="rb-btn" @click="toggleMerge" title="合并单元格">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="4" width="7" height="5" rx="0.5"/><rect x="11" y="4" width="7" height="5" rx="0.5"/><rect x="2" y="11" width="16" height="5" rx="0.5"/></svg>
+            </button>
+          </div>
+          <div class="ribbon-section-label">单元格</div>
+        </div>
+        <div class="rb-sep" />
+
+        <!-- 编辑 -->
+        <div class="ribbon-section">
+          <div class="ribbon-section-buttons">
+            <button class="rb-btn" :class="{active:showSearchDialog}" @click="showSearchDialog = !showSearchDialog" title="查找替换 (Ctrl+F)">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="9" r="5.5"/><line x1="13" y1="13" x2="17" y2="17"/></svg>
+            </button>
+            <el-dropdown trigger="click" @command="toggleFreeze" title="冻结窗格">
+              <button class="rb-btn">
+                <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="16" height="16" rx="0.5"/><line x1="2" y1="7" x2="18" y2="7"/><line x1="7" y1="2" x2="7" y2="18"/></svg>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="row">{{ freezeRows > 0 ? '✓ ' : '' }}冻结首行</el-dropdown-item>
+                  <el-dropdown-item command="col">{{ freezeCols > 0 ? '✓ ' : '' }}冻结首列</el-dropdown-item>
+                  <el-dropdown-item command="none" divided>取消冻结</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+          <div class="ribbon-section-label">编辑</div>
+        </div>
+        <div class="rb-sep" />
+
+        <!-- 数据 -->
+        <div class="ribbon-section">
+          <div class="ribbon-section-buttons">
+            <button class="rb-btn" @click="openSplitColDialog" title="分列">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="3" height="14" rx="0.3"/><line x1="8" y1="5" x2="8" y2="15" stroke-dasharray="2 1.5"/><rect x="11" y="3" width="3" height="14" rx="0.3"/><rect x="16" y="3" width="3" height="14" rx="0.3"/></svg>
+            </button>
+            <button class="rb-btn" @click="removeDuplicates" title="删除重复项">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="16" height="14" rx="1"/><line x1="2" y1="8" x2="18" y2="8"/><line x1="2" y1="13" x2="18" y2="13"/><line x1="8" y1="5" x2="12" y2="17" stroke="red" stroke-width="1"/></svg>
+            </button>
+            <button class="rb-btn" @click="openPivotDialog" title="数据透视">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="8" height="8" fill="currentColor" opacity="0.15"/><rect x="10" y="2" width="8" height="8"/><rect x="2" y="10" width="8" height="8"/><rect x="10" y="10" width="8" height="8" fill="currentColor" opacity="0.15"/></svg>
+            </button>
+          </div>
+          <div class="ribbon-section-label">数据</div>
+        </div>
+        <div class="rb-sep" />
+
+        <!-- 图表/导出 -->
+        <div class="ribbon-section">
+          <div class="ribbon-section-buttons">
+            <button class="rb-btn" :class="{active:showChart}" @click="showChart = !showChart" title="插入图表">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="11" width="3.5" height="7"/><rect x="8" y="6" width="3.5" height="12"/><rect x="14" y="3" width="3.5" height="15"/></svg>
+            </button>
+            <button class="rb-btn" @click="exportCSV" title="导出CSV">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3h8l4 4v10a2 2 0 01-2 2H6a2 2 0 01-2-2V3z"/><path d="M12 3v4h4"/><line x1="7" y1="11" x2="13" y2="11"/><line x1="7" y1="14" x2="11" y2="14"/></svg>
+            </button>
+            <button class="rb-btn" @click="printSheet" title="打印">
+              <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="7" width="12" height="8" rx="1"/><path d="M6 7V3h8v4"/><path d="M6 11h8"/><path d="M6 15v2h8v-2"/></svg>
+            </button>
+          </div>
+          <div class="ribbon-section-label">图表</div>
+        </div>
       </div>
     </div>
 
@@ -143,21 +256,23 @@
               @click="selectCol(c - 1)"
               @dblclick="autoFitCol(c - 1)"
             >
-              <span class="col-letter">{{ colName(c - 1) }}</span>
-              <span v-if="sortCol === c - 1" class="sort-arrow">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
-              <span v-if="filterActiveCols.has(c - 1)" class="filter-dot">◆</span>
-              <el-dropdown trigger="click" @command="(cmd: string) => handleColMenu(cmd, c - 1)" :hide-on-click="false" size="small">
-                <span class="hdr-menu" @click.stop>▾</span>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="sort-asc">↑ 升序排列</el-dropdown-item>
-                    <el-dropdown-item command="sort-desc">↓ 降序排列</el-dropdown-item>
-                    <el-dropdown-item command="sort-clear" divided>取消排序</el-dropdown-item>
-                    <el-dropdown-item command="filter" divided>{{ filterActiveCols.has(c - 1) ? '✓ ' : '' }}筛选此列</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-              <div class="col-resize" @mousedown.stop="startColResize(c - 1, $event)" />
+              <div class="col-hdr-inner">
+                <span class="col-letter">{{ colName(c - 1) }}</span>
+                <span v-if="sortCol === c - 1" class="sort-arrow">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+                <span v-if="filterActiveCols.has(c - 1)" class="filter-dot">◆</span>
+                <el-dropdown trigger="click" @command="(cmd: string) => handleColMenu(cmd, c - 1)" :hide-on-click="false" size="small">
+                  <span class="hdr-menu" @click.stop>▾</span>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="sort-asc">↑ 升序排列</el-dropdown-item>
+                      <el-dropdown-item command="sort-desc">↓ 降序排列</el-dropdown-item>
+                      <el-dropdown-item command="sort-clear" divided>取消排序</el-dropdown-item>
+                      <el-dropdown-item command="filter" divided>{{ filterActiveCols.has(c - 1) ? '✓ ' : '' }}筛选此列</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+                <div class="col-resize" @mousedown.stop="startColResize(c - 1, $event)" />
+              </div>
             </th>
           </tr>
         </thead>
@@ -165,8 +280,10 @@
           <template v-for="(row, ri) in currentSheetRows" :key="ri">
             <tr v-show="!isRowFiltered(ri)" :style="{ height: (rowHeights[ri] || 26) + 'px' }">
               <td class="row-hdr" :class="{ sel: isRowSelected(ri) }" @click="selectRow(ri)">
-                {{ ri + 1 }}
-                <div class="row-resize" @mousedown.stop="startRowResize(ri, $event)" />
+                <div class="row-hdr-inner">
+                  {{ ri + 1 }}
+                  <div class="row-resize" @mousedown.stop="startRowResize(ri, $event)" />
+                </div>
               </td>
               <td v-for="c in colCount" :key="c"
                 class="cell"
@@ -362,22 +479,47 @@
     </div>
 
     <!-- 分列对话框 -->
-    <el-dialog v-model="showSplitColDialog" title="分列" width="400px">
-      <div style="margin-bottom:12px;color:#666">将选定列的内容按分隔符拆分为多列</div>
-      <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+    <el-dialog v-model="showSplitColDialog" title="分列" width="440px">
+      <div style="margin-bottom:12px;color:#666">将选定列的内容拆分为多列</div>
+      <div style="margin-bottom:12px">
+        <el-radio-group v-model="splitMode" size="small">
+          <el-radio-button value="delimiter">分隔符号</el-radio-button>
+          <el-radio-button value="fixed">固定宽度</el-radio-button>
+        </el-radio-group>
+      </div>
+      <div v-if="splitMode === 'delimiter'" style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
         <span>分隔符：</span>
         <el-select v-model="splitDelimiter" size="small" style="width:120px">
-          <el-option label="逗号 (,)" value="," />
-          <el-option label="空格" value=" " />
           <el-option label="Tab" value="\t" />
           <el-option label="分号 (;)" value=";" />
+          <el-option label="逗号 (,)" value="," />
+          <el-option label="空格" value=" " />
           <el-option label="竖线 (|)" value="|" />
+          <el-option label="自定义" value="__custom__" />
         </el-select>
+        <el-input v-if="splitDelimiter === '__custom__'" v-model="splitCustomDelim" size="small" style="width:80px" placeholder="输入分隔符" />
+        <el-checkbox v-model="splitConsecutive" size="small" style="margin-left:8px">连续分隔符视为单个</el-checkbox>
+      </div>
+      <div v-if="splitMode === 'fixed'" style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span>位置列表（用逗号分隔）：</span>
+        </div>
+        <el-input v-model="splitFixedPositions" size="small" placeholder="例如: 3,8,15" />
+        <div style="color:#999;font-size:12px;margin-top:4px">从第几个字符处切分，多列用逗号隔开</div>
+      </div>
+      <div v-if="splitPreview.length" style="margin-bottom:12px">
+        <div style="font-size:12px;color:#999;margin-bottom:4px">预览：</div>
+        <table style="border-collapse:collapse;font-size:12px;width:100%">
+          <tr v-for="(row, i) in splitPreview" :key="i" style="border-bottom:1px solid #eee">
+            <td v-for="(cell, j) in row" :key="j" style="padding:2px 8px;border:1px solid #ddd">{{ cell }}</td>
+          </tr>
+        </table>
+        <div style="font-size:11px;color:#999;margin-top:2px">（仅显示前 5 行）</div>
       </div>
       <div style="color:#999;font-size:12px">源列：{{ colName(splitCol) }}</div>
       <template #footer>
         <el-button size="small" @click="showSplitColDialog = false">取消</el-button>
-        <el-button size="small" type="primary" @click="doSplitCol">确定</el-button>
+        <el-button size="small" type="primary" @click="doSplitCol" :disabled="!splitPreview.length">确定</el-button>
       </template>
     </el-dialog>
 
@@ -439,7 +581,7 @@
 </template>
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { RefreshLeft, RefreshRight, Delete, Top, Bottom, Back, Right, Lock, MagicStick, TrendCharts, Search, Grid, DocumentCopy } from '@element-plus/icons-vue'
+
 
 const props = defineProps<{ initialData?: string }>()
 const emit = defineEmits<{ (e: 'change', data: string): void }>()
@@ -530,8 +672,8 @@ const condScale3Mid = ref('#ffff00')
 const condScale3Max = ref('#4caf50')
 const condDataBarColor = ref('#4caf50')
 
-const cellTextColor = ref('')
-const cellBgColor = ref('')
+const cellTextColor = ref<string|null>(null)
+const cellBgColor = ref<string|null>(null)
 const cellFontFamily = ref('Arial')
 const cellFontSize = ref(13)
 const currentColType = ref('auto')
@@ -632,7 +774,7 @@ function updateFormula() { if (!selection.value) return; formulaValue.value = ro
 function updateToolbarState() {
   if (!selection.value) return
   const m = getCellMeta(selection.value.startRow, selection.value.startCol)
-  cellTextColor.value = m.color || ''; cellBgColor.value = m.bgColor || ''
+  cellTextColor.value = m.color || null; cellBgColor.value = m.bgColor || null
   cellFontFamily.value = m.fontFamily || 'Arial'; cellFontSize.value = m.fontSize || 13
   currentColType.value = colTypes.value[selection.value.startCol] || 'auto'
 }
@@ -693,6 +835,7 @@ function getCellTextStyle(r: number, c: number): Record<string, string> {
 function getCellStyle(r: number, c: number): Record<string, string> {
   const m = getCellMeta(r, c); const s: Record<string, string> = {}
   if (m.bgColor) s.background = m.bgColor
+  if ((m as any).valign) s.verticalAlign = (m as any).valign as string
   const b = m.border; const brd = '1px solid #333'
   if (b) { if (b.top) s.borderTop = brd; if (b.bottom) s.borderBottom = brd; if (b.left) s.borderLeft = brd; if (b.right) s.borderRight = brd }
   for (const rule of condRules.value) { const v = rows.value[r]?.[c] || ''; if (testCond(v, rule)) { s.background = rule.bgColor; break } }
@@ -726,11 +869,12 @@ function toggleFormat(prop: 'bold'|'italic'|'underline'|'strike') {
     for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) setCellMeta(r, c, { [prop]: !getCellMeta(r, c)[prop] })
   emitChange()
 }
-function applyTextColor(c: string) { applyToSelection('color', c) }
-function applyBgColor(c: string) { applyToSelection('bgColor', c) }
+function applyTextColor(c: string | null) { applyToSelection('color', c || '') }
+function applyBgColor(c: string | null) { applyToSelection('bgColor', c || '') }
 function applyFontFamily(f: string) { applyToSelection('fontFamily', f) }
 function applyFontSize(s: number) { applyToSelection('fontSize', s) }
 function setAlign(a: string) { applyToSelection('align', a) }
+function setVAlign(v: string) { applyToSelection('valign', v) }
 function toggleWrap() { if (!selection.value) return; applyToSelection('wrap', !getMetaProp('wrap')) }
 function applyToSelection(prop: string, val: any) {
   if (!selection.value) return; pushUndo()
@@ -1112,28 +1256,103 @@ function onGlobalKeydown(e: KeyboardEvent) {
 // ─── Text to Columns (分列) ───
 const showSplitColDialog = ref(false)
 const splitDelimiter = ref(',')
+const splitCustomDelim = ref('')
+const splitConsecutive = ref(true)
+const splitMode = ref<'delimiter'|'fixed'>('delimiter')
+const splitFixedPositions = ref('')
 const splitCol = ref(0)
+
+const splitPreview = computed(() => {
+  const c = splitCol.value
+  const preview: string[][] = []
+  const sampleRows = rows.value.slice(0, 5)
+  for (const row of sampleRows) {
+    const val = row[c] || ''
+    if (splitMode.value === 'fixed') {
+      const positions = splitFixedPositions.value.split(',').map(s => parseInt(s.trim())).filter(n => n > 0).sort((a, b) => a - b)
+      if (!positions.length) { preview.push([val]); continue }
+      const parts: string[] = []
+      let last = 0
+      for (const p of positions) {
+        parts.push(val.slice(last, p))
+        last = p
+      }
+      parts.push(val.slice(last))
+      preview.push(parts)
+    } else {
+      const delim = splitDelimiter.value === '__custom__' ? splitCustomDelim.value : splitDelimiter.value
+      if (!delim) { preview.push([val]); continue }
+      const actualDelim = delim === '\\t' ? '\t' : delim
+      let parts: string[]
+      if (splitConsecutive.value) {
+        // 连续分隔符视为单个
+        parts = val.split(new RegExp(actualDelim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '+'))
+      } else {
+        parts = val.split(actualDelim)
+      }
+      preview.push(parts.map(p => p.trim()))
+    }
+  }
+  return preview
+})
 
 function openSplitColDialog() {
   if (!selection.value) return
   splitCol.value = selection.value.startCol
+  splitMode.value = 'delimiter'
+  splitConsecutive.value = true
+  splitDelimiter.value = ','
+  splitCustomDelim.value = ''
+  splitFixedPositions.value = ''
   showSplitColDialog.value = true
 }
 function doSplitCol() {
   pushUndo()
-  const c = splitCol.value, delim = splitDelimiter.value
-  // Find max splits
+  const c = splitCol.value
+  // Determine max parts from preview logic
   let maxParts = 1
   for (const row of rows.value) {
-    const parts = (row[c] || '').split(delim)
-    if (parts.length > maxParts) maxParts = parts.length
+    const val = row[c] || ''
+    if (splitMode.value === 'fixed') {
+      const positions = splitFixedPositions.value.split(',').map(s => parseInt(s.trim())).filter(n => n > 0).sort((a, b) => a - b)
+      maxParts = Math.max(maxParts, positions.length + 1)
+    } else {
+      const delim = splitDelimiter.value === '__custom__' ? splitCustomDelim.value : splitDelimiter.value
+      if (!delim) continue
+      const actualDelim = delim === '\\t' ? '\t' : delim
+      let parts: string[]
+      if (splitConsecutive.value) {
+        parts = val.split(new RegExp(actualDelim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '+'))
+      } else {
+        parts = val.split(actualDelim)
+      }
+      maxParts = Math.max(maxParts, parts.length)
+    }
   }
   // Insert new columns
   for (let i = 1; i < maxParts; i++) insertColAt(c + i)
   // Split data
   for (const row of rows.value) {
-    const parts = (row[c] || '').split(delim)
-    for (let i = 0; i < parts.length; i++) row[c + i] = parts[i].trim()
+    const val = row[c] || ''
+    if (splitMode.value === 'fixed') {
+      const positions = splitFixedPositions.value.split(',').map(s => parseInt(s.trim())).filter(n => n > 0).sort((a, b) => a - b)
+      const parts: string[] = []
+      let last = 0
+      for (const p of positions) { parts.push(val.slice(last, p)); last = p }
+      parts.push(val.slice(last))
+      for (let i = 0; i < parts.length; i++) row[c + i] = parts[i]
+    } else {
+      const delim = splitDelimiter.value === '__custom__' ? splitCustomDelim.value : splitDelimiter.value
+      if (!delim) continue
+      const actualDelim = delim === '\\t' ? '\t' : delim
+      let parts: string[]
+      if (splitConsecutive.value) {
+        parts = val.split(new RegExp(actualDelim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '+'))
+      } else {
+        parts = val.split(actualDelim)
+      }
+      for (let i = 0; i < parts.length; i++) row[c + i] = parts[i].trim()
+    }
   }
   showSplitColDialog.value = false
   emitChange()
@@ -1361,29 +1580,27 @@ defineExpose({ getData })
 .formula-fx { padding: 0 8px; color: #555; font-style: italic; font-weight: 600; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; background: #f3f3f3; font-size: 12px; }
 .formula-input { flex: 1; border: none; outline: none; padding: 0 8px; height: 100%; font-size: 13px; background: #fff; }
 
-/* ── Toolbar ── */
-.toolbar { display: flex; align-items: center; gap: 0; padding: 3px 6px; border-bottom: 1px solid #d6d6d6; background: #f8f8f8; flex-wrap: wrap; min-height: 34px; }
-.tb-group { display: flex; align-items: center; gap: 1px; }
-.tb-sep { width: 1px; height: 20px; background: #d6d6d6; margin: 0 4px; }
-.tb-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 26px; border: 1px solid transparent; border-radius: 3px; background: transparent; cursor: pointer; font-size: 13px; color: #444; padding: 0 5px; transition: all 0.1s; }
-.tb-btn:hover:not(:disabled) { background: #e5e5e5; border-color: #c8c8c8; }
-.tb-btn:active:not(:disabled) { background: #d0d0d0; }
-.tb-btn.active { background: #d6e4f9; border-color: #8cb4e0; color: #1a73e8; }
-.tb-btn:disabled { opacity: 0.35; cursor: default; }
-.tb-select :deep(.el-input__wrapper) { box-shadow: none; background: #fff; }
+/* ── Ribbon (Excel style) ── */
+.ribbon { border-bottom: 1px solid #c6c6c6; background: #f3f3f3; }
+.ribbon-row { display: flex; align-items: stretch; padding: 2px 4px; gap: 0; min-height: 62px; overflow-x: auto; }
+.ribbon-section { display: flex; flex-direction: column; align-items: center; padding: 2px 6px 0; min-width: 0; }
+.ribbon-section-buttons { display: flex; align-items: center; gap: 1px; min-height: 26px; }
+.ribbon-section-label { font-size: 10px; color: #888; margin-top: auto; padding: 1px 0; white-space: nowrap; user-select: none; }
+.rb-sep { width: 1px; background: #d0d0d0; margin: 4px 2px; align-self: stretch; }
+.rb-vsep { width: 1px; height: 18px; background: #d0d0d0; margin: 0 3px; }
+.rb-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 24px; border: 1px solid transparent; border-radius: 2px; background: transparent; cursor: pointer; font-size: 13px; color: #333; padding: 0 4px; transition: all 0.08s; white-space: nowrap; }
+.rb-btn:hover:not(:disabled) { background: #c8ddf0; border-color: #90b4d8; }
+.rb-btn:active:not(:disabled) { background: #b0ccea; }
+.rb-btn.active { background: #c8ddf0; border-color: #6da0cc; color: #1565c0; }
+.rb-btn:disabled { opacity: 0.35; cursor: default; }
+.rb-svg { width: 16px; height: 16px; display: inline-block; vertical-align: middle; }
+.rb-select :deep(.el-input__wrapper) { box-shadow: none !important; background: #fff; border: 1px solid #c0c0c0; border-radius: 2px; }
+.rb-select :deep(.el-input__wrapper:hover) { border-color: #90b4d8; }
 
-/* Toolbar icon placeholders */
-.icon-undo::before { content: '↩'; font-size: 14px; }
-.icon-redo::before { content: '↪'; font-size: 14px; }
-.icon-border::before { content: '⊞'; font-size: 14px; }
-.icon-row-add::before { content: '⬆≡'; font-size: 11px; }
-.icon-col-add::before { content: '⬌≡'; font-size: 11px; }
-.icon-row-del::before { content: '✕≡'; font-size: 11px; }
-.icon-col-del::before { content: '≡✕'; font-size: 11px; }
-.icon-freeze::before { content: '🔲'; font-size: 12px; }
-.icon-cond::before { content: '🎨'; font-size: 12px; }
-.icon-chart::before { content: '📊'; font-size: 12px; }
-.icon-search::before { content: '🔍'; font-size: 12px; }
+/* Color picker integration */
+.color-btn-wrap { position: relative; display: inline-flex; }
+.color-btn-wrap .hidden-picker { position: absolute; bottom: -2px; left: 0; opacity: 0; pointer-events: none; width: 1px; height: 1px; overflow: hidden; }
+.color-indicator { display: block; height: 3px; margin-top: 1px; border-radius: 1px; min-width: 14px; }
 
 /* ── Grid ── */
 .grid-area { flex: 1; overflow: auto; background: #fff; }
@@ -1394,7 +1611,7 @@ defineExpose({ getData })
 .corner-cell { background: linear-gradient(135deg, #f0f0f0, #e8e8e8); width: 46px; position: sticky; top: 0; left: 0; z-index: 5; border-right: 1px solid #c0c0c0; border-bottom: 1px solid #c0c0c0; }
 
 /* Column Headers */
-.col-hdr { background: linear-gradient(180deg, #fafafa, #eee); font-weight: 600; color: #555; text-align: center; position: sticky; top: 0; z-index: 4; cursor: pointer; user-select: none; height: 24px; font-size: 12px; border-bottom: 1px solid #c0c0c0; }
+.col-hdr { background: linear-gradient(180deg, #fafafa, #eee); font-weight: 600; color: #555; text-align: center; position: sticky; top: 0; z-index: 4; cursor: pointer; user-select: none; height: 24px; font-size: 12px; border-bottom: 1px solid #c0c0c0; overflow: visible; }
 .col-hdr:hover { background: linear-gradient(180deg, #e8e8e8, #ddd); }
 .col-hdr.sel { background: linear-gradient(180deg, #d6e4f9, #c2d8f0); color: #1a73e8; }
 .col-hdr.sorted { color: #1a73e8; }
@@ -1403,17 +1620,19 @@ defineExpose({ getData })
 .filter-dot { font-size: 8px; color: #e6a23c; margin-left: 2px; }
 .hdr-menu { cursor: pointer; font-size: 10px; margin-left: 1px; opacity: 0.4; }
 .hdr-menu:hover { opacity: 1; }
-.col-resize { position: absolute; right: -2px; top: 0; bottom: 0; width: 5px; cursor: col-resize; }
+.col-hdr-inner { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.col-resize { position: absolute; right: -2px; top: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 5; }
 .frozen-col-hdr { z-index: 6 !important; }
 
 /* Row Headers */
-.row-hdr { background: linear-gradient(90deg, #fafafa, #eee); text-align: center; color: #555; font-weight: 600; position: sticky; left: 0; z-index: 2; cursor: pointer; user-select: none; font-size: 12px; border-right: 1px solid #c0c0c0; position: relative; min-width: 46px; }
+.row-hdr { background: linear-gradient(90deg, #fafafa, #eee); text-align: center; color: #555; font-weight: 600; position: sticky; left: 0; z-index: 2; cursor: pointer; user-select: none; font-size: 12px; border-right: 1px solid #c0c0c0; min-width: 46px; overflow: visible; }
 .row-hdr:hover { background: linear-gradient(90deg, #e8e8e8, #ddd); }
 .row-hdr.sel { background: linear-gradient(90deg, #d6e4f9, #c2d8f0); color: #1a73e8; }
-.row-resize { position: absolute; bottom: -2px; left: 0; right: 0; height: 5px; cursor: row-resize; }
+.row-hdr-inner { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.row-resize { position: absolute; bottom: -2px; left: 0; right: 0; height: 5px; cursor: row-resize; z-index: 3; }
 
 /* ── Cells ── */
-.cell { padding: 0; cursor: cell; overflow: hidden; position: relative; height: 26px; }
+.cell { padding: 0; cursor: cell; overflow: visible; position: relative; height: 26px; }
 .cell.sel { background: #e8f0fe !important; }
 .cell.sel-head { outline: 2px solid #1a73e8; outline-offset: -1px; z-index: 1; background: #fff !important; }
 .cell.editing { padding: 0; }
