@@ -3,9 +3,29 @@
     <!-- 公式栏 -->
     <div class="formula-bar">
       <div class="cell-ref">{{ currentCellRef }}</div>
-      <div class="formula-fx">fx</div>
-      <input class="formula-input" v-model="formulaValue" @keydown.enter="applyFormula"
-        @keydown.escape="cancelFormula" placeholder="输入内容或公式..." />
+      <button class="formula-fx-btn" @click="toggleFxPanel" :class="{active: showFxPanel}">fx</button>
+      <div class="formula-input-wrap">
+        <input class="formula-input" v-model="formulaValue" @input="onFormulaInput" @keydown="onFormulaKeydown" @focus="onFormulaFocus"
+          @keydown.enter="applyFormula" @keydown.escape="cancelFormula" placeholder="输入内容或公式..." />
+        <!-- 函数自动补全 -->
+        <div v-if="showFxPanel" class="fx-panel">
+          <div class="fx-search">
+            <input v-model="fxSearch" placeholder="搜索函数..." @keydown="onFxSearchKey" ref="fxSearchRef" />
+          </div>
+          <div class="fx-list">
+            <div v-for="(fn, i) in filteredFunctions" :key="fn.name" class="fx-item" :class="{active: fxIndex === i}" @click="insertFunction(fn)" @mouseenter="fxIndex = i">
+              <span class="fx-name">{{ fn.name }}</span>
+              <span class="fx-desc">{{ fn.desc }}</span>
+            </div>
+            <div v-if="!filteredFunctions.length" class="fx-empty">没有匹配的函数</div>
+          </div>
+          <!-- 参数提示 -->
+          <div v-if="fxHint" class="fx-hint">
+            <strong>{{ fxHint.name }}</strong>({{ fxHint.args }})
+            <p>{{ fxHint.desc }}</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 工具栏（Excel Ribbon 两行布局） -->
@@ -805,7 +825,143 @@ function applyFormula() {
     for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) rows.value[r][c] = formulaValue.value
   emitChange()
 }
-function cancelFormula() { updateFormula() }
+function cancelFormula() { updateFormula(); showFxPanel.value = false }
+
+// ── 函数辅助面板 ──
+const showFxPanel = ref(false)
+const fxSearch = ref('')
+const fxIndex = ref(0)
+const fxSearchRef = ref<HTMLInputElement | null>(null)
+const fxHint = ref<{name:string;args:string;desc:string}|null>(null)
+
+interface FxDef { name: string; args: string; desc: string; template: string }
+const FX_LIST: FxDef[] = [
+  { name: 'SUM', args: 'num1, num2, ...', desc: '求和', template: 'SUM()' },
+  { name: 'AVERAGE', args: 'num1, num2, ...', desc: '求平均值', template: 'AVERAGE()' },
+  { name: 'COUNT', args: 'value1, value2, ...', desc: '计数（数字）', template: 'COUNT()' },
+  { name: 'COUNTA', args: 'value1, value2, ...', desc: '计数（非空）', template: 'COUNTA()' },
+  { name: 'MAX', args: 'num1, num2, ...', desc: '最大值', template: 'MAX()' },
+  { name: 'MIN', args: 'num1, num2, ...', desc: '最小值', template: 'MIN()' },
+  { name: 'IF', args: '条件, 真值, 假值', desc: '条件判断', template: 'IF(, , )' },
+  { name: 'AND', args: '条件1, 条件2, ...', desc: '所有为真', template: 'AND(, )' },
+  { name: 'OR', args: '条件1, 条件2, ...', desc: '任一为真', template: 'OR(, )' },
+  { name: 'NOT', args: '条件', desc: '取反', template: 'NOT()' },
+  { name: 'ROUND', args: '数值, 小数位', desc: '四舍五入', template: 'ROUND(, 2)' },
+  { name: 'CEILING', args: '数值', desc: '向上取整', template: 'CEILING()' },
+  { name: 'FLOOR', args: '数值', desc: '向下取整', template: 'FLOOR()' },
+  { name: 'ABS', args: '数值', desc: '绝对值', template: 'ABS()' },
+  { name: 'MOD', args: '被除数, 除数', desc: '取余', template: 'MOD(, )' },
+  { name: 'POWER', args: '底数, 指数', desc: '幂运算', template: 'POWER(, 2)' },
+  { name: 'SQRT', args: '数值', desc: '平方根', template: 'SQRT()' },
+  { name: 'CONCATENATE', args: '文本1, 文本2, ...', desc: '拼接文本', template: 'CONCATENATE(, )' },
+  { name: 'LEFT', args: '文本, 字符数', desc: '取左侧字符', template: 'LEFT(, 1)' },
+  { name: 'RIGHT', args: '文本, 字符数', desc: '取右侧字符', template: 'RIGHT(, 1)' },
+  { name: 'MID', args: '文本, 起始位, 长度', desc: '截取文本', template: 'MID(, 1, 1)' },
+  { name: 'LEN', args: '文本', desc: '文本长度', template: 'LEN()' },
+  { name: 'UPPER', args: '文本', desc: '转大写', template: 'UPPER()' },
+  { name: 'LOWER', args: '文本', desc: '转小写', template: 'LOWER()' },
+  { name: 'TRIM', args: '文本', desc: '去除空格', template: 'TRIM()' },
+  { name: 'SUBSTITUTE', args: '文本, 旧文本, 新文本', desc: '替换文本', template: 'SUBSTITUTE(, , )' },
+  { name: 'VALUE', args: '文本', desc: '文本转数字', template: 'VALUE()' },
+  { name: 'NOW', args: '', desc: '当前日期时间', template: 'NOW()' },
+  { name: 'TODAY', args: '', desc: '当前日期', template: 'TODAY()' },
+  { name: 'YEAR', args: '日期', desc: '提取年份', template: 'YEAR()' },
+  { name: 'MONTH', args: '日期', desc: '提取月份', template: 'MONTH()' },
+  { name: 'DAY', args: '日期', desc: '提取日', template: 'DAY()' },
+  { name: 'DATEDIF', args: '日期1, 日期2, 单位', desc: '日期差', template: 'DATEDIF(, , "D")' },
+  { name: 'VLOOKUP', args: '查找值, 范围, 列号', desc: '纵向查找', template: 'VLOOKUP(, , 2)' },
+  { name: 'INDEX', args: '范围, 行号', desc: '按位置取值', template: 'INDEX(, 1)' },
+  { name: 'MATCH', args: '查找值, 范围', desc: '查找位置', template: 'MATCH(, )' },
+  { name: 'RAND', args: '', desc: '随机数 0~1', template: 'RAND()' },
+  { name: 'RANDBETWEEN', args: '最小值, 最大值', desc: '随机整数', template: 'RANDBETWEEN(1, 100)' },
+  { name: 'ISBLANK', args: '单元格', desc: '是否为空', template: 'ISBLANK()' },
+  { name: 'ISNUMBER', args: '值', desc: '是否为数字', template: 'ISNUMBER()' },
+]
+
+const filteredFunctions = computed(() => {
+  const q = fxSearch.value.toUpperCase()
+  if (!q) return FX_LIST.slice(0, 15)
+  return FX_LIST.filter(f => f.name.includes(q) || f.desc.includes(fxSearch.value)).slice(0, 15)
+})
+
+function toggleFxPanel() {
+  showFxPanel.value = !showFxPanel.value
+  if (showFxPanel.value) {
+    fxSearch.value = ''
+    fxIndex.value = 0
+    if (!formulaValue.value.startsWith('=')) formulaValue.value = '='
+    nextTick(() => fxSearchRef.value?.focus())
+  }
+}
+
+function onFormulaInput() {
+  if (formulaValue.value.startsWith('=')) {
+    const after = formulaValue.value.slice(1)
+    // 提取正在输入的函数名
+    const m = after.match(/([A-Z]+)$/i)
+    if (m && m[1].length >= 1) {
+      fxSearch.value = m[1]
+      showFxPanel.value = true
+      fxIndex.value = 0
+    } else {
+      showFxPanel.value = false
+    }
+  } else {
+    showFxPanel.value = false
+  }
+}
+
+function onFormulaFocus() {
+  if (formulaValue.value.startsWith('=')) {
+    const after = formulaValue.value.slice(1)
+    const m = after.match(/([A-Z]+)$/i)
+    if (m) {
+      fxSearch.value = m[1]
+      showFxPanel.value = true
+      fxIndex.value = 0
+    }
+  }
+}
+
+function insertFunction(fn: FxDef) {
+  const val = formulaValue.value
+  if (!val.startsWith('=')) {
+    formulaValue.value = '=' + fn.template
+  } else {
+    // 替换末尾正在输入的函数名
+    const m = val.match(/([A-Z]+)$/i)
+    if (m) {
+      formulaValue.value = val.slice(0, val.length - m[1].length) + fn.template
+    } else {
+      formulaValue.value = val + fn.template
+    }
+  }
+  showFxPanel.value = false
+  fxHint.value = fn
+}
+
+function onFormulaKeydown(e: KeyboardEvent) {
+  if (!showFxPanel.value) return
+  if (e.key === 'ArrowDown') { e.preventDefault(); fxIndex.value = Math.min(fxIndex.value + 1, filteredFunctions.value.length - 1); updateFxHint() }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); fxIndex.value = Math.max(fxIndex.value - 1, 0); updateFxHint() }
+  else if (e.key === 'Tab' || e.key === 'Enter') {
+    if (filteredFunctions.value.length) { e.preventDefault(); insertFunction(filteredFunctions.value[fxIndex.value]) }
+  }
+  else if (e.key === 'Escape') { showFxPanel.value = false }
+}
+
+function onFxSearchKey(e: KeyboardEvent) {
+  if (e.key === 'ArrowDown') { e.preventDefault(); fxIndex.value = Math.min(fxIndex.value + 1, filteredFunctions.value.length - 1); updateFxHint() }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); fxIndex.value = Math.max(fxIndex.value - 1, 0); updateFxHint() }
+  else if (e.key === 'Enter') { if (filteredFunctions.value.length) insertFunction(filteredFunctions.value[fxIndex.value]) }
+  else if (e.key === 'Escape') { showFxPanel.value = false }
+}
+
+function updateFxHint() {
+  const fn = filteredFunctions.value[fxIndex.value]
+  fxHint.value = fn || null
+}
+
 function handleEditKey(e: KeyboardEvent) {
   if (e.key === 'ArrowUp') { e.preventDefault(); finishEdit(); if (selection.value && selection.value.startRow > 0) selectCell(selection.value.startRow - 1, selection.value.startCol) }
   if (e.key === 'ArrowDown') { e.preventDefault(); finishEdit(); if (selection.value) selectCell(Math.min(selection.value.startRow + 1, rows.value.length - 1), selection.value.startCol) }
@@ -1575,10 +1731,42 @@ defineExpose({ getData })
 .sheet-container { display: flex; flex-direction: column; height: 100%; background: #fff; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; color: #333; outline: none; }
 
 /* ── Formula Bar ── */
-.formula-bar { display: flex; align-items: center; height: 28px; border-bottom: 1px solid #d6d6d6; background: #f3f3f3; }
-.cell-ref { width: 72px; text-align: center; font-size: 12px; color: #444; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; justify-content: center; background: #fff; font-weight: 500; }
-.formula-fx { padding: 0 8px; color: #555; font-style: italic; font-weight: 600; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; background: #f3f3f3; font-size: 12px; }
-.formula-input { flex: 1; border: none; outline: none; padding: 0 8px; height: 100%; font-size: 13px; background: #fff; }
+.formula-bar { display: flex; align-items: center; height: 28px; border-bottom: 1px solid #d6d6d6; background: #f3f3f3; position: relative; }
+.cell-ref { width: 72px; text-align: center; font-size: 12px; color: #444; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; justify-content: center; background: #fff; font-weight: 500; flex-shrink: 0; }
+.formula-fx-btn { padding: 0 8px; color: #555; font-style: italic; font-weight: 600; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; background: #f3f3f3; font-size: 12px; cursor: pointer; border: none; }
+.formula-fx-btn:hover { background: #e8e8e8; }
+.formula-fx-btn.active { background: #e0ecf7; color: #409eff; }
+.formula-input-wrap { flex: 1; position: relative; height: 100%; }
+.formula-input { width: 100%; border: none; outline: none; padding: 0 8px; height: 100%; font-size: 13px; background: #fff; }
+
+/* 函数面板 */
+.fx-panel {
+  position: absolute; top: 100%; left: 0; z-index: 200;
+  background: #fff; border: 1px solid #d6d6d6; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12); width: 360px;
+  display: flex; flex-direction: column; max-height: 320px;
+}
+.fx-search { padding: 8px; border-bottom: 1px solid #eee; }
+.fx-search input {
+  width: 100%; border: 1px solid #ddd; border-radius: 4px; padding: 5px 8px;
+  font-size: 13px; outline: none;
+}
+.fx-search input:focus { border-color: #409eff; }
+.fx-list { overflow-y: auto; max-height: 180px; }
+.fx-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; cursor: pointer; transition: background 0.1s;
+}
+.fx-item:hover, .fx-item.active { background: #ecf5ff; }
+.fx-name { font-weight: 600; font-size: 13px; color: #409eff; min-width: 100px; }
+.fx-desc { font-size: 12px; color: #999; }
+.fx-empty { padding: 16px; text-align: center; color: #c0c4cc; font-size: 13px; }
+.fx-hint {
+  padding: 8px 12px; background: #f5f7fa; border-top: 1px solid #eee;
+  font-size: 12px; color: #666; border-radius: 0 0 8px 8px;
+}
+.fx-hint strong { color: #409eff; }
+.fx-hint p { margin: 4px 0 0; color: #999; }
 
 /* ── Ribbon (Excel style) ── */
 .ribbon { border-bottom: 1px solid #c6c6c6; background: #f3f3f3; }
