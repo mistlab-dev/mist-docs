@@ -1006,10 +1006,15 @@ function onCellMouseEnter(r: number, c: number, _e: MouseEvent) {
 
 function stopDrag() {
   isDragging = false
-  // 公式范围模式：补上后缀（如 ) ）
+  // 公式范围模式：补上后缀（如 ) ）并退出
   if (formulaRangeMode && formulaInsertPos.end) {
     const val = formulaValue.value
     if (!val.endsWith(formulaInsertPos.end)) formulaValue.value = val + formulaInsertPos.end
+  }
+  if (formulaRangeMode) {
+    formulaRangeMode = false
+    // 自动应用公式
+    applyFormula()
   }
 }
 function updateFormula() { if (!selection.value) return; formulaValue.value = rows.value[selection.value.startRow]?.[selection.value.startCol] || '' }
