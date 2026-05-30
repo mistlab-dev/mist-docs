@@ -783,13 +783,14 @@ function isSelectionHead(r: number, c: number): boolean { return selection.value
 function isRowSelected(ri: number): boolean { if (!selection.value) return false; return ri >= Math.min(selection.value.startRow, selection.value.endRow) && ri <= Math.max(selection.value.startRow, selection.value.endRow) }
 function isColSelected(ci: number): boolean { if (!selection.value) return false; return ci >= Math.min(selection.value.startCol, selection.value.endCol) && ci <= Math.max(selection.value.startCol, selection.value.endCol) }
 function selectCell(r: number, c: number, e?: MouseEvent) {
+  if (editingCell.value) finishEdit()
   if (e?.shiftKey && selection.value) { selection.value.endRow = r; selection.value.endCol = c }
   else { selection.value = { startRow: r, startCol: c, endRow: r, endCol: c } }
   ctxRow = r; ctxCol = c; editingCell.value = null; updateFormula(); updateToolbarState()
   containerRef.value?.focus()
 }
-function selectRow(ri: number) { selection.value = { startRow: ri, startCol: 0, endRow: ri, endCol: colCount.value - 1 }; updateFormula() }
-function selectCol(ci: number) { selection.value = { startRow: 0, startCol: ci, endRow: rows.value.length - 1, endCol: ci }; updateFormula() }
+function selectRow(ri: number) { if (editingCell.value) finishEdit(); selection.value = { startRow: ri, startCol: 0, endRow: ri, endCol: colCount.value - 1 }; updateFormula() }
+function selectCol(ci: number) { if (editingCell.value) finishEdit(); selection.value = { startRow: 0, startCol: ci, endRow: rows.value.length - 1, endCol: ci }; updateFormula() }
 function updateFormula() { if (!selection.value) return; formulaValue.value = rows.value[selection.value.startRow]?.[selection.value.startCol] || '' }
 function updateToolbarState() {
   if (!selection.value) return
@@ -819,6 +820,7 @@ function finishEdit() {
 }
 function cancelEdit() { editingCell.value = null; updateFormula() }
 function applyFormula() {
+  if (editingCell.value) { editingCell.value = null } // 结束编辑
   if (!selection.value) return; pushUndo()
   const { startRow, startCol, endRow, endCol } = selection.value
   for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++)
