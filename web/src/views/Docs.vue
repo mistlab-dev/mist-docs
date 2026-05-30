@@ -1012,5 +1012,17 @@ async function filterByTag(tagId: string) {
   .content-header { flex-wrap: wrap; gap: 8px; }
   .doc-grid { grid-template-columns: 1fr; }
   .card-check { opacity: 1; }
+  .card-preview { display: none; }
+  .card-body { padding: 12px 14px; }
+  .card-title { font-size: 15px; }
+  .card-time { font-size: 13px; color: #999; margin-top: 2px; }
+
+  .doc-table { border-radius: 0; border-left: none; border-right: none; }
+  .table-row { padding: 0 10px; height: 48px; }
+  .col-type, .col-version { display: none; }
+  .col-time { width: auto; font-size: 12px; }
+  .title-icon { width: 24px; height: 24px; }
+  .title-icon svg { width: 14px; height: 14px; }
+  .sort-select { width: 100px; }
 }
 </style>
