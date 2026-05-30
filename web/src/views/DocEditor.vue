@@ -999,7 +999,7 @@ function confirmCodeLang() {
 // 保存
 function scheduleAutoSave() {
   clearTimeout(autoSaveTimer)
-  autoSaveTimer = setTimeout(doSave, 3000)
+  autoSaveTimer = setTimeout(doSave, 1500)
 }
 
 async function doSave() {
@@ -1014,8 +1014,6 @@ async function doSave() {
   saveStatus.value = 'saving'
   try {
     await http.put(`/docs/documents/${docId}/content`, { content })
-    await loadDoc()
-    await loadVersions()
     saveStatus.value = 'saved'
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => { saveStatus.value = '' }, 3000)
