@@ -318,9 +318,9 @@
                 :colspan="getColspan(ri, c - 1)"
                 :rowspan="getRowspan(ri, c - 1)"
                 v-show="!isCellHidden(ri, c - 1)"
-                @click="selectCell(ri, c - 1, $event)"
+                @mousedown.prevent="onCellMouseDown(ri, c - 1, $event)"
+                @mouseenter="onCellMouseEnter(ri, c - 1, $event); showCellComment(ri, c - 1, $event)"
                 @dblclick="startEdit(ri, c - 1)"
-                @mouseenter="showCellComment(ri, c - 1, $event)"
                 @mouseleave="hideCellComment()"
               >
                 <template v-if="editingCell?.row === ri && editingCell?.col === c - 1">
@@ -791,6 +791,30 @@ function selectCell(r: number, c: number, e?: MouseEvent) {
 }
 function selectRow(ri: number) { if (editingCell.value) finishEdit(); selection.value = { startRow: ri, startCol: 0, endRow: ri, endCol: colCount.value - 1 }; updateFormula() }
 function selectCol(ci: number) { if (editingCell.value) finishEdit(); selection.value = { startRow: 0, startCol: ci, endRow: rows.value.length - 1, endCol: ci }; updateFormula() }
+
+// ── 拖选逻辑 ──
+let isDragging = false
+
+function onCellMouseDown(r: number, c: number, e: MouseEvent) {
+  if (e.button !== 0) return // 只处理左键
+  if (e.shiftKey && selection.value) {
+    // Shift+点击：扩展选区
+    selection.value.endRow = r
+    selection.value.endCol = c
+  } else {
+    selectCell(r, c, e)
+  }
+  isDragging = true
+  document.addEventListener('mouseup', stopDrag, { once: true })
+}
+
+function onCellMouseEnter(r: number, c: number, _e: MouseEvent) {
+  if (!isDragging || !selection.value) return
+  selection.value.endRow = r
+  selection.value.endCol = c
+}
+
+function stopDrag() { isDragging = false }
 function updateFormula() { if (!selection.value) return; formulaValue.value = rows.value[selection.value.startRow]?.[selection.value.startCol] || '' }
 function updateToolbarState() {
   if (!selection.value) return
