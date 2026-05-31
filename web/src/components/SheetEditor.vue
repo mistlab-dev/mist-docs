@@ -1224,8 +1224,12 @@ function insertFunction(fn: FxDef) {
     const m = val.match(/([A-Z]+)$/i)
     if (m) {
       formulaValue.value = val.slice(0, val.length - m[1].length) + fn.template
+    } else if (val === '=') {
+      // 光标在 = 后面，直接插入模板
+      formulaValue.value = '=' + fn.template
     } else {
-      formulaValue.value = val + fn.template
+      // 已有完整公式（如 =SUM()），替换整个公式
+      formulaValue.value = '=' + fn.template
     }
   }
   showFxPanel.value = false
@@ -1720,6 +1724,7 @@ function evalFormula(expr: string): string {
     case 'SUM': return String(numArray(args.join(',')).reduce((a, b) => a + b, 0))
     case 'AVG': case 'AVERAGE': { const arr = numArray(args.join(',')); return arr.length ? String(arr.reduce((a, b) => a + b, 0) / arr.length) : '0' }
     case 'COUNT': return String(numArray(args.join(','), true).length)
+    case 'COUNTA': return String(numArray(args.join(','), false, false, true).length)
     case 'MAX': { const arr = numArray(args.join(',')); return arr.length ? String(Math.max(...arr)) : '0' }
     case 'MIN': { const arr = numArray(args.join(',')); return arr.length ? String(Math.min(...arr)) : '0' }
     case 'IF': return parsed[0] ? String(parsed[1] ?? '') : String(parsed[2] ?? '')
@@ -1781,11 +1786,11 @@ function evalArg(a: string): any {
     const rng = ref.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
     if (rng) {
       const c1 = colIndex(rng[1]), r1 = parseInt(rng[2]) - 1, c2 = colIndex(rng[3]), r2 = parseInt(rng[4]) - 1
-      const res: any[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = s.rows[r]?.[c]; if (v !== undefined && v !== '') { const n = parseFloat(v); res.push(isNaN(n) ? v : n) } else res.push('') }
+      const res: any[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = resolveCrossCellRaw(si, r, c); if (v !== '') { const n = parseFloat(v); res.push(isNaN(n) ? v : n) } else res.push('') }
       return res
     }
     const cr = ref.match(/^([A-Z]+)(\d+)$/)
-    if (cr) { const v = s.rows[parseInt(cr[2]) - 1]?.[colIndex(cr[1])]; if (v === undefined || v === '') return ''; const n = parseFloat(v); return isNaN(n) ? v : n }
+    if (cr) { const v = resolveCrossCellRaw(si, parseInt(cr[2]) - 1, colIndex(cr[1])); if (v === '') return ''; const n = parseFloat(v); return isNaN(n) ? v : n }
     return '#REF!'
   }
   const cr = a.match(/^([A-Z]+)(\d+)$/); if (cr) return getCellVal(cr[1], parseInt(cr[2]))
@@ -1794,12 +1799,32 @@ function evalArg(a: string): any {
   if (a.toUpperCase() === 'TRUE') return true; if (a.toUpperCase() === 'FALSE') return false
   return a
 }
-function getCellVal(col: string, row: number): any { const c = colIndex(col), r = row - 1; const v = rows.value[r]?.[c]; if (v === undefined || v === '') return ''; const n = parseFloat(v); return isNaN(n) ? v : n }
-function getCellValByRC(r: number, c: number): any { const v = rows.value[r]?.[c]; if (v === undefined || v === '') return ''; const n = parseFloat(v); return isNaN(n) ? v : n }
-function getRange(rangeStr: string): any[] { const m = rangeStr.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/); if (!m) return []; const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: any[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) res.push(rows.value[r]?.[c] || ''); return res }
+const _resolving = new Set<string>()
+function resolveCellRaw(r: number, c: number): string {
+  const key = `${r},${c}`
+  const v = rows.value[r]?.[c]
+  if (v === undefined || v === '') return ''
+  if (v.startsWith('=')) {
+    if (_resolving.has(key)) return '#REF!'
+    _resolving.add(key)
+    const result = computeFormula(v)
+    _resolving.delete(key)
+    return result
+  }
+  return v
+}
+function resolveCrossCellRaw(sheetIdx: number, r: number, c: number): string {
+  const v = sheets.value[sheetIdx].rows[r]?.[c]
+  if (v === undefined || v === '') return ''
+  if (v.startsWith('=')) return computeFormula(v)
+  return v
+}
+function getCellVal(col: string, row: number): any { const c = colIndex(col), r = row - 1; const v = resolveCellRaw(r, c); if (v === '') return ''; const n = parseFloat(v); return isNaN(n) ? v : n }
+function getCellValByRC(r: number, c: number): any { const v = resolveCellRaw(r, c); if (v === '') return ''; const n = parseFloat(v); return isNaN(n) ? v : n }
+function getRange(rangeStr: string): any[] { const m = rangeStr.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/); if (!m) return []; const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: any[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) res.push(resolveCellRaw(r, c)); return res }
 interface RC { r: number; c: number }
 function getRangeData(arg: string): RC[] { const m = arg.trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/); if (!m) return []; const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: RC[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) res.push({ r, c }); return res }
-function numArray(arg: string, countNonNum = false, raw = false): number[] {
+function numArray(arg: string, countNonNum = false, raw = false, countAll = false): number[] {
   const crossRange = arg.trim().match(/^(\w+)!([A-Z]+\d+:[A-Z]+\d+)$/i)
   if (crossRange) {
     const si = sheets.value.findIndex(s => s.name.toLowerCase() === crossRange[1].toLowerCase())
@@ -1809,20 +1834,20 @@ function numArray(arg: string, countNonNum = false, raw = false): number[] {
     if (!mr) return []
     const c1 = colIndex(mr[1]), r1 = parseInt(mr[2]) - 1, c2 = colIndex(mr[3]), r2 = parseInt(mr[4]) - 1
     const res: number[] = []
-    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = s.rows[r]?.[c]; if (countNonNum) { if (v !== undefined && v !== '') res.push(raw ? parseFloat(v) || 0 : 1) } else { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } }
+    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = resolveCrossCellRaw(si, r, c); if (countAll) { if (v !== '') res.push(raw ? parseFloat(v) || 0 : 1) } else if (countNonNum) { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } else { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } }
     return res
   }
   const m = arg.trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
-  if (m) { const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: number[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = rows.value[r]?.[c]; if (countNonNum) { if (v !== undefined && v !== '') res.push(raw ? parseFloat(v) || 0 : 1) } else { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } }; return res }
+  if (m) { const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: number[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = resolveCellRaw(r, c); if (countAll) { if (v !== '') res.push(raw ? parseFloat(v) || 0 : 1) } else if (countNonNum) { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } else { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } }; return res }
   return arg.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
 }
 function strArray(arg: string, keepAll = false): string[] {
   const m = arg.trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
-  if (m) { const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: string[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = rows.value[r]?.[c]; if (keepAll || (v !== undefined && v !== '')) res.push(v || '') }; return res }
+  if (m) { const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: string[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = resolveCellRaw(r, c); if (keepAll || v !== '') res.push(v) }; return res }
   return arg.split(',').map(v => v.trim())
 }
 function splitArgs(s: string): string[] { const args: string[] = []; let depth = 0, cur = '', inStr = false; for (let i = 0; i < s.length; i++) { const ch = s[i]; if (ch === '"' && (i === 0 || s[i - 1] !== '\\')) inStr = !inStr; if (!inStr) { if (ch === '(') depth++; if (ch === ')') depth-- } if (ch === ',' && depth === 0 && !inStr) { args.push(cur); cur = '' } else cur += ch }; if (cur.trim()) args.push(cur); return args }
-function safeCalc(expr: string): number { let safe = expr.replace(/([A-Z]+)(\d+)/gi, (_, col, row) => { const v = getCellVal(col.toUpperCase(), parseInt(row)); return isNaN(v) ? '0' : String(v) }); safe = safe.replace(/[^0-9+\-*/.() ]/g, ''); try { return Function('"use strict"; return (' + safe + ')')() } catch { return NaN } }
+function safeCalc(expr: string): number { let safe = expr.replace(/([A-Z]+)(\d+)/gi, (_, col, row) => { const v = getCellVal(col.toUpperCase(), parseInt(row)); return (typeof v === 'number') ? String(v) : (isNaN(Number(v)) ? '0' : String(v)) }); safe = safe.replace(/[^0-9+\-*/.() <>!=&]/g, ''); try { return Function('"use strict"; return (' + safe + ')')() } catch { return NaN } }
 
 // Chart
 function drawChart() { const canvas = chartCanvas.value; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; ctx.clearRect(0, 0, canvas.width, canvas.height); const data = getChartData(); if (!data.length) return; const t = chartType.value; if (t === 'bar') drawBarChart(ctx, data, canvas); else if (t === 'line') drawLineChart(ctx, data, canvas); else if (t === 'pie') drawPieChart(ctx, data, canvas); else if (t === 'scatter') drawScatterChart(ctx, data, canvas); else if (t === 'area') drawAreaChart(ctx, data, canvas) }

@@ -651,8 +651,8 @@ const stats = ref<any>(null)
 
 async function loadAndShowStats() {
   try {
-    const { data } = await http.get(`/docs/documents/${docId}/stats`)
-    stats.value = data
+    const res = await http.get(`/docs/documents/${docId}/stats`)
+    stats.value = res.data?.data || res.data
     showStats.value = true
   } catch {}
 }
