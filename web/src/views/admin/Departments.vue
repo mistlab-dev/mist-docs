@@ -1,55 +1,105 @@
 <template>
   <div class="admin-page">
     <div class="page-header">
-      <h2 class="page-title">部门管理</h2>
+      <div class="header-left">
+        <h2 class="page-title">部门管理</h2>
+        <span class="header-count">共 {{ flatDepts.length }} 个部门</span>
+      </div>
       <div class="header-actions">
-        <el-input v-model="searchKey" placeholder="搜索部门..." size="small" style="width:180px" clearable>
+        <el-input v-model="searchKey" placeholder="搜索部门..." size="default" class="search-input" clearable>
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-button size="small" @click="showImport = true">
-          <el-icon><Upload /></el-icon> 批量导入
+        <el-button size="default" @click="showImport = true">
+          <el-icon><Upload /></el-icon>
         </el-button>
-        <el-button type="primary" size="small" @click="openForm()">
-          <el-icon><Plus /></el-icon> 新建部门
+        <el-button type="primary" size="default" @click="openForm()">
+          <el-icon><Plus /></el-icon> 新建
         </el-button>
       </div>
     </div>
 
     <div class="table-card">
-      <el-table :data="flatDepts" row-key="id" :tree-props="{ children: 'children', hasChildren: 'hasChildren' }" stripe>
-        <el-table-column prop="name" label="部门名称" min-width="200">
+      <el-table
+        :data="filteredDepts"
+        row-key="id"
+        :tree-props="{ children: 'children' }"
+        :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
+        :cell-style="{ fontSize: '14px' }"
+        default-expand-all
+      >
+        <el-table-column label="部门名称" min-width="280">
           <template #default="{ row }">
             <div class="dept-name">
-              <svg class="dept-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h4a1 1 0 01.8.4L10.5 6H17a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>
-              {{ row.name }}
+              <div class="dept-icon" :style="{ background: deptColor(row.id) }">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h4a1 1 0 01.8.4L10.5 6H17a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>
+              </div>
+              <span class="dept-label">{{ row.name }}</span>
+              <el-tag v-if="row.children?.length" size="small" type="info" effect="plain" round>
+                {{ row.children.length }}
+              </el-tag>
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column label="状态" width="120" align="center">
           <template #default="{ row }">
-            <span class="status-dot" :class="row.status === 1 ? 'active' : 'disabled'" />
-            <span style="margin-left:6px;font-size:13px;color:#666">{{ row.status === 1 ? '正常' : '禁用' }}</span>
+            <el-switch
+              :model-value="row.status === 1"
+              size="small"
+              inline-prompt
+              active-text="启"
+              inactive-text="停"
+              @change="toggleStatus(row)"
+            />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140">
+        <el-table-column label="排序" width="80" align="center">
           <template #default="{ row }">
-            <el-button link size="small" @click="openForm(row)">编辑</el-button>
-            <el-button link type="danger" size="small" @click="del(row)">删除</el-button>
+            <span class="sort-text">{{ row.sort_order }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="80" fixed="right" align="center">
+          <template #default="{ row }">
+            <el-dropdown trigger="click" @command="(cmd: string) => handleCmd(cmd, row)">
+              <el-button link size="small" class="more-btn">
+                <el-icon><MoreFilled /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit">
+                    <el-icon><Edit /></el-icon> 编辑
+                  </el-dropdown-item>
+                  <el-dropdown-item command="addSub">
+                    <el-icon><Plus /></el-icon> 添加子部门
+                  </el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>
+                    <span style="color:#f56c6c"><el-icon><Delete /></el-icon> 删除</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <el-dialog v-model="showForm" :title="editing ? '编辑部门' : '新建部门'" width="450">
-      <el-form :model="form" label-width="80px">
+    <el-dialog v-model="showForm" :title="editing ? '编辑部门' : '新建部门'" width="440" destroy-on-close>
+      <el-form :model="form" label-position="top" class="dept-form">
         <el-form-item label="名称">
-          <el-input v-model="form.name" />
+          <el-input v-model="form.name" placeholder="部门名称" />
         </el-form-item>
         <el-form-item label="上级部门">
-          <el-tree-select v-model="form.parent_id" :data="deptTree" check-strictly :props="{ label: 'name', value: 'id' }" clearable placeholder="无（顶级）" />
+          <el-tree-select
+            v-model="form.parent_id"
+            :data="deptTree"
+            check-strictly
+            :props="{ label: 'name', value: 'id' }"
+            clearable
+            placeholder="无（顶级部门）"
+            class="full-width"
+          />
         </el-form-item>
         <el-form-item label="排序">
-          <el-input-number v-model="form.sort_order" :min="0" />
+          <el-input-number v-model="form.sort_order" :min="0" style="width: 100%" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -70,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '@/utils/http'
 
@@ -82,6 +132,42 @@ const editing = ref<any>(null)
 const form = ref<any>({ name: '', parent_id: '', sort_order: 0 })
 const csvData = ref('')
 const searchKey = ref('')
+
+const filteredDepts = computed(() => {
+  if (!searchKey.value) return flatDepts
+  const k = searchKey.value.toLowerCase()
+  function filterTree(nodes: any[]): any[] {
+    return nodes.reduce((acc: any[], node: any) => {
+      const match = node.name?.toLowerCase().includes(k)
+      const filteredChildren = filterTree(node.children || [])
+      if (match || filteredChildren.length) {
+        acc.push({ ...node, children: filteredChildren })
+      }
+      return acc
+    }, [])
+  }
+  return filterTree(flatDepts)
+})
+
+function deptColor(id: string) {
+  const colors = ['linear-gradient(135deg,#667eea,#764ba2)', 'linear-gradient(135deg,#36b37e,#00875a)', 'linear-gradient(135deg,#ff991f,#ff5630)', 'linear-gradient(135deg,#00b8d9,#0065ff)', 'linear-gradient(135deg,#eb5286,#ff5630)']
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash)
+  return colors[Math.abs(hash) % colors.length]
+}
+
+function handleCmd(cmd: string, row: any) {
+  if (cmd === 'edit') openForm(row)
+  else if (cmd === 'addSub') openForm(null, row.id)
+  else if (cmd === 'delete') del(row)
+}
+
+async function toggleStatus(row: any) {
+  const newStatus = row.status === 1 ? 0 : 1
+  await http.put(`/departments/${row.id}`, { ...row, status: newStatus })
+  row.status = newStatus
+  ElMessage.success(newStatus === 1 ? '已启用' : '已禁用')
+}
 
 async function load() {
   const { data } = await http.get('/departments')
@@ -100,9 +186,9 @@ function buildTree(items: any[]): any[] {
   return roots
 }
 
-function openForm(row?: any) {
+function openForm(row?: any, parentId?: string) {
   editing.value = row || null
-  form.value = row ? { ...row } : { name: '', parent_id: '', sort_order: 0 }
+  form.value = row ? { ...row } : { name: '', parent_id: parentId || '', sort_order: 0 }
   showForm.value = true
 }
 
@@ -118,7 +204,7 @@ async function submit() {
 }
 
 async function del(row: any) {
-  await ElMessageBox.confirm(`删除部门「${row.name}」？`, '确认', { type: 'warning' })
+  await ElMessageBox.confirm(`删除部门「${row.name}」？子部门也会被删除。`, '确认', { type: 'warning' })
   await http.delete(`/departments/${row.id}`)
   ElMessage.success('已删除')
   load()
@@ -136,23 +222,58 @@ onMounted(load)
 </script>
 
 <style scoped>
-.admin-page { height: 100%; display: flex; flex-direction: column; }
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
-.page-title { font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0; }
-.header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.table-card { background: #fff; border-radius: 10px; border: 1px solid #e8ecf0; flex: 1; overflow: auto; padding: 4px; }
+.admin-page { height: 100%; display: flex; flex-direction: column; padding: 20px; background: #f5f7fa; }
 
-.dept-name { display: flex; align-items: center; gap: 6px; }
-.dept-icon { width: 16px; height: 16px; color: #e6a23c; flex-shrink: 0; }
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px; flex-wrap: wrap; gap: 16px;
+  padding-bottom: 16px; border-bottom: 1px solid #e8ecf0;
+}
+.header-left { display: flex; align-items: baseline; gap: 16px; }
+.page-title { font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0; letter-spacing: -0.02em; }
+.header-count { font-size: 14px; color: #909399; }
 
-.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
-.status-dot.active { background: #67c23a; box-shadow: 0 0 0 2px rgba(103,194,58,0.2); }
-.status-dot.disabled { background: #f56c6c; box-shadow: 0 0 0 2px rgba(245,108,108,0.2); }
+.header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.search-input { width: 220px; }
+
+.table-card {
+  background: #fff; border-radius: 16px;
+  border: none; flex: 1; overflow: auto;
+  padding: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+}
+.table-card :deep(.el-table__row) { height: 56px; }
+.table-card :deep(.el-table__cell) { padding: 12px 0; }
+.table-card :deep(.el-table__header-cell) { padding: 14px 0; background: #fafbfc !important; }
+
+.dept-name { display: flex; align-items: center; gap: 10px; }
+.dept-icon {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.dept-icon svg { width: 16px; height: 16px; color: #fff; }
+.dept-label { font-weight: 500; color: #1a1a2e; font-size: 14px; }
+
+.sort-text { font-size: 13px; color: #909399; }
+
+.more-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: #909399; transition: all 0.2s ease;
+}
+.more-btn:hover { color: #409eff; background: #f0f5ff; }
+
+.dept-form :deep(.el-form-item__label) { font-weight: 500; color: #606266; }
+.dept-form :deep(.el-input__wrapper) { border-radius: 8px; }
+.full-width { width: 100%; }
+
+:deep(.el-dialog) { border-radius: 16px; }
 
 @media (max-width: 768px) {
-  .page-header { flex-direction: column; align-items: stretch; }
+  .admin-page { padding: 12px; }
+  .page-header { flex-direction: column; align-items: stretch; padding-bottom: 12px; }
   .header-actions { width: 100%; }
-  .header-actions .el-input { width: 100% !important; }
-  .header-actions .el-button span { display: none; }
+  .search-input { width: 100% !important; }
 }
 </style>

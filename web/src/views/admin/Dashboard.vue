@@ -1,120 +1,72 @@
 <template>
   <div class="admin-page">
     <div class="page-header">
-      <h2 class="page-title">系统概览</h2>
+      <div class="header-left">
+        <h2 class="page-title">系统概览</h2>
+        <span class="header-sub">MistDocs 运行状态</span>
+      </div>
     </div>
 
-    <!-- 统计卡片 -->
-    <el-row :gutter="16" class="stat-cards">
-      <el-col :span="6" :xs="12">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background:#409eff"><el-icon :size="24"><User /></el-icon></div>
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.users?.total || 0 }}</div>
-            <div class="stat-label">用户</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6" :xs="12">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background:#67c23a"><el-icon :size="24"><Document /></el-icon></div>
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.documents?.total || 0 }}</div>
-            <div class="stat-label">文档</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6" :xs="12">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background:#e6a23c"><el-icon :size="24"><Grid /></el-icon></div>
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.documents?.sheets || 0 }}</div>
-            <div class="stat-label">表格</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6" :xs="12">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-icon" style="background:#909399"><el-icon :size="24"><Delete /></el-icon></div>
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.trash || 0 }}</div>
-            <div class="stat-label">回收站</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <!-- 主统计卡片 -->
+    <div class="stat-grid">
+      <div class="stat-card" v-for="s in mainStats" :key="s.label">
+        <div class="stat-icon" :style="{ background: s.gradient }">
+          <el-icon :size="22"><component :is="s.icon" /></el-icon>
+        </div>
+        <div class="stat-body">
+          <div class="stat-value">{{ s.value }}</div>
+          <div class="stat-label">{{ s.label }}</div>
+        </div>
+      </div>
+    </div>
 
-    <el-row :gutter="16" style="margin-top:16px">
-      <el-col :span="6" :xs="12">
-        <el-card shadow="hover" class="stat-card small">
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.departments || 0 }}</div>
-            <div class="stat-label">部门</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6" :xs="12">
-        <el-card shadow="hover" class="stat-card small">
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.shares || 0 }}</div>
-            <div class="stat-label">分享链接</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6" :xs="12">
-        <el-card shadow="hover" class="stat-card small">
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.comments?.total || 0 }}</div>
-            <div class="stat-label">评论</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6" :xs="12">
-        <el-card shadow="hover" class="stat-card small">
-          <div class="stat-info">
-            <div class="stat-value">{{ stats.week_new || 0 }}</div>
-            <div class="stat-label">本周新增</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <!-- 次要统计 -->
+    <div class="stat-grid secondary">
+      <div class="stat-card small" v-for="s in subStats" :key="s.label">
+        <div class="stat-body">
+          <div class="stat-value sm">{{ s.value }}</div>
+          <div class="stat-label">{{ s.label }}</div>
+        </div>
+      </div>
+    </div>
 
-    <el-row :gutter="16" style="margin-top:16px">
+    <div class="charts-row">
       <!-- 每日新增图表 -->
-      <el-col :span="12" :xs="24">
-        <el-card>
-          <template #header>近 7 天新增文档</template>
+      <div class="chart-panel">
+        <div class="panel-header">近 7 天新增文档</div>
+        <div class="chart-body">
           <div class="chart-container">
             <div v-for="d in stats.daily_new" :key="d.date" class="chart-bar-wrapper">
-              <div class="chart-bar" :style="{ height: barHeight(d.count) + 'px' }">
-                <span class="chart-count">{{ d.count }}</span>
-              </div>
+              <span class="chart-count">{{ d.count }}</span>
+              <div class="chart-bar" :style="{ height: barHeight(d.count) + 'px' }" />
               <div class="chart-label">{{ d.date.slice(5) }}</div>
             </div>
-            <div v-if="!stats.daily_new?.length" class="no-data">暂无数据</div>
           </div>
-        </el-card>
-      </el-col>
+          <div v-if="!stats.daily_new?.length" class="no-data">暂无数据</div>
+        </div>
+      </div>
 
       <!-- 最近活动 -->
-      <el-col :span="12" :xs="24">
-        <el-card>
-          <template #header>最近活动</template>
-          <div class="activity-list">
-            <div v-for="a in stats.recent_activities" :key="a.created_at" class="activity-item">
-              <el-tag size="small" :type="activityType(a.action)">{{ a.action }}</el-tag>
-              <span class="activity-text">
+      <div class="chart-panel">
+        <div class="panel-header">最近活动</div>
+        <div class="activity-list">
+          <div v-for="a in stats.recent_activities" :key="a.created_at" class="activity-item">
+            <div class="activity-avatar" :style="{ background: avatarColor(a.user_name) }">
+              {{ a.user_name?.charAt(0) || '?' }}
+            </div>
+            <div class="activity-content">
+              <div class="activity-text">
                 <strong>{{ a.user_name }}</strong>
                 {{ a.action }}
                 <em>{{ a.resource_name }}</em>
-              </span>
-              <span class="activity-time">{{ formatTime(a.created_at) }}</span>
+              </div>
+              <div class="activity-time">{{ formatTime(a.created_at) }}</div>
             </div>
-            <div v-if="!stats.recent_activities?.length" class="no-data">暂无活动</div>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+          <div v-if="!stats.recent_activities?.length" class="no-data">暂无活动</div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -124,10 +76,19 @@ import http from '@/utils/http'
 
 const stats = ref<any>({})
 
-async function loadStats() {
-  const { data } = await http.get('/admin/dashboard')
-  stats.value = data.data || {}
-}
+const mainStats = computed(() => [
+  { label: '用户', value: stats.value.users?.total || 0, icon: 'User', gradient: 'linear-gradient(135deg, #667eea, #764ba2)' },
+  { label: '文档', value: stats.value.documents?.total || 0, icon: 'Document', gradient: 'linear-gradient(135deg, #36b37e, #00875a)' },
+  { label: '表格', value: stats.value.documents?.sheets || 0, icon: 'Grid', gradient: 'linear-gradient(135deg, #ff991f, #ff5630)' },
+  { label: '回收站', value: stats.value.trash || 0, icon: 'Delete', gradient: 'linear-gradient(135deg, #8993a4, #505f79)' },
+])
+
+const subStats = computed(() => [
+  { label: '部门', value: stats.value.departments || 0 },
+  { label: '分享链接', value: stats.value.shares || 0 },
+  { label: '评论', value: stats.value.comments?.total || 0 },
+  { label: '本周新增', value: stats.value.week_new || 0 },
+])
 
 const maxCount = computed(() => {
   const items = stats.value.daily_new || []
@@ -135,14 +96,14 @@ const maxCount = computed(() => {
 })
 
 function barHeight(count: number) {
-  return Math.max((count / maxCount.value) * 120, 4)
+  return Math.max((count / maxCount.value) * 140, 4)
 }
 
-function activityType(action: string) {
-  if (action.includes('delete') || action.includes('remove')) return 'danger'
-  if (action.includes('create') || action.includes('add')) return 'success'
-  if (action.includes('update') || action.includes('edit')) return 'warning'
-  return 'info'
+function avatarColor(name: string) {
+  const colors = ['#4f6ef7', '#36b37e', '#ff991f', '#ff5630', '#6554c0', '#00b8d9', '#eb5286']
+  let hash = 0
+  for (let i = 0; i < (name || '').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  return colors[Math.abs(hash) % colors.length]
 }
 
 function formatTime(t: string) {
@@ -156,35 +117,102 @@ function formatTime(t: string) {
   return d.toLocaleDateString()
 }
 
+async function loadStats() {
+  const { data } = await http.get('/admin/dashboard')
+  stats.value = data.data || {}
+}
+
 onMounted(loadStats)
 </script>
 
 <style scoped>
-.admin-page { height: 100%; overflow-y: auto; }
-.page-header { margin-bottom: 20px; }
-.page-title { font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0; }
+.admin-page { height: 100%; overflow-y: auto; padding: 20px; background: #f5f7fa; }
 
-.stat-cards .el-col { margin-bottom: 8px; }
-.stat-card { display: flex; align-items: center; gap: 16px; padding: 8px; }
-.stat-card.small { justify-content: center; }
-.stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; }
-.stat-info { flex: 1; text-align: center; }
-.stat-value { font-size: 24px; font-weight: 700; color: #303133; }
-.stat-label { font-size: 13px; color: #909399; margin-top: 4px; }
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e8ecf0;
+}
+.header-left { display: flex; align-items: baseline; gap: 16px; }
+.page-title { font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0; letter-spacing: -0.02em; }
+.header-sub { font-size: 14px; color: #909399; }
 
-.stat-card :deep(.el-card__body) { display: flex; align-items: center; gap: 16px; width: 100%; }
+/* 统计卡片 */
+.stat-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;
+}
+.stat-grid.secondary { gap: 12px; }
 
-.chart-container { display: flex; align-items: flex-end; gap: 8px; height: 160px; padding-top: 20px; }
-.chart-bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-.chart-bar { width: 100%; background: linear-gradient(to top, #409eff, #79bbff); border-radius: 4px 4px 0 0; position: relative; min-height: 4px; transition: height 0.3s ease; }
-.chart-count { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #606266; }
-.chart-label { font-size: 11px; color: #909399; margin-top: 4px; }
-.no-data { color: #c0c4cc; text-align: center; padding: 40px 0; }
+.stat-card {
+  background: #fff; border-radius: 16px; padding: 20px;
+  display: flex; align-items: center; gap: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  transition: all 0.2s ease;
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
 
-.activity-list { max-height: 300px; overflow-y: auto; }
-.activity-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
+.stat-card.small { padding: 16px 20px; justify-content: center; }
+
+.stat-icon {
+  width: 48px; height: 48px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0;
+}
+
+.stat-body { flex: 1; text-align: center; }
+.stat-value { font-size: 28px; font-weight: 700; color: #1a1a2e; letter-spacing: -0.02em; }
+.stat-value.sm { font-size: 22px; }
+.stat-label { font-size: 13px; color: #909399; margin-top: 4px; font-weight: 500; }
+
+/* 图表面板 */
+.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.chart-panel {
+  background: #fff; border-radius: 16px; overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+}
+.panel-header {
+  padding: 16px 20px; font-size: 15px; font-weight: 600; color: #1a1a2e;
+  border-bottom: 1px solid #f0f0f0;
+}
+.chart-body { padding: 20px; }
+
+.chart-container {
+  display: flex; align-items: flex-end; gap: 12px; height: 180px; padding-top: 24px;
+}
+.chart-bar-wrapper {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%;
+}
+.chart-bar {
+  width: 100%; max-width: 48px;
+  background: linear-gradient(to top, #667eea, #764ba2);
+  border-radius: 8px 8px 0 0; position: relative; min-height: 4px;
+  transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.chart-count { font-size: 13px; color: #606266; margin-bottom: 6px; font-weight: 600; }
+.chart-label { font-size: 12px; color: #909399; margin-top: 8px; }
+
+.no-data { color: #c0c4cc; text-align: center; padding: 60px 0; font-size: 14px; }
+
+/* 活动列表 */
+.activity-list { max-height: 340px; overflow-y: auto; padding: 8px 12px; }
+.activity-item {
+  display: flex; align-items: flex-start; gap: 12px; padding: 12px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
 .activity-item:last-child { border-bottom: none; }
-.activity-text { flex: 1; font-size: 13px; color: #606266; }
-.activity-text em { color: #409eff; font-style: normal; }
-.activity-time { font-size: 12px; color: #c0c4cc; white-space: nowrap; }
+
+.activity-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 13px; font-weight: 600; flex-shrink: 0;
+}
+
+.activity-content { flex: 1; min-width: 0; }
+.activity-text { font-size: 14px; color: #606266; line-height: 1.5; }
+.activity-text strong { color: #1a1a2e; font-weight: 600; }
+.activity-text em { color: #4f6ef7; font-style: normal; font-weight: 500; }
+.activity-time { font-size: 12px; color: #c0c4cc; margin-top: 2px; }
+
+@media (max-width: 768px) {
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .charts-row { grid-template-columns: 1fr; }
+}
 </style>
