@@ -1,72 +1,102 @@
 <template>
   <div class="trash-page">
-    <div class="trash-header">
-      <div class="header-left">
+    <!-- 页头 -->
+    <div class="page-header">
+      <div class="header-info">
         <h2 class="page-title">回收站</h2>
-        <span class="doc-count" v-if="trash.length">{{ trash.length }} 个文档</span>
+        <span v-if="trash.length" class="page-count">{{ trash.length }} 个文档</span>
       </div>
-      <div class="header-right">
-        <el-button v-if="trash.length" type="danger" plain size="small" @click="emptyTrash">
+      <div class="header-actions">
+        <el-input v-model="searchKey" placeholder="搜索..." style="width:180px" clearable size="default">
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+        <el-button v-if="trash.length" type="danger" plain @click="emptyTrash">
           <el-icon><Delete /></el-icon> 清空回收站
         </el-button>
       </div>
     </div>
 
-    <div v-if="!trash.length" class="empty-state">
-      <svg class="empty-svg" viewBox="0 0 200 160" fill="none">
-        <path d="M60 50 L80 30 L120 30 L140 50 L160 50 L160 140 L40 140 L40 50 Z" fill="#f0f2f5" stroke="#dcdfe6" stroke-width="1.5"/>
-        <path d="M80 30 L80 50 L120 50 L120 30" fill="none" stroke="#dcdfe6" stroke-width="1.5"/>
-        <line x1="85" y1="75" x2="115" y2="75" stroke="#dcdfe6" stroke-width="2" stroke-linecap="round"/>
-        <line x1="85" y1="90" x2="115" y2="90" stroke="#dcdfe6" stroke-width="2" stroke-linecap="round"/>
-        <line x1="85" y1="105" x2="105" y2="105" stroke="#dcdfe6" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      <p class="empty-title">回收站为空</p>
-      <p class="empty-desc">删除的文档会在这里保留 30 天</p>
+    <!-- 空状态 -->
+    <div v-if="!filteredTrash.length && !loading" class="empty-state">
+      <div class="empty-icon">🗑️</div>
+      <p v-if="searchKey" class="empty-title">没有匹配的文档</p>
+      <template v-else>
+        <p class="empty-title">回收站为空</p>
+        <p class="empty-desc">删除的文档会在这里保留 30 天</p>
+      </template>
     </div>
 
-    <div v-else class="trash-table">
-      <div class="table-row table-header-row">
-        <div class="table-col col-title">名称</div>
-        <div class="table-col col-type">类型</div>
-        <div class="table-col col-time">删除时间</div>
-        <div class="table-col col-actions">操作</div>
-      </div>
-      <div v-for="item in trash" :key="item.id" class="table-row">
-        <div class="table-col col-title">
-          <div class="title-icon" :class="item.type">
-            <svg v-if="item.type === 'doc'" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L2.414 12.586A2 2 0 014 12h4.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg>
-            <svg v-else viewBox="0 0 20 20" fill="currentColor"><path d="M3 3h14a1 1 0 011 1v12a1 1 0 01-1 1H3a1 1 0 01-1-1V4a1 1 0 011-1zm1 2v2h4V5H4zm6 0v2h4V5h-4zm-6 4v2h4V9H4zm6 0v2h4V9h-4z"/></svg>
-          </div>
-          <span class="title-text">{{ item.title }}</span>
-        </div>
-        <div class="table-col col-type">
-          <el-tag :type="item.type === 'doc' ? 'info' : 'success'" size="small" effect="plain" round>
-            {{ item.type === 'doc' ? '文档' : '表格' }}
-          </el-tag>
-        </div>
-        <div class="table-col col-time">{{ formatTime(item.updated_at) }}</div>
-        <div class="table-col col-actions">
-          <el-button link type="primary" size="small" @click="restore(item)">
-            <svg class="act-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M.5 1.163a1.5 1.5 0 011.5-1.163h5a1.5 1.5 0 010 3h-1.5l3.5 3.5a1.5 1.5 0 01-2.122 2.122L3.378 5.122v1.5a1.5 1.5 0 01-3 0V1.163z" transform="translate(4, 4) scale(0.8)"/></svg>
-            恢复
-          </el-button>
-          <el-button link type="danger" size="small" @click="purge(item)">永久删除</el-button>
-        </div>
-      </div>
+    <!-- 加载 -->
+    <div v-if="loading" class="loading-state">
+      <el-skeleton :rows="6" animated />
+    </div>
+
+    <!-- 列表 -->
+    <div v-else-if="filteredTrash.length" class="trash-card">
+      <el-table
+        :data="filteredTrash"
+        :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
+        :cell-style="{ fontSize: '14px' }"
+        :row-style="{ height: '56px' }"
+      >
+        <el-table-column label="名称" min-width="280">
+          <template #default="{ row }">
+            <div class="doc-title">
+              <div class="type-icon" :class="row.type">
+                <el-icon :size="14"><Document v-if="row.type === 'doc'" /><Grid v-else /></el-icon>
+              </div>
+              <span class="title-text">{{ row.title }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="类型" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.type === 'doc' ? '' : 'success'" size="small" effect="light" round>
+              {{ row.type === 'doc' ? '文档' : '表格' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="删除时间" width="160">
+          <template #default="{ row }">
+            <span class="time-text">{{ formatTime(row.updated_at) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="" width="180" fixed="right" align="center">
+          <template #default="{ row }">
+            <div class="row-actions">
+              <el-button link type="primary" @click="restore(row)">
+                <el-icon><RefreshRight /></el-icon> 恢复
+              </el-button>
+              <el-button link type="danger" @click="purge(row)">永久删除</el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '@/utils/http'
 
 const trash = ref<any[]>([])
+const searchKey = ref('')
+const loading = ref(false)
+
+const filteredTrash = computed(() => {
+  if (!searchKey.value) return trash.value
+  const q = searchKey.value.toLowerCase()
+  return trash.value.filter(t => t.title.toLowerCase().includes(q))
+})
 
 async function load() {
-  const { data } = await http.get('/docs/trash')
-  trash.value = data.data || []
+  loading.value = true
+  try {
+    const { data } = await http.get('/docs/trash')
+    trash.value = data.data || []
+  } finally { loading.value = false }
 }
 
 async function restore(row: any) {
@@ -108,55 +138,51 @@ onMounted(load)
 </script>
 
 <style scoped>
-.trash-page { height: 100%; display: flex; flex-direction: column; }
-.trash-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 20px;
+.trash-page {
+  height: 100%; display: flex; flex-direction: column;
+  padding: 20px; background: #f5f7fa;
 }
-.header-left { display: flex; align-items: baseline; gap: 8px; }
-.page-title { font-size: 20px; font-weight: 600; color: #1a1a2e; margin: 0; }
-.doc-count { font-size: 13px; color: #999; }
+
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
+}
+.header-info { display: flex; align-items: baseline; gap: 10px; }
+.page-title { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0; }
+.page-count { font-size: 13px; color: #909399; }
+.header-actions { display: flex; gap: 8px; align-items: center; }
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; flex: 1; padding: 60px 20px;
+  justify-content: center; flex: 1; padding: 80px 20px;
 }
-.empty-svg { width: 200px; height: 160px; margin-bottom: 20px; }
-.empty-title { font-size: 16px; color: #555; margin: 0 0 4px; }
-.empty-desc { font-size: 13px; color: #999; margin: 0; }
+.empty-icon { font-size: 56px; margin-bottom: 16px; opacity: 0.5; }
+.empty-title { font-size: 16px; color: #606266; margin: 0 0 4px; }
+.empty-desc { font-size: 13px; color: #909399; margin: 0; }
 
-.trash-table {
-  background: #fff; border-radius: 10px; border: 1px solid #e8ecf0; flex: 1; overflow-y: auto;
-}
-.table-row {
-  display: flex; align-items: center; padding: 0 16px; height: 48px;
-  border-bottom: 1px solid #f0f2f5; transition: background 0.15s;
-}
-.table-row:last-child { border-bottom: none; }
-.table-row:hover { background: #f8f9fb; }
-.table-header-row {
-  background: #fafbfc; font-size: 12px; font-weight: 600; color: #909399;
-  border-bottom: 1px solid #e8ecf0;
-}
-.table-header-row:hover { background: #fafbfc; }
-.table-col { flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; color: #333; }
-.col-type { width: 72px; text-align: center; }
-.col-time { width: 120px; color: #999; font-size: 13px; }
-.col-actions { width: 140px; text-align: right; display: flex; gap: 4px; justify-content: flex-end; }
+.loading-state { padding: 40px; }
 
-.title-icon {
-  width: 28px; height: 28px; border-radius: 6px;
+.trash-card {
+  background: #fff; border-radius: 16px; overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04); flex: 1;
+}
+.trash-card :deep(.el-table__row:hover) { background: #f9fbff !important; }
+.trash-card :deep(.el-table__cell) { padding: 12px 0; }
+
+.doc-title { display: flex; align-items: center; gap: 10px; }
+.type-icon {
+  width: 28px; height: 28px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.title-icon svg { width: 16px; height: 16px; }
-.title-icon.doc { background: #ecf5ff; color: #409eff; }
-.title-icon.sheet { background: #f0f9eb; color: #67c23a; }
-.title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.type-icon.doc { background: #e8f0fe; color: #4f6ef7; }
+.type-icon:not(.doc) { background: #e6f7f0; color: #36b37e; }
+.title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.time-text { font-size: 13px; color: #909399; }
+.row-actions { display: flex; align-items: center; gap: 4px; }
 
 @media (max-width: 768px) {
-  .col-type { display: none; }
-  .col-time { width: auto; font-size: 12px; }
-  .table-row { height: 52px; padding: 0 10px; }
+  .trash-page { padding: 12px; }
+  .header-actions { width: 100%; }
+  .header-actions .el-input { flex: 1; }
 }
 </style>

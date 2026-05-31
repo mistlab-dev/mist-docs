@@ -1,136 +1,148 @@
 <template>
   <div class="docs-page">
+    <!-- 顶部工具栏 -->
     <div class="toolbar">
-      <el-button @click="sidebarOpen = !sidebarOpen" class="menu-btn">
-        <el-icon><Operation /></el-icon>
-      </el-button>
-      <el-button type="primary" size="small" @click="showNewDoc = true">
-        <el-icon><Document /></el-icon><span class="btn-text"> 文档</span>
-      </el-button>
-      <el-button type="success" size="small" @click="showNewSheet = true">
-        <el-icon><Grid /></el-icon><span class="btn-text"> 表格</span>
-      </el-button>
-      <el-button size="small" @click="showImportDialog = true">
-        <el-icon><Upload /></el-icon><span class="btn-text"> 导入</span>
-      </el-button>
-      <div style="flex:1" />
-      <el-select v-model="sortBy" size="small" style="width:120px" @change="sortDocs">
-        <el-option label="更新时间" value="updated" />
-        <el-option label="创建时间" value="created" />
-        <el-option label="标题" value="title" />
-      </el-select>
-      <el-button-group style="margin-left:8px">
-        <el-button size="small" :type="layoutMode === 'grid' ? 'primary' : ''" @click="layoutMode = 'grid'">
-          <el-icon><Monitor /></el-icon>
+      <div class="toolbar-left">
+        <el-button @click="sidebarOpen = !sidebarOpen" class="menu-btn" circle size="small">
+          <el-icon><Operation /></el-icon>
         </el-button>
-        <el-button size="small" :type="layoutMode === 'list' ? 'primary' : ''" @click="layoutMode = 'list'">
-          <el-icon><List /></el-icon>
+        <el-button type="primary" @click="showNewDoc = true">
+          <el-icon><Plus /></el-icon> 新建文档
         </el-button>
-      </el-button-group>
-      <el-input v-model="search" placeholder="搜索..." style="width:200px;margin-left:8px" clearable @keyup.enter="doSearch" @clear="clearSearch" size="small">
-        <template #prefix><el-icon><Search /></el-icon></template>
-      </el-input>
+        <el-button @click="showNewSheet = true">
+          <el-icon><Grid /></el-icon> 表格
+        </el-button>
+        <el-button @click="showImportDialog = true">
+          <el-icon><Upload /></el-icon>
+        </el-button>
+      </div>
+      <div class="toolbar-right">
+        <el-input v-model="search" placeholder="搜索文档..." class="search-box" clearable @keyup.enter="doSearch" @clear="clearSearch" size="default">
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+        <el-select v-model="sortBy" size="default" class="sort-select" @change="sortDocs">
+          <el-option label="更新时间" value="updated" />
+          <el-option label="创建时间" value="created" />
+          <el-option label="标题" value="title" />
+        </el-select>
+        <el-button-group>
+          <el-button :type="layoutMode === 'grid' ? 'primary' : 'default'" @click="layoutMode = 'grid'" size="default">
+            <el-icon><Monitor /></el-icon>
+          </el-button>
+          <el-button :type="layoutMode === 'list' ? 'primary' : 'default'" @click="layoutMode = 'list'" size="default">
+            <el-icon><List /></el-icon>
+          </el-button>
+        </el-button-group>
+      </div>
     </div>
 
     <!-- 批量操作栏 -->
-    <div v-if="selectedDocs.length" class="batch-bar">
-      <span>已选 {{ selectedDocs.length }} 项</span>
-      <el-button size="small" @click="showBatchMove = true">批量移动</el-button>
-      <el-button size="small" type="success" @click="batchExport">批量导出</el-button>
-      <el-button size="small" type="danger" @click="batchDelete">批量删除</el-button>
-      <el-button size="small" text @click="selectedDocs = []">取消选择</el-button>
-    </div>
+    <transition name="slide-down">
+      <div v-if="selectedDocs.length" class="batch-bar">
+        <div class="batch-info">
+          <div class="batch-dot" />
+          <span>已选 <strong>{{ selectedDocs.length }}</strong> 项</span>
+        </div>
+        <el-button size="small" @click="showBatchMove = true">移动</el-button>
+        <el-button size="small" @click="batchExport">导出</el-button>
+        <el-button size="small" type="danger" @click="batchDelete">删除</el-button>
+        <el-button size="small" link @click="selectedDocs = []">取消</el-button>
+      </div>
+    </transition>
 
     <div class="content">
-      <!-- 遮罩层（移动端） -->
-      <div class="sidebar-overlay" :class="{ open: sidebarOpen }" @click="sidebarOpen = false"></div>
-      <!-- 左侧：文件夹 + 快捷入口 -->
-      <div class="sidebar" :class="{ open: sidebarOpen }" @click.self="sidebarOpen = false">
+      <!-- 移动端遮罩 -->
+      <div class="sidebar-overlay" :class="{ open: sidebarOpen }" @click="sidebarOpen = false" />
+
+      <!-- 左侧栏 -->
+      <div class="sidebar" :class="{ open: sidebarOpen }">
         <div class="sidebar-inner">
-        <!-- 快捷入口 -->
-        <div class="sidebar-section">
-          <div class="section-item" :class="{ active: viewMode === 'all' }" @click="switchView('all')">
-            <el-icon><Files /></el-icon> 全部文档
+          <!-- 快捷入口 -->
+          <div class="sidebar-section">
+            <div class="nav-item" :class="{ active: viewMode === 'all' }" @click="switchView('all')">
+              <svg viewBox="0 0 20 20" fill="currentColor" class="nav-icon"><path d="M3 4a1 1 0 011-1h4a1 1 0 01.8.4L10.5 6H17a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>
+              全部文档
+            </div>
+            <div class="nav-item" :class="{ active: viewMode === 'recent' }" @click="switchView('recent')">
+              <el-icon class="nav-icon"><Clock /></el-icon>
+              最近打开
+            </div>
+            <div class="nav-item" :class="{ active: viewMode === 'favorites' }" @click="switchView('favorites')">
+              <el-icon class="nav-icon"><Star /></el-icon>
+              我的收藏
+            </div>
           </div>
-          <div class="section-item" :class="{ active: viewMode === 'recent' }" @click="switchView('recent')">
-            <el-icon><Clock /></el-icon> 最近打开
-          </div>
-          <div class="section-item" :class="{ active: viewMode === 'favorites' }" @click="switchView('favorites')">
-            <el-icon><Star /></el-icon> 我的收藏
-          </div>
-        </div>
 
-        <!-- 标签 -->
-        <div v-if="sidebarTags.length" class="sidebar-section">
-          <div class="tree-header">标签</div>
-          <div v-for="tag in sidebarTags" :key="tag.id" class="section-item" @click="filterByTag(tag.id)">
-            <span class="tag-dot" :style="{ background: tag.color }"></span>
-            {{ tag.name }} <span style="color:#999">({{ tag.doc_count }})</span>
+          <!-- 标签 -->
+          <div v-if="sidebarTags.length" class="sidebar-section">
+            <div class="section-title">标签</div>
+            <div v-for="tag in sidebarTags" :key="tag.id" class="nav-item" @click="filterByTag(tag.id)">
+              <span class="tag-dot" :style="{ background: tag.color }" />
+              {{ tag.name }}
+              <span class="tag-count">{{ tag.doc_count }}</span>
+            </div>
           </div>
-        </div>
 
-        <!-- 文件夹树 -->
-        <div class="tree-header">文件夹 <el-button size="small" text @click="showNewFolder = true" style="float:right;padding:0">+ 新建</el-button></div>
-        <el-tree
-          :data="treeData"
-          :props="{ label: 'name', children: 'children' }"
-          node-key="id"
-          highlight-current
-          default-expand-all
-          @node-click="onFolderClick"
-        >
-          <template #default="{ data }">
-            <span class="tree-node">
-              <el-icon><Folder /></el-icon>
-              <span>{{ data.name }}</span>
-            </span>
-          </template>
-        </el-tree>
+          <!-- 文件夹树 -->
+          <div class="sidebar-section">
+            <div class="section-title">
+              文件夹
+              <el-button size="small" text @click="showNewFolder = true" class="section-add">+ 新建</el-button>
+            </div>
+            <el-tree
+              :data="treeData"
+              :props="{ label: 'name', children: 'children' }"
+              node-key="id"
+              highlight-current
+              default-expand-all
+              @node-click="onFolderClick"
+              class="folder-tree"
+            >
+              <template #default="{ data }">
+                <span class="tree-node">
+                  <svg viewBox="0 0 20 20" fill="currentColor" class="folder-icon"><path d="M3 4a1 1 0 011-1h4a1 1 0 01.8.4L10.5 6H17a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>
+                  <span>{{ data.name }}</span>
+                </span>
+              </template>
+            </el-tree>
+          </div>
         </div>
       </div>
 
-      <!-- 右侧：文档列表 -->
-      <div class="doc-list">
-        <!-- 搜索结果 -->
-        <div v-if="searchMode" class="list-header">
-          搜索「{{ search }}」的结果（{{ docs.length }} 条）
+      <!-- 右侧文档区 -->
+      <div class="doc-area">
+        <!-- 搜索结果头 -->
+        <div v-if="searchMode" class="search-header">
+          搜索「{{ search }}」— 找到 {{ docs.length }} 个结果
         </div>
 
-        <!-- 空状态 -->
+        <!-- 加载 -->
         <div v-if="loading" class="loading-state">
           <el-skeleton :rows="5" animated />
         </div>
+
+        <!-- 空状态 -->
         <div v-else-if="!docs.length" class="empty-state">
-          <el-icon :size="48" color="#ccc"><Document /></el-icon>
+          <div class="empty-icon">📄</div>
           <p v-if="viewMode === 'recent'">还没有打开过文档</p>
           <p v-else-if="viewMode === 'favorites'">还没有收藏文档</p>
-          <p v-else>暂无文档，点击上方按钮创建</p>
+          <p v-else>暂无文档，点击「新建文档」开始</p>
         </div>
 
-        <!-- 文档卡片网格/列表 -->
-        <div v-else :class="layoutMode === 'grid' ? 'doc-grid' : 'doc-list-view'">
-          <!-- 列表头 -->
-          <div v-if="layoutMode === 'list'" class="list-row list-header-row">
-            <div class="list-col list-col-check"><el-checkbox /></div>
-            <div class="list-col list-col-title">标题</div>
-            <div class="list-col list-col-type">类型</div>
-            <div class="list-col list-col-version">版本</div>
-            <div class="list-col list-col-time">更新时间</div>
-            <div class="list-col list-col-actions">操作</div>
-          </div>
+        <!-- 网格视图 -->
+        <div v-else-if="layoutMode === 'grid'" class="doc-grid">
           <div
             v-for="doc in docs"
             :key="doc.id"
-            v-show="layoutMode === 'grid'"
             class="doc-card"
             :class="{ selected: selectedDocs.includes(doc.id) }"
             @click="openDoc(doc)"
           >
-            <div class="card-checkbox" @click.stop="toggleSelect(doc.id)">
+            <div class="card-check" @click.stop="toggleSelect(doc.id)">
               <el-checkbox :model-value="selectedDocs.includes(doc.id)" />
             </div>
-            <div class="card-icon">
-              <el-icon :size="32">
+            <div class="card-preview" :class="doc.type">
+              <el-icon :size="36">
                 <Document v-if="doc.type === 'doc'" />
                 <Grid v-else />
               </el-icon>
@@ -138,7 +150,7 @@
             <div class="card-body">
               <div class="card-title">{{ doc.title }}</div>
               <div class="card-meta">
-                <el-tag :type="doc.type === 'doc' ? '' : 'success'" size="small">
+                <el-tag :type="doc.type === 'doc' ? '' : 'success'" size="small" effect="light" round>
                   {{ doc.type === 'doc' ? '文档' : '表格' }}
                 </el-tag>
                 <span class="card-version">v{{ doc.version }}</span>
@@ -155,7 +167,7 @@
                 <Star v-else />
               </el-icon>
               <el-dropdown trigger="click">
-                <el-icon :size="18" class="more-btn"><MoreFilled /></el-icon>
+                <el-icon :size="18" class="more-icon"><MoreFilled /></el-icon>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="openDoc(doc)">打开</el-dropdown-item>
@@ -169,49 +181,72 @@
               </el-dropdown>
             </div>
           </div>
-          <!-- 列表模式行 -->
-          <div
-            v-for="doc in docs" :key="doc.id + '-list'"
-            v-if="layoutMode === 'list'"
-            class="list-row"
-            @click="openDoc(doc)"
+        </div>
+
+        <!-- 列表视图 -->
+        <div v-else class="doc-table-wrap">
+          <el-table
+            :data="docs"
+            @row-click="openDoc"
+            :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
+            :cell-style="{ fontSize: '14px' }"
+            @selection-change="(rows: any[]) => selectedDocs = rows.map((r: any) => r.id)"
           >
-            <div class="list-col list-col-check" @click.stop="toggleSelect(doc.id)">
-              <el-checkbox :model-value="selectedDocs.includes(doc.id)" />
-            </div>
-            <div class="list-col list-col-title">
-              <el-icon style="vertical-align:middle;margin-right:4px"><Document v-if="doc.type==='doc'" /><Grid v-else /></el-icon>
-              {{ doc.title }}
-            </div>
-            <div class="list-col list-col-type">
-              <el-tag :type="doc.type === 'doc' ? '' : 'success'" size="small">{{ doc.type === 'doc' ? '文档' : '表格' }}</el-tag>
-            </div>
-            <div class="list-col list-col-version">v{{ doc.version }}</div>
-            <div class="list-col list-col-time">{{ formatTime(doc.updated_at) }}</div>
-            <div class="list-col list-col-actions" @click.stop>
-              <el-icon :size="16" :class="{ 'fav-active': doc.is_favorite }" @click="toggleFavorite(doc)" style="cursor:pointer">
-                <StarFilled v-if="doc.is_favorite" /><Star v-else />
-              </el-icon>
-              <el-dropdown trigger="click">
-                <el-icon :size="16" style="cursor:pointer;margin-left:6px"><MoreFilled /></el-icon>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item @click="openDoc(doc)">打开</el-dropdown-item>
-                    <el-dropdown-item @click="showRename(doc)">重命名</el-dropdown-item>
-                    <el-dropdown-item @click="showMove(doc)">移动到...</el-dropdown-item>
-                    <el-dropdown-item @click="deleteDoc(doc)" divided><span style="color:#f56c6c">删除</span></el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-          </div>
+            <el-table-column type="selection" width="40" />
+            <el-table-column label="标题" min-width="260">
+              <template #default="{ row }">
+                <div class="table-title">
+                  <div class="type-dot" :class="row.type">
+                    <el-icon :size="14"><Document v-if="row.type==='doc'" /><Grid v-else /></el-icon>
+                  </div>
+                  <span>{{ row.title }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="类型" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.type === 'doc' ? '' : 'success'" size="small" effect="light" round>
+                  {{ row.type === 'doc' ? '文档' : '表格' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="version" label="版本" width="70" align="center">
+              <template #default="{ row }">
+                <span class="version-text">v{{ row.version }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="更新时间" width="140">
+              <template #default="{ row }">
+                <span class="time-text">{{ formatTime(row.updated_at) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="" width="80" fixed="right" align="center">
+              <template #default="{ row }">
+                <div @click.stop class="table-actions">
+                  <el-icon :size="16" :class="{ 'fav-active': row.is_favorite }" @click="toggleFavorite(row)" style="cursor:pointer">
+                    <StarFilled v-if="row.is_favorite" /><Star v-else />
+                  </el-icon>
+                  <el-dropdown trigger="click">
+                    <el-icon :size="16" style="cursor:pointer"><MoreFilled /></el-icon>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item @click="showRename(row)">重命名</el-dropdown-item>
+                        <el-dropdown-item @click="showMove(row)">移动</el-dropdown-item>
+                        <el-dropdown-item @click="deleteDoc(row)" divided><span style="color:#f56c6c">删除</span></el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
       </div>
     </div>
 
     <!-- 新建文件夹 -->
-    <el-dialog v-model="showNewFolder" title="新建文件夹" width="400">
-      <el-input v-model="newFolderName" placeholder="文件夹名称" />
+    <el-dialog v-model="showNewFolder" title="新建文件夹" width="400" destroy-on-close>
+      <el-input v-model="newFolderName" placeholder="文件夹名称" size="large" />
       <template #footer>
         <el-button @click="showNewFolder = false">取消</el-button>
         <el-button type="primary" @click="createFolder">创建</el-button>
@@ -219,37 +254,20 @@
     </el-dialog>
 
     <!-- 新建文档 -->
-    <el-dialog v-model="showNewDoc" title="新建文档" width="460">
-      <el-input v-model="newDocTitle" placeholder="文档标题" />
-      <div style="margin-top:12px">
-        <p style="color:#999;font-size:13px;margin-bottom:8px">选择模板：</p>
-        <div class="template-grid">
-          <div class="tpl-card" :class="{ active: newDocTemplate === '' }" @click="newDocTemplate = ''">
-            <div class="tpl-icon">📝</div>
-            <div class="tpl-label">空白文档</div>
+    <el-dialog v-model="showNewDoc" title="新建文档" width="520" destroy-on-close>
+      <el-form label-position="top">
+        <el-form-item label="文档标题">
+          <el-input v-model="newDocTitle" placeholder="输入文档标题" size="large" />
+        </el-form-item>
+        <el-form-item label="选择模板">
+          <div class="template-grid">
+            <div v-for="t in templateList" :key="t.key" class="tpl-card" :class="{ active: newDocTemplate === t.key }" @click="newDocTemplate = t.key">
+              <div class="tpl-icon">{{ t.icon }}</div>
+              <div class="tpl-label">{{ t.name }}</div>
+            </div>
           </div>
-          <div class="tpl-card" :class="{ active: newDocTemplate === 'meeting' }" @click="newDocTemplate = 'meeting'">
-            <div class="tpl-icon">📋</div>
-            <div class="tpl-label">会议纪要</div>
-          </div>
-          <div class="tpl-card" :class="{ active: newDocTemplate === 'weekly' }" @click="newDocTemplate = 'weekly'">
-            <div class="tpl-icon">📊</div>
-            <div class="tpl-label">周报</div>
-          </div>
-          <div class="tpl-card" :class="{ active: newDocTemplate === 'requirement' }" @click="newDocTemplate = 'requirement'">
-            <div class="tpl-icon">📐</div>
-            <div class="tpl-label">需求文档</div>
-          </div>
-          <div class="tpl-card" :class="{ active: newDocTemplate === 'api' }" @click="newDocTemplate = 'api'">
-            <div class="tpl-icon">🔌</div>
-            <div class="tpl-label">API 文档</div>
-          </div>
-          <div class="tpl-card" :class="{ active: newDocTemplate === 'readme' }" @click="newDocTemplate = 'readme'">
-            <div class="tpl-icon">📖</div>
-            <div class="tpl-label">README</div>
-          </div>
-        </div>
-      </div>
+        </el-form-item>
+      </el-form>
       <template #footer>
         <el-button @click="showNewDoc = false">取消</el-button>
         <el-button type="primary" @click="createDoc('doc')">创建</el-button>
@@ -257,26 +275,20 @@
     </el-dialog>
 
     <!-- 新建表格 -->
-    <el-dialog v-model="showNewSheet" title="新建表格" width="400">
-      <el-input v-model="newDocTitle" placeholder="表格标题" />
+    <el-dialog v-model="showNewSheet" title="新建表格" width="400" destroy-on-close>
+      <el-input v-model="newDocTitle" placeholder="表格标题" size="large" />
       <template #footer>
         <el-button @click="showNewSheet = false">取消</el-button>
         <el-button type="primary" @click="createDoc('sheet')">创建</el-button>
       </template>
     </el-dialog>
 
-    <!-- 批量导入 -->
+    <!-- 导入 -->
     <el-dialog v-model="showImportDialog" title="批量导入" width="500">
-      <p style="color:#999;font-size:13px;margin-bottom:12px">支持 .txt、.md、.html、.docx、.xlsx 文件，最多20个，每个不超过10MB</p>
-      <el-upload
-        ref="importUpload"
-        :auto-upload="false"
-        :limit="20"
-        multiple
-        accept=".txt,.md,.html,.htm,.docx,.xlsx"
-        :on-change="onImportFileChange"
-      >
-        <el-button type="primary" size="small">选择文件</el-button>
+      <p class="import-hint">支持 .txt、.md、.html、.docx、.xlsx 文件，最多20个，每个不超过10MB</p>
+      <el-upload ref="importUpload" :auto-upload="false" :limit="20" multiple accept=".txt,.md,.html,.htm,.docx,.xlsx" :on-change="onImportFileChange" drag>
+        <el-icon :size="32" color="#c0c4cc"><Upload /></el-icon>
+        <div class="upload-text">拖拽文件到此处，或 <em>点击上传</em></div>
       </el-upload>
       <template #footer>
         <el-button @click="showImportDialog = false">取消</el-button>
@@ -287,27 +299,21 @@
     </el-dialog>
 
     <!-- 重命名 -->
-    <el-dialog v-model="renameDialog" title="重命名" width="400">
-      <el-input v-model="renameTitle" placeholder="新标题" />
+    <el-dialog v-model="renameDialog" title="重命名" width="400" destroy-on-close>
+      <el-input v-model="renameTitle" placeholder="新标题" size="large" />
       <template #footer>
         <el-button @click="renameDialog = false">取消</el-button>
         <el-button type="primary" @click="doRename">确定</el-button>
       </template>
     </el-dialog>
 
-    <!-- 移动文档 -->
+    <!-- 移动 -->
     <el-dialog v-model="moveDialog" title="移动到文件夹" width="400">
-      <el-tree
-        :data="treeData"
-        :props="{ label: 'name', children: 'children' }"
-        node-key="id"
-        highlight-current
-        default-expand-all
-        @node-click="selectMoveTarget"
-      >
+      <el-tree :data="treeData" :props="{ label: 'name', children: 'children' }" node-key="id" highlight-current default-expand-all @node-click="selectMoveTarget">
         <template #default="{ data }">
-          <span style="display:flex;align-items:center;gap:4px">
-            <el-icon><Folder /></el-icon> {{ data.name }}
+          <span class="tree-node">
+            <svg viewBox="0 0 20 20" fill="currentColor" class="folder-icon"><path d="M3 4a1 1 0 011-1h4a1 1 0 01.8.4L10.5 6H17a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>
+            {{ data.name }}
           </span>
         </template>
       </el-tree>
@@ -317,17 +323,17 @@
       </template>
     </el-dialog>
 
-    <!-- 批量移动弹窗 -->
-    <el-dialog v-model="showBatchMove" title="批量移动" width="400px">
-      <p style="color:#999;margin-bottom:12px">将 {{ selectedDocs.length }} 个文档移动到：</p>
-      <el-tree
-        :data="treeData"
-        :props="{ label: 'name', children: 'children', value: 'id' }"
-        node-key="id"
-        highlight-current
-        default-expand-all
-        @node-click="batchMoveTarget = $event.id"
-      />
+    <!-- 批量移动 -->
+    <el-dialog v-model="showBatchMove" title="批量移动" width="400">
+      <p style="color:#909399;margin-bottom:16px">将 {{ selectedDocs.length }} 个文档移动到：</p>
+      <el-tree :data="treeData" :props="{ label: 'name', children: 'children' }" node-key="id" highlight-current default-expand-all @node-click="batchMoveTarget = $event.id">
+        <template #default="{ data }">
+          <span class="tree-node">
+            <svg viewBox="0 0 20 20" fill="currentColor" class="folder-icon"><path d="M3 4a1 1 0 011-1h4a1 1 0 01.8.4L10.5 6H17a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>
+            {{ data.name }}
+          </span>
+        </template>
+      </el-tree>
       <template #footer>
         <el-button @click="showBatchMove = false">取消</el-button>
         <el-button type="primary" @click="doBatchMove" :disabled="!batchMoveTarget">移动</el-button>
@@ -364,30 +370,6 @@ const showNewSheet = ref(false)
 const showImportDialog = ref(false)
 const importFiles = ref<any[]>([])
 const importing = ref(false)
-
-function onImportFileChange(file: any, fileList: any[]) {
-  importFiles.value = fileList
-}
-
-async function doImport() {
-  if (!importFiles.value.length) return
-  importing.value = true
-  const fd = new FormData()
-  for (const f of importFiles.value) {
-    fd.append('files', f.raw)
-  }
-  if (currentFolder.value) fd.append('folder_id', currentFolder.value)
-  try {
-    const { data } = await http.post('/docs/import', fd)
-    ElMessage.success(data.message || '导入完成')
-    showImportDialog.value = false
-    importFiles.value = []
-    loadDocs()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error || '导入失败')
-  }
-  importing.value = false
-}
 const renameDialog = ref(false)
 const renameTitle = ref('')
 const renameDoc = ref<any>(null)
@@ -399,6 +381,15 @@ const newDocTitle = ref('')
 const newDocTemplate = ref('')
 const layoutMode = ref<'grid'|'list'>('grid')
 const sortBy = ref('updated')
+
+const templateList = [
+  { key: '', icon: '📝', name: '空白文档' },
+  { key: 'meeting', icon: '📋', name: '会议纪要' },
+  { key: 'weekly', icon: '📊', name: '周报' },
+  { key: 'requirement', icon: '📐', name: '需求文档' },
+  { key: 'api', icon: '🔌', name: 'API 文档' },
+  { key: 'readme', icon: '📖', name: 'README' },
+]
 
 const templates: Record<string, string> = {
   meeting: '<h2>会议纪要</h2><p><strong>日期：</strong>' + new Date().toLocaleDateString() + '</p><h3>讨论内容</h3><ul><li></li></ul><h3>决议</h3><ul><li></li></ul><h3>待办事项</h3><table><thead><tr><th>任务</th><th>负责人</th><th>截止日期</th><th>状态</th></tr></thead><tbody><tr><td></td><td></td><td></td><td></td></tr></tbody></table>',
@@ -646,6 +637,28 @@ async function doBatchMove() {
   loadDocs()
 }
 
+function onImportFileChange(_file: any, fileList: any[]) {
+  importFiles.value = fileList
+}
+
+async function doImport() {
+  if (!importFiles.value.length) return
+  importing.value = true
+  const fd = new FormData()
+  for (const f of importFiles.value) fd.append('files', f.raw)
+  if (currentFolder.value) fd.append('folder_id', currentFolder.value)
+  try {
+    const { data } = await http.post('/docs/import', fd)
+    ElMessage.success(data.message || '导入完成')
+    showImportDialog.value = false
+    importFiles.value = []
+    loadDocs()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || '导入失败')
+  }
+  importing.value = false
+}
+
 onMounted(async () => {
   await loadFavoriteIds()
   loadTree()
@@ -670,180 +683,198 @@ async function filterByTag(tagId: string) {
 </script>
 
 <style scoped>
-.docs-page { height: 100%; display: flex; flex-direction: column; }
-.batch-bar {
-  display: flex; align-items: center; gap: 12px;
-  padding: 8px 16px; background: #ecf5ff; border-bottom: 1px solid #d9ecff;
-  font-size: 14px; color: #409eff;
+.docs-page { height: 100%; display: flex; flex-direction: column; padding: 16px 20px; background: #f5f7fa; }
+
+/* 工具栏 */
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
 }
-.toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.toolbar-left { display: flex; align-items: center; gap: 8px; }
+.toolbar-right { display: flex; align-items: center; gap: 8px; }
+.search-box { width: 220px; }
+.sort-select { width: 120px; }
+
+/* 批量操作 */
+.batch-bar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 20px; margin-bottom: 12px;
+  background: linear-gradient(135deg, #e6f7ff, #f0f5ff);
+  border: 1px solid #91d5ff; border-radius: 10px;
+  font-size: 14px; color: #1890ff;
+}
+.batch-info { display: flex; align-items: center; gap: 8px; }
+.batch-dot { width: 8px; height: 8px; border-radius: 50%; background: #1890ff; }
+
+.slide-down-enter-active, .slide-down-leave-active { transition: all 0.25s ease; }
+.slide-down-enter-from, .slide-down-leave-to { opacity: 0; transform: translateY(-8px); margin-top: -44px; }
+
+/* 主内容区 */
 .content { flex: 1; display: flex; gap: 16px; overflow: hidden; }
 
 /* 左侧栏 */
 .sidebar {
-  width: 220px;
-  border: 1px solid #e8e8e8;
-  border-radius: 8px;
-  overflow-y: auto;
-  background: #fafafa;
+  width: 230px; border-radius: 16px; overflow-y: auto;
+  background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.04);
   flex-shrink: 0;
 }
-.sidebar-overlay {
-  display: none;
-}
-.sidebar-section { padding: 8px 0; border-bottom: 1px solid #e8e8e8; }
-.section-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 16px; cursor: pointer; font-size: 14px; color: #555;
-  transition: all 0.2s;
-}
-.section-item:hover { background: #e8f0fe; color: #1a73e8; }
-.section-item.active { background: #e8f0fe; color: #1a73e8; font-weight: 500; }
-.tree-header {
-  padding: 10px 16px; font-weight: bold;
-  border-bottom: 1px solid #e8e8e8; background: #f5f5f5;
-}
-.tag-dot {
-  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-  margin-right: 6px; vertical-align: middle;
-}
-.tree-node { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.sidebar-overlay { display: none; }
+.sidebar-inner { padding: 8px 0; }
+.sidebar-section { border-bottom: 1px solid #f0f0f0; }
 
-/* 右侧 */
-.doc-list { flex: 1; overflow-y: auto; }
-.list-header { padding: 8px 12px; color: #888; font-size: 13px; margin-bottom: 12px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; cursor: pointer; font-size: 14px; color: #606266;
+  transition: all 0.15s;
+}
+.nav-item:hover { background: #f0f5ff; color: #4f6ef7; }
+.nav-item.active { background: #e8f0fe; color: #4f6ef7; font-weight: 600; }
+.nav-icon { width: 18px; height: 18px; color: inherit; }
+
+.section-title {
+  padding: 10px 16px; font-size: 12px; font-weight: 600;
+  color: #909399; text-transform: uppercase; letter-spacing: 0.05em;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.section-add { font-size: 12px; color: #4f6ef7; }
+
+.tag-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 2px; }
+.tag-count { font-size: 12px; color: #c0c4cc; margin-left: auto; }
+
+.folder-tree :deep(.el-tree-node__content) { height: 36px; border-radius: 6px; margin: 1px 8px; }
+.folder-tree :deep(.el-tree-node.is-current > .el-tree-node__content) { background: #e8f0fe; color: #4f6ef7; }
+.tree-node { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.folder-icon { width: 16px; height: 16px; color: #fa8c16; }
+
+/* 右侧文档区 */
+.doc-area { flex: 1; overflow-y: auto; min-width: 0; }
+
+.search-header {
+  padding: 12px 16px; margin-bottom: 12px;
+  background: #fff; border-radius: 12px; font-size: 14px; color: #606266;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+}
 
 /* 空状态 */
 .empty-state {
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; height: 300px; color: #999;
+  justify-content: center; height: 400px; color: #909399;
 }
-.empty-state p { margin-top: 12px; font-size: 14px; }
+.empty-icon { font-size: 56px; margin-bottom: 16px; opacity: 0.5; }
+.empty-state p { font-size: 15px; }
 .loading-state { padding: 40px 20px; }
 
-/* 文档卡片网格 */
+/* 网格视图 */
 .doc-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 .doc-card {
-  border: 1px solid #e8e8e8;
-  border-radius: 8px;
-  padding: 16px;
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-  background: #fff;
+  background: #fff; border-radius: 14px; padding: 16px;
+  cursor: pointer; position: relative;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  transition: all 0.2s ease;
 }
 .doc-card:hover {
-  border-color: #409eff;
-  box-shadow: 0 2px 12px rgba(64,158,255,0.15);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
 }
-.doc-card.selected {
-  border-color: #409eff;
-  background: #ecf5ff;
+.doc-card.selected { background: #f0f5ff; border: 2px solid #4f6ef7; padding: 14px; }
+
+.card-check { position: absolute; top: 10px; left: 10px; z-index: 1; }
+
+.card-preview {
+  width: 100%; height: 80px; border-radius: 10px; margin-bottom: 12px;
+  display: flex; align-items: center; justify-content: center;
 }
-.card-checkbox {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 1;
-}
-.card-icon { color: #409eff; margin-bottom: 8px; }
+.card-preview.doc { background: linear-gradient(135deg, #e8f0fe, #f0f5ff); color: #4f6ef7; }
+.card-preview:not(.doc) { background: linear-gradient(135deg, #e6f7f0, #f0fff7); color: #36b37e; }
+
 .card-body { min-width: 0; }
 .card-title {
-  font-size: 15px; font-weight: 500; margin-bottom: 6px;
+  font-size: 14px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .card-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.card-version { color: #999; font-size: 12px; }
-.card-time { color: #999; font-size: 12px; }
+.card-version { color: #909399; font-size: 12px; }
+.card-time { color: #909399; font-size: 12px; }
+
 .card-actions {
-  position: absolute; top: 8px; right: 8px;
-  display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s;
+  position: absolute; top: 10px; right: 10px;
+  display: flex; gap: 2px; opacity: 0; transition: opacity 0.2s;
 }
 .doc-card:hover .card-actions { opacity: 1; }
-.card-actions .el-icon { cursor: pointer; color: #999; padding: 4px; border-radius: 4px; }
-.card-actions .el-icon:hover { color: #409eff; background: #f0f5ff; }
+.card-actions .el-icon { cursor: pointer; color: #909399; padding: 4px; border-radius: 6px; }
+.card-actions .el-icon:hover { color: #4f6ef7; background: #f0f5ff; }
+.more-icon { cursor: pointer; }
 .fav-active { color: #f7ba2a !important; }
-.more-btn { cursor: pointer; }
 
-/* 移动端适配 */
-@media (max-width: 768px) {
-  .btn-text { display: none; }
-  .toolbar { flex-wrap: wrap; gap: 6px; }
-  .toolbar .el-input { width: 100% !important; order: 10; }
-  .menu-btn { display: inline-flex !important; }
-
-  .sidebar {
-    position: fixed;
-    top: 0; left: 0;
-    width: 260px; height: 100vh;
-    z-index: 200;
-    border-radius: 0;
-    border: none;
-    border-right: 1px solid #e8e8e8;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    display: flex;
-  }
-  .sidebar.open {
-    transform: translateX(0);
-    box-shadow: 4px 0 16px rgba(0,0,0,0.15);
-  }
-  .sidebar-overlay.open {
-    display: block;
-    position: fixed; top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    background: rgba(0,0,0,0.3);
-    z-index: 199;
-  }
-  .sidebar-inner { width: 100%; height: 100%; overflow-y: auto; background: #fafafa; }
-
-  .doc-grid { grid-template-columns: 1fr; }
-  .doc-card { padding: 12px; display: flex; align-items: center; gap: 10px; }
-  .card-checkbox { position: static; }
-  .card-icon { margin-bottom: 0; flex-shrink: 0; }
-  .card-icon .el-icon { font-size: 22px; }
-  .card-body { flex: 1; min-width: 0; }
-  .card-title { font-size: 14px; }
-  .card-actions { opacity: 1; position: static; }
+/* 列表视图 */
+.doc-table-wrap {
+  background: #fff; border-radius: 16px; overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
 }
+.doc-table-wrap :deep(.el-table__row) { height: 56px; cursor: pointer; }
+.doc-table-wrap :deep(.el-table__row:hover) { background: #f9fbff !important; }
+.doc-table-wrap :deep(.el-table__cell) { padding: 12px 0; }
 
-/* PC端隐藏菜单按钮 */
-@media (min-width: 769px) {
-  .menu-btn { display: none !important; }
+.table-title { display: flex; align-items: center; gap: 10px; }
+.type-dot {
+  width: 28px; height: 28px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
+.type-dot.doc { background: #e8f0fe; color: #4f6ef7; }
+.type-dot:not(.doc) { background: #e6f7f0; color: #36b37e; }
 
-/* Template grid */
-.template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.version-text { font-size: 12px; color: #909399; }
+.time-text { font-size: 13px; color: #909399; }
+
+.table-actions { display: flex; align-items: center; gap: 8px; }
+
+/* 弹窗 */
+:deep(.el-dialog) { border-radius: 16px; }
+
+/* 模板 */
+.template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
 .tpl-card {
-  border: 2px solid #e8e8e8; border-radius: 8px; padding: 12px 8px;
+  border: 2px solid #edf0f4; border-radius: 12px; padding: 14px 8px;
   text-align: center; cursor: pointer; transition: all 0.2s;
 }
-.tpl-card:hover { border-color: #409eff; background: #f5f7fa; }
-.tpl-card.active { border-color: #409eff; background: #ecf5ff; }
-.tpl-icon { font-size: 24px; margin-bottom: 4px; }
-.tpl-label { font-size: 12px; color: #606266; }
+.tpl-card:hover { border-color: #4f6ef7; background: #f9fbff; }
+.tpl-card.active { border-color: #4f6ef7; background: #f0f5ff; }
+.tpl-icon { font-size: 28px; margin-bottom: 6px; }
+.tpl-label { font-size: 13px; color: #606266; }
 
-/* List view */
-.doc-list-view { width: 100%; }
-.list-row {
-  display: flex; align-items: center; padding: 10px 12px;
-  border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.15s;
+/* 导入 */
+.import-hint { color: #909399; font-size: 13px; margin-bottom: 12px; }
+.upload-text { color: #909399; font-size: 14px; margin-top: 8px; }
+.upload-text em { color: #4f6ef7; font-style: normal; }
+
+/* 移动端 */
+@media (max-width: 768px) {
+  .docs-page { padding: 12px; }
+  .toolbar { gap: 8px; }
+  .search-box { width: 100% !important; order: 10; }
+  .sort-select { width: 100% !important; order: 11; }
+
+  .sidebar {
+    position: fixed; top: 0; left: 0;
+    width: 280px; height: 100vh; z-index: 200;
+    border-radius: 0; box-shadow: none;
+    transform: translateX(-100%); transition: transform 0.25s ease;
+  }
+  .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.15); }
+  .sidebar-overlay.open {
+    display: block; position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh; background: rgba(0,0,0,0.3); z-index: 199;
+  }
+
+  .doc-grid { grid-template-columns: 1fr; }
+  .doc-card { display: flex; align-items: center; gap: 12px; }
+  .card-preview { width: 48px; height: 48px; margin-bottom: 0; flex-shrink: 0; }
+  .card-actions { opacity: 1; position: static; }
+  .card-check { position: static; }
 }
-.list-row:hover { background: #f5f7fa; }
-.list-header-row {
-  font-weight: 600; font-size: 12px; color: #909399;
-  background: #fafafa; cursor: default; border-bottom: 1px solid #e8e8e8;
-}
-.list-col { flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.list-col-check { width: 36px; }
-.list-col-title { flex: 1; min-width: 0; font-size: 14px; }
-.list-col-type { width: 70px; text-align: center; }
-.list-col-version { width: 50px; text-align: center; color: #999; font-size: 12px; }
-.list-col-time { width: 100px; color: #999; font-size: 12px; }
-.list-col-actions { width: 70px; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+@media (min-width: 769px) { .menu-btn { display: none !important; } }
 </style>
