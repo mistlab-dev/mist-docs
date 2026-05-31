@@ -155,7 +155,10 @@
                 </el-tag>
                 <span class="card-version">v{{ doc.version }}</span>
               </div>
-              <div class="card-time">{{ formatTime(doc.updated_at) }}</div>
+              <div class="card-footer">
+                <span class="card-author">{{ doc.created_by_name || '未知' }}</span>
+                <span class="card-time">{{ formatTime(doc.updated_at) }}</span>
+              </div>
             </div>
             <div class="card-actions" @click.stop>
               <el-icon
@@ -208,6 +211,11 @@
                 <el-tag :type="row.type === 'doc' ? '' : 'success'" size="small" effect="light" round>
                   {{ row.type === 'doc' ? '文档' : '表格' }}
                 </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="创建者" width="100">
+              <template #default="{ row }">
+                <span class="author-text">{{ row.created_by_name || '-' }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="version" label="版本" width="70" align="center">
@@ -798,6 +806,9 @@ async function filterByTag(tagId: string) {
 }
 .card-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .card-version { color: #909399; font-size: 12px; }
+.card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+.card-author { color: #909399; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.card-author::before { content: ''; display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: #e0e4ea; }
 .card-time { color: #909399; font-size: 12px; }
 
 .card-actions {
@@ -828,6 +839,7 @@ async function filterByTag(tagId: string) {
 .type-dot:not(.doc) { background: #e6f7f0; color: #36b37e; }
 
 .version-text { font-size: 12px; color: #909399; }
+.author-text { font-size: 13px; color: #606266; }
 .time-text { font-size: 13px; color: #909399; }
 
 .table-actions { display: flex; align-items: center; gap: 8px; }

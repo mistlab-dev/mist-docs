@@ -134,7 +134,7 @@ const csvData = ref('')
 const searchKey = ref('')
 
 const filteredDepts = computed(() => {
-  if (!searchKey.value) return flatDepts
+  if (!searchKey.value) return flatDepts.value
   const k = searchKey.value.toLowerCase()
   function filterTree(nodes: any[]): any[] {
     return nodes.reduce((acc: any[], node: any) => {
@@ -146,7 +146,7 @@ const filteredDepts = computed(() => {
       return acc
     }, [])
   }
-  return filterTree(flatDepts)
+  return filterTree(flatDepts.value)
 })
 
 function deptColor(id: string) {
@@ -170,9 +170,16 @@ async function toggleStatus(row: any) {
 }
 
 async function load() {
-  const { data } = await http.get('/departments')
-  deptTree.value = buildTree(data.data || [])
-  flatDepts.value = deptTree.value
+  try {
+    const res = await http.get('/departments')
+    console.log('[DEBUG] departments res.data:', JSON.stringify(res.data)?.substring(0, 200))
+    const arr = res.data?.data
+    console.log('[DEBUG] arr type:', typeof arr, 'isArray:', Array.isArray(arr), 'length:', arr?.length)
+    flatDepts.value = Array.isArray(arr) ? arr : []
+    deptTree.value = flatDepts.value
+  } catch(e) {
+    console.error('[DEBUG] load error:', e)
+  }
 }
 
 function buildTree(items: any[]): any[] {

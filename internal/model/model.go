@@ -14,7 +14,7 @@ type Department struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 
 	// 非数据库字段
-	Children  []*Department `json:"children,omitempty"`
+	Children  []*Department `json:"children"`
 	UserCount int           `json:"user_count,omitempty"`
 }
 

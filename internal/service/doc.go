@@ -582,9 +582,13 @@ func RecentDocuments(ctx context.Context, userID string, limit int) ([]*model.Do
 		limit = 10
 	}
 	rows, err := database.DB.QueryContext(ctx, `
-		SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version, IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at
+		SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version,
+		       IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at,
+		       u1.name as creator_name, u2.name as updater_name
 		FROM md_documents d
 		INNER JOIN md_audits a ON a.resource_id = d.id AND a.user_id = ? AND a.action = 'view'
+		LEFT JOIN md_users u1 ON IFNULL(d.created_by,'') = u1.id
+		LEFT JOIN md_users u2 ON IFNULL(d.updated_by,'') = u2.id
 		WHERE d.status = 1
 		GROUP BY d.id
 		ORDER BY MAX(a.created_at) DESC
@@ -598,9 +602,12 @@ func RecentDocuments(ctx context.Context, userID string, limit int) ([]*model.Do
 	var docs []*model.Document
 	for rows.Next() {
 		doc := &model.Document{}
-		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FileSize, &doc.Version, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+		var creator, updater sql.NullString
+		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FileSize, &doc.Version, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt, &creator, &updater); err != nil {
 			continue
 		}
+		doc.CreatedByName = ns(creator)
+		doc.UpdatedByName = ns(updater)
 		docs = append(docs, doc)
 	}
 	return docs, nil
@@ -625,9 +632,13 @@ func RemoveFavorite(ctx context.Context, userID, docID string) error {
 
 func ListFavorites(ctx context.Context, userID string) ([]*model.Document, error) {
 	rows, err := database.DB.QueryContext(ctx, `
-		SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version, IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at
+		SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version,
+		       IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at,
+		       u1.name as creator_name, u2.name as updater_name
 		FROM md_favorites f
 		INNER JOIN md_documents d ON d.id = f.document_id AND d.status = 1
+		LEFT JOIN md_users u1 ON IFNULL(d.created_by,'') = u1.id
+		LEFT JOIN md_users u2 ON IFNULL(d.updated_by,'') = u2.id
 		WHERE f.user_id = ?
 		ORDER BY f.created_at DESC
 	`, userID)
@@ -639,9 +650,12 @@ func ListFavorites(ctx context.Context, userID string) ([]*model.Document, error
 	var docs []*model.Document
 	for rows.Next() {
 		doc := &model.Document{}
-		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FileSize, &doc.Version, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
+		var creator, updater sql.NullString
+		if err := rows.Scan(&doc.ID, &doc.FolderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FileSize, &doc.Version, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt, &creator, &updater); err != nil {
 			continue
 		}
+		doc.CreatedByName = ns(creator)
+		doc.UpdatedByName = ns(updater)
 		docs = append(docs, doc)
 	}
 	return docs, nil

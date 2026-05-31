@@ -808,20 +808,40 @@ const canUndo = computed(() => undoStack.length > 0)
 const canRedo = computed(() => redoStack.length > 0)
 function snapshot(): string { return JSON.stringify(sheets.value) }
 function pushUndo() { undoStack.push(snapshot()); if (undoStack.length > 50) undoStack.shift(); redoStack.length = 0 }
-function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); sheets.value = JSON.parse(undoStack.pop()!) }
-function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); sheets.value = JSON.parse(redoStack.pop()!) }
+function parseSheets(raw: string): SheetData[] {
+  return JSON.parse(raw).map((s: any) => ({
+    ...s,
+    rows: stringifyRows(s.rows || []),
+    hiddenRows: new Set(Array.isArray(s.hiddenRows) ? s.hiddenRows : []),
+    hiddenCols: new Set(Array.isArray(s.hiddenCols) ? s.hiddenCols : []),
+  }))
+}
+function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); sheets.value = parseSheets(undoStack.pop()!) }
+function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); sheets.value = parseSheets(redoStack.pop()!) }
+
+// Ensure all cell values are strings (JSON may contain numbers)
+function stringifyRows(r: string[][]) { return r.map(row => row.map(cell => String(cell ?? ''))) }
 
 // Data Load
 function loadData() {
   if (!props.initialData) { sheets.value = [makeSheet('Sheet1')]; return }
   try {
     const d = JSON.parse(props.initialData)
-    if (Array.isArray(d)) { sheets.value = d; return }
+    if (Array.isArray(d)) {
+      // JSON 反序列化后 hiddenRows/hiddenCols 是数组，需要转为 Set
+      sheets.value = d.map(s => ({
+        ...s,
+        rows: stringifyRows(s.rows || []),
+        hiddenRows: new Set(Array.isArray(s.hiddenRows) ? s.hiddenRows : []),
+        hiddenCols: new Set(Array.isArray(s.hiddenCols) ? s.hiddenCols : []),
+      }))
+      return
+    }
     const oldRows = d.rows || []
     const cols = d.cols || d.colCount || 26
     // 旧数据行数为0时用默认50行
     const rowCount = oldRows.length > 0 ? oldRows.length : 50
-    const rows = oldRows.length > 0 ? oldRows : Array.from({ length: 50 }, () => Array(cols).fill(''))
+    const rows = oldRows.length > 0 ? stringifyRows(oldRows) : Array.from({ length: 50 }, () => Array(cols).fill(''))
     const s: SheetData = {
       name: 'Sheet1', rows, colCount: cols,
       colWidths: d.colWidths || Array(cols).fill(120),
@@ -1287,7 +1307,7 @@ function acceptAutocomplete(val: string) {
 
 // Cell Display
 function getCellDisplay(r: number, c: number): string {
-  const raw = rows.value[r]?.[c] ?? ''
+  const raw = String(rows.value[r]?.[c] ?? '')
   if (raw.startsWith('=')) return computeFormula(raw)
   const t = colTypes.value[c] || 'auto'
   if (t === 'percent' && raw !== '') { const n = parseFloat(raw); return isNaN(n) ? raw : (n * 100).toFixed(2) + '%' }
@@ -2194,7 +2214,7 @@ const _origGetCellTextStyle = getCellTextStyle
 // We'll handle indent in the template display directly
 
 // Emit
-function emitChange() { emit('change', getData()) }
+function emitChange() { if (!isLoadingData) emit('change', getData()) }
 function getData(): string {
   // 序列化时 Set → Array
   const data = sheets.value.map(s => ({
@@ -2206,7 +2226,16 @@ function getData(): string {
 }
 
 // Lifecycle
+let isLoadingData = true
 loadData()
+isLoadingData = false
+watch(() => props.initialData, (newVal) => {
+  if (newVal && newVal !== '{}') {
+    isLoadingData = true
+    loadData()
+    isLoadingData = false
+  }
+})
 onMounted(() => { document.addEventListener('keydown', onGlobalKeydown) })
 onUnmounted(() => { document.removeEventListener('keydown', onGlobalKeydown) })
 defineExpose({ getData })

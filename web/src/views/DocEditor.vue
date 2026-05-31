@@ -469,7 +469,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
@@ -492,7 +492,7 @@ import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { MistWSProvider, type CollabUser } from '@/utils/collab'
 import http from '@/utils/http'
-import SheetEditor from '@/components/SheetEditor.vue'
+const SheetEditor = defineAsyncComponent(() => import('@/components/SheetEditor.vue'))
 
 const lowlight = createLowlight(common)
 
@@ -512,6 +512,7 @@ const saving = ref(false)
 const saveStatus = ref('') // '', 'saving', 'saved', 'error'
 let saveTimer: any = null
 let autoSaveTimer: any = null
+let dataLoaded = false // 防止加载数据前自动保存空内容
 
 // 分享
 const showShareDialog = ref(false)
@@ -747,6 +748,8 @@ async function loadDoc() {
   if (doc.value?.type === 'sheet') {
     sheetData.value = doc.value?.content || '{}'
   }
+  // 数据加载完成，允许自动保存
+  nextTick(() => { dataLoaded = true })
 }
 
 // === 文档移动 ===
@@ -998,18 +1001,21 @@ function confirmCodeLang() {
 
 // 保存
 function scheduleAutoSave() {
+  if (!dataLoaded) return // 数据未加载完不保存
   clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(doSave, 1500)
 }
 
 async function doSave() {
+  if (!dataLoaded) { console.warn('[SAVE] blocked: dataLoaded=false'); return }
   let content = ''
   if (doc.value?.type === 'sheet') {
     content = sheetRef.value?.getData() || '{}'
+    console.log('[SAVE] sheet content len:', content.length, 'isEmpty:', content === '{}')
   } else if (editor.value) {
     content = editor.value.getHTML()
   }
-  if (!content) return
+  if (!content) { console.warn('[SAVE] blocked: no content'); return }
   saving.value = true
   saveStatus.value = 'saving'
   try {
