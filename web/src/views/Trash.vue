@@ -114,12 +114,13 @@ async function purge(row: any) {
 
 async function emptyTrash() {
   await ElMessageBox.confirm('清空回收站？所有文档将永久删除！', '危险操作', { type: 'error' })
-  let ok = 0
-  for (const item of trash.value) {
-    try { await http.delete(`/docs/trash/purge/${item.id}`); ok++ } catch {}
+  try {
+    const { data } = await http.delete('/docs/trash/empty')
+    ElMessage.success(data.message || `已清空回收站`)
+    trash.value = []
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || '清空失败')
   }
-  ElMessage.success(`已永久删除 ${ok} 个文档`)
-  load()
 }
 
 function formatTime(t: string): string {

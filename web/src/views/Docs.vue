@@ -583,18 +583,22 @@ async function deleteFolder() {
   folderCtxMenu.show = false
   try {
     await ElMessageBox.confirm(`确定删除文件夹「${folderCtxMenu.nodeName}」吗？`, '删除文件夹', { type: 'warning' })
-    await http.delete(`/docs/folders/${folderCtxMenu.nodeId}`)
-    ElMessage.success('文件夹已删除')
-    if (currentFolder.value === folderCtxMenu.nodeId) {
-      currentFolder.value = null
-      loadDocs()
+    try {
+      await http.delete(`/docs/folders/${folderCtxMenu.nodeId}`)
+      ElMessage.success('文件夹已删除')
+      if (currentFolder.value === folderCtxMenu.nodeId) {
+        currentFolder.value = null
+        loadDocs()
+      }
+      loadTree()
+    } catch (e: any) {
+      ElMessage.error(e?.response?.data?.error || '删除文件夹失败')
     }
-    loadTree()
   } catch {}
 }
 
 async function createDoc(type: string) {
-  if (!newDocTitle.value) return
+  if (!newDocTitle.value.trim()) return ElMessage.warning('请输入文档标题')
   const tplContent = type === 'doc' ? (templates[newDocTemplate.value] || '') : ''
   const { data } = await http.post('/docs/documents', {
     title: newDocTitle.value, type, folder_id: currentFolder.value,

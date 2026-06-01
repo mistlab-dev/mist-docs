@@ -335,6 +335,36 @@ func PurgeDocument(ctx context.Context, id string) error {
 	return store.PurgeFromTrash(doc.ID)
 }
 
+func EmptyTrash(ctx context.Context, deptID string) (int, error) {
+	q := `SELECT id FROM md_documents WHERE status = 0`
+	var args []interface{}
+	if deptID != "" {
+		q += ` AND department_id = ?`
+		args = append(args, deptID)
+	}
+	rows, err := database.DB.QueryContext(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err == nil {
+			ids = append(ids, id)
+		}
+	}
+
+	count := 0
+	for _, id := range ids {
+		if err := PurgeDocument(ctx, id); err == nil {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // ==================== 版本 ====================
 
 func ListVersions(ctx context.Context, docID string) ([]*model.DocVersion, error) {

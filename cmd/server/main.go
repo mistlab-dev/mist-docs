@@ -186,6 +186,7 @@ func main() {
 			auth.GET("/docs/trash", handler.ListTrash)
 			auth.POST("/docs/trash/restore/:id", handler.RestoreFromTrash)
 			auth.DELETE("/docs/trash/purge/:id", handler.PurgeFromTrash)
+			auth.DELETE("/docs/trash/empty", handler.EmptyTrash)
 
 			// 权限
 			auth.GET("/permissions", handler.ListPermissions)

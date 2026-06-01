@@ -501,7 +501,19 @@ func PurgeFromTrash(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "已永久删除"})
 }
 
-// ==================== 权限 ====================
+func EmptyTrash(c *gin.Context) {
+	deptID := c.Query("department_id")
+	role := c.GetString("role")
+	if role == "dept_admin" {
+		deptID = c.GetString("department_id")
+	}
+	count, err := service.EmptyTrash(c.Request.Context(), deptID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("已永久删除 %d 个文档", count), "count": count})
+}
 
 func ListPermissions(c *gin.Context) {
 	resourceType := c.Query("resource_type")
