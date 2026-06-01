@@ -5,31 +5,31 @@
       <!-- 第一行：公式栏 | 撤销 | 字体 | 对齐 -->
       <div class="ribbon-row">
         <!-- 公式栏（内嵌到 ribbon） -->
-        <div class="ribbon-formula-section">
+        <div class="ribbon-formula-section" style="position:relative">
           <div class="ribbon-section-buttons ribbon-formula-row">
             <div class="cell-ref-sm">{{ currentCellRef }}</div>
             <button class="formula-fx-btn-sm" @click="toggleFxPanel" :class="{active: showFxPanel}">fx</button>
             <div class="formula-input-wrap-sm">
               <input class="formula-input-sm" v-model="formulaValue" @input="onFormulaInput" @keydown="onFormulaKeydown" @focus="onFormulaFocus" @blur="onFormulaBlur"
                 @keydown.enter="applyFormula" @keydown.escape="cancelFormula" placeholder="输入内容或公式..." />
-              <!-- 函数自动补全 -->
-              <div v-if="showFxPanel" class="fx-panel">
-                <div class="fx-search">
-                  <input v-model="fxSearch" placeholder="搜索函数..." @keydown="onFxSearchKey" ref="fxSearchRef" />
-                </div>
-                <div class="fx-list">
-                  <div v-for="(fn, i) in filteredFunctions" :key="fn.name" class="fx-item" :class="{active: fxIndex === i}" @click="insertFunction(fn)" @mouseenter="fxIndex = i">
-                    <span class="fx-name">{{ fn.name }}</span>
-                    <span class="fx-desc">{{ fn.desc }}</span>
-                  </div>
-                  <div v-if="!filteredFunctions.length" class="fx-empty">没有匹配的函数</div>
-                </div>
-                <!-- 参数提示 -->
-                <div v-if="fxHint" class="fx-hint">
-                  <strong>{{ fxHint.name }}</strong>({{ fxHint.args }})
-                  <p>{{ fxHint.desc }}</p>
-                </div>
+            </div>
+          </div>
+          <!-- 函数自动补全（放在 ribbon-formula-row 外面避免 overflow 影响） -->
+          <div v-if="showFxPanel" class="fx-panel">
+            <div class="fx-search">
+              <input v-model="fxSearch" placeholder="搜索函数..." @keydown="onFxSearchKey" ref="fxSearchRef" />
+            </div>
+            <div class="fx-list">
+              <div v-for="(fn, i) in filteredFunctions" :key="fn.name" class="fx-item" :class="{active: fxIndex === i}" @click="insertFunction(fn)" @mouseenter="fxIndex = i">
+                <span class="fx-name">{{ fn.name }}</span>
+                <span class="fx-desc">{{ fn.desc }}</span>
               </div>
+              <div v-if="!filteredFunctions.length" class="fx-empty">没有匹配的函数</div>
+            </div>
+            <!-- 参数提示 -->
+            <div v-if="fxHint" class="fx-hint">
+              <strong>{{ fxHint.name }}</strong>({{ fxHint.args }})
+              <p>{{ fxHint.desc }}</p>
             </div>
           </div>
           <div class="ribbon-section-label">公式</div>
@@ -364,10 +364,12 @@
                 <template v-if="editingCell?.row === ri && editingCell?.col === c - 1">
                   <input ref="editInput" class="cell-input" v-model="editingValue"
                     @keydown.enter.prevent="onEditEnter($event)"
-                    @keydown.tab.prevent="finishEdit(); moveNext()"
+                    @keydown.tab.prevent="onEditTab"
                     @keydown.escape="cancelEdit"
                     @keydown="handleEditKey"
-                    @input="updateAutocomplete" />
+                    @input="updateAutocomplete"
+                    @compositionstart="isComposing = true"
+                    @compositionend="isComposing = false" />
                   <!-- 输入联想 -->
                   <div v-if="acItems.length" class="ac-dropdown">
                     <div v-for="(item, i) in acItems" :key="i" class="ac-item" :class="{'ac-active': i === acIndex}" @mousedown.prevent="acceptAutocomplete(item)">{{ item }}</div>
@@ -1016,6 +1018,7 @@ function startColDrag(ci: number, e: MouseEvent) {
   document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up)
 }
 let isDragging = false
+const isComposing = ref(false) // 中文输入法组合状态
 let formulaRangeMode = false // 公式范围选择模式
 let formulaInsertPos = { start: '', end: '' } // 插入位置
 let formulaTargetCell: { r: number; c: number } | null = null // 公式要写入的目标单元格
@@ -1131,6 +1134,7 @@ function finishEdit() {
 }
 function cancelEdit() { editingCell.value = null; updateFormula() }
 function onEditEnter(e: KeyboardEvent) {
+  if (isComposing.value) return // 中文输入法组合中，不结束编辑
   if ((e.ctrlKey || e.metaKey) && isMultiCellSelection.value) {
     // Ctrl+Enter：填入选区所有格
     if (!editingCell.value || !selection.value) return
@@ -1145,6 +1149,8 @@ function onEditEnter(e: KeyboardEvent) {
   }
 }
 function applyFormula() {
+  // fx-panel 打开时 Enter 用于选择函数，不提交公式
+  if (showFxPanel.value) return
   if (editingCell.value) { editingCell.value = null } // 结束编辑
   if (!selection.value) return; pushUndo()
   const { startRow, startCol, endRow, endCol } = selection.value
@@ -1153,6 +1159,7 @@ function applyFormula() {
   emitChange()
 }
 function cancelFormula() { updateFormula(); showFxPanel.value = false }
+function onEditTab() { if (isComposing.value) return; finishEdit(); moveNext() }
 
 // ── 函数辅助面板 ──
 const showFxPanel = ref(false)
@@ -1639,11 +1646,26 @@ function applyDataBar() {
 
 // Copy/Paste/Cut
 let clipData: { data: string[][]; cut?: boolean } | null = null
+function fallbackCopy(text: string) {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.cssText = 'position:fixed;opacity:0;left:-9999px'
+  document.body.appendChild(ta)
+  ta.select()
+  document.execCommand('copy')
+  document.body.removeChild(ta)
+}
 function clipCopy() {
   if (!selection.value) return
   const { startRow, startCol, endRow, endCol } = selection.value; const data: string[][] = []
   for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++) { const row: string[] = []; for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) row.push(rows.value[r]?.[c] || ''); data.push(row) }
-  clipData = { data }; navigator.clipboard?.writeText(data.map(r => r.join('\t')).join('\n'))
+  clipData = { data }
+  const text = data.map(r => r.join('\t')).join('\n')
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text))
+  } else {
+    fallbackCopy(text)
+  }
 }
 function clipCut() { clipCopy(); if (clipData) clipData.cut = true }
 function clipPaste() {
@@ -1651,8 +1673,14 @@ function clipPaste() {
   if (clipData) {
     for (let r = 0; r < clipData.data.length; r++) for (let c = 0; c < clipData.data[r].length; c++) { if (!rows.value[r0 + r]) rows.value[r0 + r] = makeRow(colCount.value); rows.value[r0 + r][c0 + c] = clipData.data[r][c] }
     if (clipData.cut) clipData.cut = false
-  } else { navigator.clipboard?.readText().then(t => { const lines = t.split('\n'); for (let r = 0; r < lines.length; r++) { const cells = lines[r].split('\t'); for (let c = 0; c < cells.length; c++) { if (!rows.value[r0 + r]) rows.value[r0 + r] = makeRow(colCount.value); rows.value[r0 + r][c0 + c] = cells[c] } }; emitChange() }); return }
-  emitChange()
+    emitChange()
+    return
+  }
+  if (navigator.clipboard?.readText) {
+    navigator.clipboard.readText().then(t => {
+      const lines = t.split('\n'); for (let r = 0; r < lines.length; r++) { const cells = lines[r].split('\t'); for (let c = 0; c < cells.length; c++) { if (!rows.value[r0 + r]) rows.value[r0 + r] = makeRow(colCount.value); rows.value[r0 + r][c0 + c] = cells[c] } }; emitChange()
+    }).catch(() => { console.warn('剪贴板访问被拒绝，请使用 Ctrl+V 粘贴') })
+  }
 }
 
 // Fill Handle
@@ -2031,7 +2059,7 @@ function onGlobalKeydown(e: KeyboardEvent) {
   else if (e.key === 'ArrowDown') { selectCell(Math.min(selection.value.startRow + 1, rows.value.length - 1), selection.value.startCol) }
   else if (e.key === 'ArrowLeft') { if (selection.value.startCol > 0) selectCell(selection.value.startRow, selection.value.startCol - 1) }
   else if (e.key === 'ArrowRight') { if (selection.value.startCol < colCount.value - 1) selectCell(selection.value.startRow, selection.value.startCol + 1) }
-  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { editingValue.value = e.key; startEdit(selection.value.startRow, selection.value.startCol) }
+  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.isComposing) { editingValue.value = e.key; startEdit(selection.value.startRow, selection.value.startCol) }
 }
 
 // ─── Text to Columns (分列) ───
