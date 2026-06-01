@@ -1,37 +1,41 @@
 <template>
   <div class="sheet-container" tabindex="0" ref="containerRef" @keydown="onGlobalKeydown">
-    <!-- 公式栏 -->
-    <div class="formula-bar">
-      <div class="cell-ref">{{ currentCellRef }}</div>
-      <button class="formula-fx-btn" @click="toggleFxPanel" :class="{active: showFxPanel}">fx</button>
-      <div class="formula-input-wrap">
-        <input class="formula-input" v-model="formulaValue" @input="onFormulaInput" @keydown="onFormulaKeydown" @focus="onFormulaFocus" @blur="onFormulaBlur"
-          @keydown.enter="applyFormula" @keydown.escape="cancelFormula" placeholder="输入内容或公式..." />
-        <!-- 函数自动补全 -->
-        <div v-if="showFxPanel" class="fx-panel">
-          <div class="fx-search">
-            <input v-model="fxSearch" placeholder="搜索函数..." @keydown="onFxSearchKey" ref="fxSearchRef" />
-          </div>
-          <div class="fx-list">
-            <div v-for="(fn, i) in filteredFunctions" :key="fn.name" class="fx-item" :class="{active: fxIndex === i}" @click="insertFunction(fn)" @mouseenter="fxIndex = i">
-              <span class="fx-name">{{ fn.name }}</span>
-              <span class="fx-desc">{{ fn.desc }}</span>
-            </div>
-            <div v-if="!filteredFunctions.length" class="fx-empty">没有匹配的函数</div>
-          </div>
-          <!-- 参数提示 -->
-          <div v-if="fxHint" class="fx-hint">
-            <strong>{{ fxHint.name }}</strong>({{ fxHint.args }})
-            <p>{{ fxHint.desc }}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 工具栏（Excel Ribbon 两行布局） -->
+    <!-- 工具栏（Excel Ribbon 布局） -->
     <div class="ribbon">
-      <!-- 第一行：剪贴板 | 字体 | 对齐 -->
+      <!-- 第一行：公式栏 | 撤销 | 字体 | 对齐 -->
       <div class="ribbon-row">
+        <!-- 公式栏（内嵌到 ribbon） -->
+        <div class="ribbon-formula-section">
+          <div class="ribbon-section-buttons ribbon-formula-row">
+            <div class="cell-ref-sm">{{ currentCellRef }}</div>
+            <button class="formula-fx-btn-sm" @click="toggleFxPanel" :class="{active: showFxPanel}">fx</button>
+            <div class="formula-input-wrap-sm">
+              <input class="formula-input-sm" v-model="formulaValue" @input="onFormulaInput" @keydown="onFormulaKeydown" @focus="onFormulaFocus" @blur="onFormulaBlur"
+                @keydown.enter="applyFormula" @keydown.escape="cancelFormula" placeholder="输入内容或公式..." />
+              <!-- 函数自动补全 -->
+              <div v-if="showFxPanel" class="fx-panel">
+                <div class="fx-search">
+                  <input v-model="fxSearch" placeholder="搜索函数..." @keydown="onFxSearchKey" ref="fxSearchRef" />
+                </div>
+                <div class="fx-list">
+                  <div v-for="(fn, i) in filteredFunctions" :key="fn.name" class="fx-item" :class="{active: fxIndex === i}" @click="insertFunction(fn)" @mouseenter="fxIndex = i">
+                    <span class="fx-name">{{ fn.name }}</span>
+                    <span class="fx-desc">{{ fn.desc }}</span>
+                  </div>
+                  <div v-if="!filteredFunctions.length" class="fx-empty">没有匹配的函数</div>
+                </div>
+                <!-- 参数提示 -->
+                <div v-if="fxHint" class="fx-hint">
+                  <strong>{{ fxHint.name }}</strong>({{ fxHint.args }})
+                  <p>{{ fxHint.desc }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="ribbon-section-label">公式</div>
+        </div>
+        <div class="rb-sep" />
+
         <div class="ribbon-section">
           <div class="ribbon-section-buttons">
             <button class="rb-btn" :disabled="!canUndo" @click="undo" title="撤销 (Ctrl+Z)">
@@ -300,12 +304,12 @@
         </colgroup>
         <thead>
           <tr>
-            <th class="corner-cell"></th>
+            <th class="corner-cell" @click="selectAll"></th>
             <th v-for="c in colCount" :key="c"
               v-show="!hiddenCols.has(c - 1)"
               class="col-hdr"
               :class="{ sel: isColSelected(c - 1), sorted: sortCol === c - 1, 'frozen-col-hdr': freezeRows > 0, 'drag-over': colDragOver === c - 1 }"
-              @click="selectCol(c - 1)"
+              @click="selectCol(c - 1, $event)"
               @dblclick="autoFitCol(c - 1)"
               @mousedown="startColDrag(c - 1, $event)"
             >
@@ -333,7 +337,7 @@
         <tbody>
           <template v-for="(row, ri) in currentSheetRows" :key="ri">
             <tr v-show="!isRowFiltered(ri) && !hiddenRows.has(ri)" :style="{ height: (rowHeights[ri] || 26) + 'px' }" :class="{'wrap-row': hasRowWrap(ri)}">
-              <td class="row-hdr" :class="{ sel: isRowSelected(ri), 'drag-over': rowDragOver === ri }" @click="selectRow(ri)" @mousedown.prevent="startRowDrag(ri, $event)">
+              <td class="row-hdr" :class="{ sel: isRowSelected(ri), 'drag-over': rowDragOver === ri }" @click="selectRow(ri, $event)" @mousedown.prevent="startRowDrag(ri, $event)">
                 <div class="row-hdr-inner">
                   {{ ri + 1 }}
                   <div class="row-resize" @mousedown.stop="startRowResize(ri, $event)" />
@@ -837,6 +841,27 @@ function loadData() {
       }))
       return
     }
+    // Handle {sheets: [...]} wrapper format
+    if (d.sheets && Array.isArray(d.sheets)) {
+      sheets.value = d.sheets.map((s: any) => {
+        const rowCount = (s.rows || []).length || 50
+        return {
+          name: s.name || 'Sheet1',
+          rows: stringifyRows(s.rows || []),
+          colCount: s.colCount || 26,
+          colWidths: s.colWidths || Array(s.colCount || 26).fill(120),
+          colTypes: s.colTypes || Array(s.colCount || 26).fill('auto'),
+          rowHeights: s.rowHeights || Array(rowCount).fill(26),
+          cellMeta: s.cellMeta || {},
+          merges: s.merges || [],
+          frozenRows: s.frozenRows || 0, frozenCols: s.frozenCols || 0,
+          hiddenRows: new Set(Array.isArray(s.hiddenRows) ? s.hiddenRows : []),
+          hiddenCols: new Set(Array.isArray(s.hiddenCols) ? s.hiddenCols : []),
+          protected: s.protected || false, groups: s.groups || [],
+        }
+      })
+      return
+    }
     const oldRows = d.rows || []
     const cols = d.cols || d.colCount || 26
     // 旧数据行数为0时用默认50行
@@ -902,8 +927,29 @@ function selectCell(r: number, c: number, e?: MouseEvent) {
   ctxRow = r; ctxCol = c; editingCell.value = null; updateFormula(); updateToolbarState()
   containerRef.value?.focus()
 }
-function selectRow(ri: number) { if (editingCell.value) finishEdit(); selection.value = { startRow: ri, startCol: 0, endRow: ri, endCol: colCount.value - 1 }; updateFormula() }
-function selectCol(ci: number) { if (editingCell.value) finishEdit(); selection.value = { startRow: 0, startCol: ci, endRow: rows.value.length - 1, endCol: ci }; updateFormula() }
+function selectAll() {
+  if (editingCell.value) finishEdit()
+  selection.value = { startRow: 0, startCol: 0, endRow: rows.value.length - 1, endCol: colCount.value - 1 }
+  updateFormula()
+}
+function selectRow(ri: number, e?: MouseEvent) {
+  if (editingCell.value) finishEdit()
+  if (e?.shiftKey && selection.value) {
+    selection.value = { ...selection.value, startRow: Math.min(selection.value.startRow, ri), endRow: Math.max(selection.value.endRow, ri) }
+  } else {
+    selection.value = { startRow: ri, startCol: 0, endRow: ri, endCol: colCount.value - 1 }
+  }
+  updateFormula()
+}
+function selectCol(ci: number, e?: MouseEvent) {
+  if (editingCell.value) finishEdit()
+  if (e?.shiftKey && selection.value) {
+    selection.value = { ...selection.value, startCol: Math.min(selection.value.startCol, ci), endCol: Math.max(selection.value.endCol, ci) }
+  } else {
+    selection.value = { startRow: 0, startCol: ci, endRow: rows.value.length - 1, endCol: ci }
+  }
+  updateFormula()
+}
 
 // ── 行拖拽排序 ──
 const rowDragOver = ref(-1)
@@ -971,7 +1017,8 @@ function startColDrag(ci: number, e: MouseEvent) {
 }
 let isDragging = false
 let formulaRangeMode = false // 公式范围选择模式
-let formulaInsertPos = { start: 0, end: 0 } // 插入位置
+let formulaInsertPos = { start: '', end: '' } // 插入位置
+let formulaTargetCell: { r: number; c: number } | null = null // 公式要写入的目标单元格
 
 function isFormulaRangeEditing(): boolean {
   if (!formulaValue.value.startsWith('=')) return false
@@ -983,6 +1030,10 @@ function onCellMouseDown(r: number, c: number, e: MouseEvent) {
   if (e.button !== 0) return
   // 公式范围选择模式：拖选单元格直接填入范围引用
   if (formulaRangeMode) {
+    // 记住公式要写入的目标单元格（当前活动单元格）
+    if (!formulaTargetCell && selection.value) {
+      formulaTargetCell = { r: selection.value.startRow, c: selection.value.startCol }
+    }
     const parts = getFormulaInsertParts()
     formulaInsertPos = parts
     const ref = colName(c) + (r + 1)
@@ -1005,16 +1056,18 @@ function onCellMouseEnter(r: number, c: number, _e: MouseEvent) {
   if (!isDragging) return
   // 公式范围模式：扩展范围引用
   if (formulaRangeMode) {
-    // 找到第一个被选中的起始单元格（上一次 mousedown 的）
-    const startRef = formulaValue.value.match(/([A-Z]+\d+)$/)?.[1]
-    if (startRef) {
-      const m = startRef.match(/^([A-Z]+)(\d+)$/)
+    // 找到末尾的单元格引用或范围引用（如 A3 或 A3:D3）
+    const rangeOrRef = formulaValue.value.match(/([A-Z]+\d+(?::[A-Z]+\d+)?)$/)?.[1]
+    if (rangeOrRef) {
+      // 提取范围的起始位置（取最左上角的单元格）
+      const firstRef = rangeOrRef.split(':')[0]
+      const m = firstRef.match(/^([A-Z]+)(\d+)$/)
       if (m) {
         const sc = colIndex(m[1]), sr = parseInt(m[2]) - 1
         const endRef = colName(c) + (r + 1)
         const rangeStr = colName(Math.min(sc, c)) + (Math.min(sr, r) + 1) + ':' + colName(Math.max(sc, c)) + (Math.max(sr, r) + 1)
-        // 替换末尾的引用为范围
-        formulaValue.value = formulaValue.value.replace(/([A-Z]+\d+)$/, rangeStr)
+        // 替换末尾的整个引用（单个或范围）为新范围
+        formulaValue.value = formulaValue.value.replace(/([A-Z]+\d+(?::[A-Z]+\d+)?)$/, rangeStr)
       }
     }
     return
@@ -1033,8 +1086,18 @@ function stopDrag() {
   }
   if (formulaRangeMode) {
     formulaRangeMode = false
-    // 自动应用公式
-    applyFormula()
+    // 将公式写入目标单元格（而非整个 selection，避免覆盖数据）
+    if (formulaTargetCell) {
+      pushUndo()
+      rows.value[formulaTargetCell.r][formulaTargetCell.c] = formulaValue.value
+      // 更新 selection 到目标单元格
+      selection.value = { startRow: formulaTargetCell.r, startCol: formulaTargetCell.c, endRow: formulaTargetCell.r, endCol: formulaTargetCell.c }
+      formulaTargetCell = null
+      emitChange()
+    } else {
+      // fallback：没有目标单元格，用 applyFormula
+      applyFormula()
+    }
   }
 }
 function updateFormula() { if (!selection.value) return; formulaValue.value = rows.value[selection.value.startRow]?.[selection.value.startCol] || '' }
@@ -1156,6 +1219,8 @@ function toggleFxPanel() {
     fxSearch.value = ''
     fxIndex.value = 0
     if (!formulaValue.value.startsWith('=')) formulaValue.value = '='
+    // 记住公式目标单元格
+    formulaTargetCell = selection.value ? { r: selection.value.startRow, c: selection.value.startCol } : null
     nextTick(() => fxSearchRef.value?.focus())
   }
 }
@@ -1442,7 +1507,19 @@ function addRowAbove() { insertRowAt(selection.value?.startRow ?? 0) }
 function addRowBelow() { insertRowAt((selection.value?.startRow ?? rows.value.length - 1) + 1) }
 function addColLeft() { insertColAt(selection.value?.startCol ?? 0) }
 function addColRight() { insertColAt((selection.value?.startCol ?? colCount.value - 1) + 1) }
-function deleteRow() { deleteRowAt(selection.value?.startRow ?? 0) }
+function deleteRow() {
+  if (!selection.value) { deleteRowAt(0); return }
+  const r1 = Math.min(selection.value.startRow, selection.value.endRow)
+  const r2 = Math.max(selection.value.startRow, selection.value.endRow)
+  if (r1 === r2) { deleteRowAt(r1); return }
+  pushUndo()
+  rows.value.splice(r1, r2 - r1 + 1)
+  rowHeights.value.splice(r1, r2 - r1 + 1)
+  if (rows.value.length === 0) { rows.value.push(makeRow(colCount.value)); rowHeights.value.push(26) }
+  const nr = Math.min(r1, rows.value.length - 1)
+  selection.value = { startRow: nr, startCol: 0, endRow: nr, endCol: colCount.value - 1 }
+  emitChange()
+}
 function deleteCol() { deleteColAt(selection.value?.startCol ?? 0) }
 
 // Resize
@@ -1722,7 +1799,7 @@ function ctxCopy() { hideContextMenu(); clipCopy() }
 function ctxPaste() { hideContextMenu(); clipPaste() }
 function ctxPasteValues() { hideContextMenu(); if (!clipData || !selection.value) return; pushUndo(); const r0 = selection.value.startRow, c0 = selection.value.startCol; for (let r = 0; r < clipData.data.length; r++) for (let c = 0; c < clipData.data[r].length; c++) { if (!rows.value[r0 + r]) rows.value[r0 + r] = makeRow(colCount.value); rows.value[r0 + r][c0 + c] = clipData.data[r][c] }; emitChange() }
 function ctxPasteFormat() { hideContextMenu(); if (!selection.value) return; pushUndo(); const { startRow, startCol, endRow, endCol } = selection.value; const src = clipData ? { r: 0, c: 0 } : null; if (!src) return; const r0 = selection.value.startRow, c0 = selection.value.startCol; for (let r = Math.min(startRow, endRow); r <= Math.max(startRow, endRow); r++) for (let c = Math.min(startCol, endCol); c <= Math.max(startCol, endCol); c++) { const sr = r - r0, sc = c - c0; if (sr < clipData!.data.length && sc < clipData!.data[sr].length) { const srcMeta = getCellMeta(r0 + sr, c0 + sc); setCellMeta(r, c, { ...srcMeta }) } }; emitChange() }
-function ctxPasteTranspose() { hideContextMenu(); if (!clipData || !selection.value) return; pushUndo(); const r0 = selection.value.startRow, c0 = selection.value.startCol; const transposed = clipData.data[0].map((_, c) => clipData.data.map(row => row[c])); for (let r = 0; r < transposed.length; r++) for (let c = 0; c < transposed[r].length; c++) { if (!rows.value[r0 + r]) rows.value[r0 + r] = makeRow(colCount.value); rows.value[r0 + r][c0 + c] = transposed[r][c] }; emitChange() }
+function ctxPasteTranspose() { hideContextMenu(); if (!clipData || !selection.value) return; pushUndo(); const r0 = selection.value.startRow, c0 = selection.value.startCol; const transposed = clipData!.data[0].map((_, c) => clipData!.data.map(row => row[c])); for (let r = 0; r < transposed.length; r++) for (let c = 0; c < transposed[r].length; c++) { if (!rows.value[r0 + r]) rows.value[r0 + r] = makeRow(colCount.value); rows.value[r0 + r][c0 + c] = transposed[r][c] }; emitChange() }
 function ctxInsertRowAbove() { hideContextMenu(); addRowAbove() }
 function ctxInsertRowBelow() { hideContextMenu(); addRowBelow() }
 function ctxInsertColLeft() { hideContextMenu(); addColLeft() }
@@ -1859,12 +1936,62 @@ function numArray(arg: string, countNonNum = false, raw = false, countAll = fals
   }
   const m = arg.trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
   if (m) { const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: number[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = resolveCellRaw(r, c); if (countAll) { if (v !== '') res.push(raw ? parseFloat(v) || 0 : 1) } else if (countNonNum) { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } else { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } }; return res }
-  return arg.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
+  // Fallback: handle multi-colon range like C3:B3:A3:D3 → normalize to A3:D3
+  const multiColon = arg.trim().toUpperCase().match(/^([A-Z]+\d+(?::[A-Z]+\d+)+)$/)
+  if (multiColon) {
+    const refs = multiColon[1].split(':')
+    if (refs.length >= 2) {
+      // Find bounding box of all refs
+      let minC = Infinity, minR = Infinity, maxC = -1, maxR = -1
+      for (const ref of refs) {
+        const rm = ref.match(/^([A-Z]+)(\d+)$/)
+        if (rm) { const c = colIndex(rm[1]), r = parseInt(rm[2]) - 1; minC = Math.min(minC, c); minR = Math.min(minR, r); maxC = Math.max(maxC, c); maxR = Math.max(maxR, r) }
+      }
+      if (minC <= maxC && minR <= maxR) {
+        const res: number[] = []
+        for (let r = minR; r <= maxR; r++) for (let c = minC; c <= maxC; c++) { const v = resolveCellRaw(r, c); if (countAll) { if (v !== '') res.push(raw ? parseFloat(v) || 0 : 1) } else if (countNonNum) { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } else { const n = parseFloat(v); if (!isNaN(n)) res.push(n) } }
+        return res
+      }
+    }
+  }
+  // Split by comma, each part can be a range (A1:B3) or single cell ref or number
+  const parts = arg.split(',')
+  const res: number[] = []
+  for (let p of parts) {
+    p = p.trim().toUpperCase()
+    const rng = p.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+    if (rng) {
+      const c1 = colIndex(rng[1]), r1 = parseInt(rng[2]) - 1, c2 = colIndex(rng[3]), r2 = parseInt(rng[4]) - 1
+      for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = resolveCellRaw(r, c); const n = parseFloat(v); if (!isNaN(n)) res.push(n) }
+      continue
+    }
+    const cr = p.match(/^([A-Z]+)(\d+)$/)
+    if (cr) {
+      const val = resolveCellRaw(parseInt(cr[2]) - 1, colIndex(cr[1])); const n = parseFloat(val); if (!isNaN(n)) res.push(n)
+      continue
+    }
+    const n = parseFloat(p)
+    if (!isNaN(n)) res.push(n)
+  }
+  return res
 }
 function strArray(arg: string, keepAll = false): string[] {
   const m = arg.trim().toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
   if (m) { const c1 = colIndex(m[1]), r1 = parseInt(m[2]) - 1, c2 = colIndex(m[3]), r2 = parseInt(m[4]) - 1; const res: string[] = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = resolveCellRaw(r, c); if (keepAll || v !== '') res.push(v) }; return res }
-  return arg.split(',').map(v => v.trim())
+  const parts = arg.split(','), res: string[] = []
+  for (let p of parts) {
+    p = p.trim().toUpperCase()
+    const rng = p.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+    if (rng) {
+      const c1 = colIndex(rng[1]), r1 = parseInt(rng[2]) - 1, c2 = colIndex(rng[3]), r2 = parseInt(rng[4]) - 1
+      for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const v = resolveCellRaw(r, c); if (keepAll || v !== '') res.push(v) }
+      continue
+    }
+    const cr = p.match(/^([A-Z]+)(\d+)$/)
+    if (cr) { const v = resolveCellRaw(parseInt(cr[2]) - 1, colIndex(cr[1])); if (keepAll || v !== '') res.push(v); continue }
+    res.push(p)
+  }
+  return res
 }
 function splitArgs(s: string): string[] { const args: string[] = []; let depth = 0, cur = '', inStr = false; for (let i = 0; i < s.length; i++) { const ch = s[i]; if (ch === '"' && (i === 0 || s[i - 1] !== '\\')) inStr = !inStr; if (!inStr) { if (ch === '(') depth++; if (ch === ')') depth-- } if (ch === ',' && depth === 0 && !inStr) { args.push(cur); cur = '' } else cur += ch }; if (cur.trim()) args.push(cur); return args }
 function safeCalc(expr: string): number { let safe = expr.replace(/([A-Z]+)(\d+)/gi, (_, col, row) => { const v = getCellVal(col.toUpperCase(), parseInt(row)); return (typeof v === 'number') ? String(v) : (isNaN(Number(v)) ? '0' : String(v)) }); safe = safe.replace(/[^0-9+\-*/.() <>!=&]/g, ''); try { return Function('"use strict"; return (' + safe + ')')() } catch { return NaN } }
@@ -2245,14 +2372,15 @@ defineExpose({ getData })
 /* ── Layout ── */
 .sheet-container { display: flex; flex-direction: column; height: 100%; background: #fff; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; color: #333; outline: none; }
 
-/* ── Formula Bar ── */
-.formula-bar { display: flex; align-items: center; height: 28px; border-bottom: 1px solid #d6d6d6; background: #f3f3f3; position: relative; }
-.cell-ref { width: 72px; text-align: center; font-size: 12px; color: #444; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; justify-content: center; background: #fff; font-weight: 500; flex-shrink: 0; }
-.formula-fx-btn { padding: 0 8px; color: #555; font-style: italic; font-weight: 600; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; background: #f3f3f3; font-size: 12px; cursor: pointer; border: none; }
-.formula-fx-btn:hover { background: #e8e8e8; }
-.formula-fx-btn.active { background: #e0ecf7; color: #409eff; }
-.formula-input-wrap { flex: 1; position: relative; height: 100%; }
-.formula-input { width: 100%; border: none; outline: none; padding: 0 8px; height: 100%; font-size: 13px; background: #fff; }
+/* ── Formula (inside ribbon) ── */
+.ribbon-formula-section { display: flex; flex-direction: column; align-items: center; padding: 2px 6px 0; min-width: 0; }
+.ribbon-formula-row { gap: 0 !important; border: 1px solid #d6d6d6; border-radius: 3px; overflow: hidden; height: 26px; }
+.cell-ref-sm { width: 52px; text-align: center; font-size: 11px; color: #444; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; justify-content: center; background: #fff; font-weight: 500; flex-shrink: 0; }
+.formula-fx-btn-sm { padding: 0 6px; color: #555; font-style: italic; font-weight: 600; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; background: #f3f3f3; font-size: 11px; cursor: pointer; border: none; }
+.formula-fx-btn-sm:hover { background: #e8e8e8; }
+.formula-fx-btn-sm.active { background: #e0ecf7; color: #409eff; }
+.formula-input-wrap-sm { position: relative; height: 100%; flex: 1; min-width: 120px; }
+.formula-input-sm { width: 100%; border: none; outline: none; padding: 0 6px; height: 100%; font-size: 12px; background: #fff; }
 
 /* 函数面板 */
 .fx-panel {

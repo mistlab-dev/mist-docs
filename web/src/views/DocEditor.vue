@@ -214,9 +214,9 @@
       <p style="margin-bottom:12px;color:#666">
         将恢复到 <strong>v{{ versionDialog.version }}</strong>，当前内容将被保存为新版本。
       </p>
-      <el-timeline>
+      <el-timeline style="max-height:400px;overflow-y:auto">
         <el-timeline-item
-          v-for="v in versions.slice(0, 10)"
+          v-for="v in versions"
           :key="v.version"
           :timestamp="formatTime(v.created_at)"
           :type="v.version === versionDialog.version ? 'primary' : ''"
@@ -686,8 +686,8 @@ async function unlockDoc() {
 }
 
 function openDiff(ver: number) {
-  diffOld.value = Math.max(1, ver - 1)
-  diffNew.value = ver
+  diffOld.value = ver
+  diffNew.value = doc.value?.version || ver
   showDiff.value = true
   loadDiff()
 }
@@ -700,9 +700,27 @@ async function loadDiff() {
       fetch(`/api/docs/documents/${docId}/versions/${diffOld.value}/content`, { headers: authHeader() }),
       fetch(`/api/docs/documents/${docId}/versions/${diffNew.value}/content`, { headers: authHeader() }),
     ])
-    const oldText = await oldResp.text()
-    const newText = await newResp.text()
-    diffHtml.value = simpleDiff(oldText, newText)
+    let oldText = await oldResp.text()
+    let newText = await newResp.text()
+    // Check for API error responses
+    const checkError = (text: string, label: string): string | null => {
+      try {
+        const obj = JSON.parse(text)
+        if (obj.error) return `${label}: ${obj.error}`
+      } catch {}
+      return null
+    }
+    const oldErr = checkError(oldText, '旧版本')
+    const newErr = checkError(newText, '新版本')
+    if (oldErr || newErr) {
+      diffHtml.value = '<div style="font-size:14px;line-height:1.8">' +
+        (oldErr ? `<p style="color:#f56c6c">⚠️ ${oldErr}</p>` : '') +
+        (newErr ? `<p style="color:#f56c6c">⚠️ ${newErr}</p>` : '') +
+        '<p style="color:#909399">提示：旧版本数据可能使用了不同加密密钥，无法解密</p>' +
+        '</div>'
+    } else {
+      diffHtml.value = simpleDiff(oldText, newText)
+    }
   } catch { diffHtml.value = '<p style="color:#f56c6c">加载失败</p>' }
   diffLoading.value = false
 }
@@ -713,6 +731,11 @@ function authHeader(): Record<string, string> {
 }
 
 function simpleDiff(oldHtml: string, newHtml: string): string {
+  // 检测是否为 JSON（sheet 类型）
+  const isJson = (s: string) => { try { const p = JSON.parse(s); return Array.isArray(p) } catch { return false } }
+  if (isJson(oldHtml) && isJson(newHtml)) {
+    return sheetDiff(oldHtml, newHtml)
+  }
   const stripTags = (s: string) => s.replace(/<[^>]+>/g, '').split(/\s+/).filter(Boolean)
   const oldWords = stripTags(oldHtml)
   const newWords = stripTags(newHtml)
@@ -730,6 +753,49 @@ function simpleDiff(oldHtml: string, newHtml: string): string {
   }
   html += '</div>'
   return html
+}
+
+function sheetDiff(oldJson: string, newJson: string): string {
+  try {
+    const oldSheets: any[] = JSON.parse(oldJson)
+    const newSheets: any[] = JSON.parse(newJson)
+    let html = '<div style="font-size:14px;line-height:1.8">'
+    const maxSheets = Math.max(oldSheets.length, newSheets.length)
+    let hasDiff = false
+    for (let si = 0; si < maxSheets; si++) {
+      const os = oldSheets[si], ns = newSheets[si]
+      const name = ns?.name || os?.name || `Sheet${si + 1}`
+      if (!os) { html += `<p>📄 <strong>${name}</strong>: <span style="color:#67c23a">新增工作表</span></p>`; hasDiff = true; continue }
+      if (!ns) { html += `<p>📄 <strong>${name}</strong>: <span style="color:#f56c6c">删除工作表</span></p>`; hasDiff = true; continue }
+      const oldRows = os.rows || [], newRows = ns.rows || []
+      const maxR = Math.max(oldRows.length, newRows.length)
+      for (let ri = 0; ri < maxR; ri++) {
+        const or_ = oldRows[ri], nr_ = newRows[ri]
+        const maxC = Math.max(or_?.cells?.length || 0, nr_?.cells?.length || 0)
+        for (let ci = 0; ci < maxC; ci++) {
+          const oc = or_?.cells?.[ci], nc = nr_?.cells?.[ci]
+          const ov = oc?.value ?? oc?.formula ?? '', nv = nc?.value ?? nc?.formula ?? ''
+          if (ov !== nv) {
+            hasDiff = true
+            const colName = String.fromCharCode(65 + ci)
+            const cellRef = `${colName}${ri + 1}`
+            html += `<p>📄 ${name} ${cellRef}: `
+            if (ov) html += `<span style="background:#fde2e2;color:#f56c6c;padding:1px 3px;border-radius:3px">${String(ov).substring(0, 50)}</span>`
+            html += ' → '
+            if (nv) html += `<span style="background:#e1f3d8;color:#67c23a;padding:1px 3px;border-radius:3px">${String(nv).substring(0, 50)}</span>`
+            if (!ov) html += '<span style="color:#67c23a">新增</span>'
+            if (!nv) html += '<span style="color:#f56c6c">删除</span>'
+            html += '</p>'
+          }
+        }
+      }
+    }
+    if (!hasDiff) html += '<p style="color:#67c23a">✅ 两个版本内容相同</p>'
+    html += '</div>'
+    return html
+  } catch {
+    return '<p style="color:#f56c6c">数据解析失败</p>'
+  }
 }
 
 // 链接弹窗
@@ -774,7 +840,7 @@ watch(showMoveDialog, (v) => { if (v) loadFolderTree() })
 
 async function loadVersions() {
   const { data } = await http.get(`/docs/documents/${docId}/versions`)
-  versions.value = (data.data || []).reverse()
+  versions.value = (data.data || [])
 }
 
 function initEditor(initialContent: string) {
@@ -1010,12 +1076,15 @@ async function doSave() {
   if (!dataLoaded) { console.warn('[SAVE] blocked: dataLoaded=false'); return }
   let content = ''
   if (doc.value?.type === 'sheet') {
-    content = sheetRef.value?.getData() || '{}'
+    const refVal = sheetRef.value
+    console.log('[SAVE] sheetRef.value type:', typeof refVal, 'keys:', refVal ? Object.keys(refVal) : 'null')
+    console.log('[SAVE] getData exists:', typeof refVal?.getData)
+    content = refVal?.getData?.() || '{}'
     console.log('[SAVE] sheet content len:', content.length, 'isEmpty:', content === '{}')
   } else if (editor.value) {
     content = editor.value.getHTML()
   }
-  if (!content) { console.warn('[SAVE] blocked: no content'); return }
+  if (!content || content === '{}') { console.warn('[SAVE] blocked: no content or empty'); return }
   saving.value = true
   saveStatus.value = 'saving'
   try {
@@ -1073,7 +1142,7 @@ async function confirmRestore() {
   versionDialog.loading = false
 }
 
-function onSheetChange() { scheduleAutoSave() }
+function onSheetChange() { console.log('[SAVE] onSheetChange triggered, dataLoaded:', dataLoaded); scheduleAutoSave() }
 
 // === 分享 ===
 async function createShare() {

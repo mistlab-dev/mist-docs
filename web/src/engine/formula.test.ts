@@ -252,3 +252,64 @@ describe('formula engine', () => {
     expect(evalExpr('=NOT(1)', grid([]))).toBe('false')
   })
 })
+
+  // ─── multi-column selection: 选4列求和 ───
+  it('SUM across 4 columns in one row', () => {
+    // A1=1, B1=2, C1=3, D1=4 → SUM(A1:D1) = 10
+    const g = [['1', '2', '3', '4']]
+    expect(evalExpr('=SUM(A1:D1)', g)).toBe('10')
+  })
+
+  it('SUM across 5 columns in one row', () => {
+    const g = [['1', '2', '3', '4', '5']]
+    expect(evalExpr('=SUM(A1:E1)', g)).toBe('15')
+  })
+
+  it('AVERAGE across 4 columns in one row', () => {
+    const g = [['10', '20', '30', '40']]
+    expect(evalExpr('=AVERAGE(A1:D1)', g)).toBe('25')
+  })
+
+  it('SUM 4x3 block', () => {
+    // 4列 x 3行
+    const g = [
+      ['1', '2', '3', '4'],     // 10
+      ['5', '6', '7', '8'],     // 26
+      ['9', '10', '11', '12'],  // 42
+    ]
+    expect(evalExpr('=SUM(A1:D3)', g)).toBe('78')
+  })
+
+  it('SUM selecting only columns B through E', () => {
+    const g = [['a', '1', '2', '3', '4', 'b']]
+    expect(evalExpr('=SUM(B1:E1)', g)).toBe('10')
+  })
+
+  // ─── 选中4列但数据是字符串数字 ───
+  it('SUM 4 columns with string numbers in cells', () => {
+    const g = [['1', '2', '3', '4']]
+    expect(evalExpr('=SUM(A1:D1)', g)).toBe('10')
+  })
+
+  // 选中4列，有公式单元格
+  it('SUM 4 columns where some cells are formulas', () => {
+    const g = [['10', '=A1*2', '=A1+20', '=A1+30']]
+    // 10 + 20 + 30 + 40 = 100
+    expect(evalExpr('=SUM(A1:D1)', g)).toBe('100')
+  })
+
+  // 选整列4列
+  it('SUM full column selection A:D', () => {
+    const g = [
+      ['1', '2', '3', '4'],
+      ['5', '6', '7', '8'],
+    ]
+    expect(evalExpr('=SUM(A1:D2)', g)).toBe('36')
+  })
+
+  // 选4列但单元格值为数字字符串带空格
+  it('SUM 4 columns with spaces in values', () => {
+    const g = [[' 10 ', ' 20 ', ' 30 ', ' 40 ']]
+    // parseFloat(' 10 ') = 10, 应该OK
+    expect(evalExpr('=SUM(A1:D1)', g)).toBe('100')
+  })

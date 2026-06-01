@@ -7,3 +7,4 @@ dist/
 /configs/config.local.yaml
 secrets/master.key
 mist-docs
+mist-docs-linux

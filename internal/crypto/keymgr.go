@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"unicode/utf8"
 
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/google/uuid"
@@ -123,7 +124,7 @@ func Keygen() error {
 
 // EnsureDEK ensures there's an active DEK in the database
 func EnsureDEK(ctx context.Context) error {
-	// Check if active DEK exists
+	// Check if active DEK exists and is decryptable
 	var count int
 	err := database.DB.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM md_keys WHERE type='dek' AND status='active'`).Scan(&count)
@@ -131,7 +132,14 @@ func EnsureDEK(ctx context.Context) error {
 		return err
 	}
 	if count > 0 {
-		return nil
+		// Verify the DEK can actually be decrypted with current master key
+		_, err := GetActiveDEK(ctx)
+		if err == nil {
+			return nil // all good
+		}
+		// DEK exists but can't be decrypted (master key changed)
+		log.Println("[Crypto] Existing DEK cannot be decrypted, rotating...")
+		return RotateDEK(ctx, "system")
 	}
 
 	// Generate new DEK
@@ -227,7 +235,16 @@ func DecryptDocument(ciphertext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("get DEK: %w", err)
 	}
 
-	return Decrypt(ciphertext, dek)
+	plaintext, err := Decrypt(ciphertext, dek)
+	if err != nil {
+		// Fallback: data may have been saved without encryption
+		// Check if it looks like valid UTF-8 plaintext
+		if utf8.Valid(ciphertext) {
+			return ciphertext, nil
+		}
+		return nil, fmt.Errorf("decrypt: %w", err)
+	}
+	return plaintext, nil
 }
 
 // KeyInfo returns info about current keys

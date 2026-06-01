@@ -87,7 +87,7 @@
           <div class="sidebar-section">
             <div class="section-title">
               文件夹
-              <el-button size="small" text @click="showNewFolder = true" class="section-add">+ 新建</el-button>
+              <el-button size="small" text @click="newFolderParentId = null; showNewFolder = true" class="section-add">+ 新建</el-button>
             </div>
             <el-tree
               :data="treeData"
@@ -96,6 +96,7 @@
               highlight-current
               default-expand-all
               @node-click="onFolderClick"
+              @node-contextmenu="onFolderContextMenu"
               class="folder-tree"
             >
               <template #default="{ data }">
@@ -253,11 +254,27 @@
     </div>
 
     <!-- 新建文件夹 -->
-    <el-dialog v-model="showNewFolder" title="新建文件夹" width="400" destroy-on-close>
+    <el-dialog v-model="showNewFolder" :title="newFolderParentId ? '新建子文件夹' : '新建文件夹'" width="400" destroy-on-close>
       <el-input v-model="newFolderName" placeholder="文件夹名称" size="large" />
       <template #footer>
         <el-button @click="showNewFolder = false">取消</el-button>
         <el-button type="primary" @click="createFolder">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 文件夹右键菜单 -->
+    <div v-if="folderCtxMenu.show" :style="{ position: 'fixed', left: folderCtxMenu.x + 'px', top: folderCtxMenu.y + 'px', zIndex: 9999 }" class="folder-ctx-menu">
+      <div class="folder-ctx-item" @click="createSubFolder">新建子文件夹</div>
+      <div class="folder-ctx-item" @click="startRenameFolder">重命名</div>
+      <div class="folder-ctx-item danger" @click="deleteFolder">删除</div>
+    </div>
+
+    <!-- 重命名文件夹 -->
+    <el-dialog v-model="showRenameFolder" title="重命名文件夹" width="400" destroy-on-close>
+      <el-input v-model="renameFolderName" placeholder="文件夹名称" size="large" />
+      <template #footer>
+        <el-button @click="showRenameFolder = false">取消</el-button>
+        <el-button type="primary" @click="doRenameFolder">确定</el-button>
       </template>
     </el-dialog>
 
@@ -351,7 +368,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Star, StarFilled, Clock, Files, MoreFilled, Operation, Monitor, List } from '@element-plus/icons-vue'
@@ -373,6 +390,7 @@ const favoriteIds = ref<Set<string>>(new Set())
 const sidebarOpen = ref(false)
 
 const showNewFolder = ref(false)
+const newFolderParentId = ref<string | null>(null)
 const showNewDoc = ref(false)
 const showNewSheet = ref(false)
 const showImportDialog = ref(false)
@@ -385,6 +403,10 @@ const moveDialog = ref(false)
 const moveDoc = ref<any>(null)
 const moveTargetFolder = ref('')
 const newFolderName = ref('')
+const showRenameFolder = ref(false)
+const renameFolderName = ref('')
+const renameFolderId = ref('')
+const folderCtxMenu = reactive({ show: false, x: 0, y: 0, nodeId: '', nodeName: '' })
 const newDocTitle = ref('')
 const newDocTemplate = ref('')
 const layoutMode = ref<'grid'|'list'>('grid')
@@ -439,7 +461,9 @@ function formatTime(t: string): string {
 
 async function loadTree() {
   const { data } = await http.get('/docs/tree')
-  treeData.value = buildTree(data.data || [])
+  // 后端已返回树形结构，直接使用；兼容旧版扁平数据
+  const raw = data.data || []
+  treeData.value = raw.length > 0 && raw[0].children !== undefined ? raw : buildTree(raw)
 }
 
 async function loadDocs(folderId?: string) {
@@ -515,11 +539,58 @@ function buildTree(items: any[]): any[] {
 
 async function createFolder() {
   if (!newFolderName.value) return
-  await http.post('/docs/folders', { name: newFolderName.value, parent_id: currentFolder.value })
+  const parentId = newFolderParentId.value ?? currentFolder.value
+  await http.post('/docs/folders', { name: newFolderName.value, parent_id: parentId })
   ElMessage.success('文件夹已创建')
   showNewFolder.value = false
   newFolderName.value = ''
+  newFolderParentId.value = null
   loadTree()
+}
+
+function onFolderContextMenu(event: MouseEvent, node: any) {
+  event.preventDefault()
+  folderCtxMenu.show = true
+  folderCtxMenu.x = event.clientX
+  folderCtxMenu.y = event.clientY
+  folderCtxMenu.nodeId = node.id
+  folderCtxMenu.nodeName = node.name
+}
+
+function createSubFolder() {
+  folderCtxMenu.show = false
+  newFolderParentId.value = folderCtxMenu.nodeId
+  newFolderName.value = ''
+  showNewFolder.value = true
+}
+
+function startRenameFolder() {
+  folderCtxMenu.show = false
+  renameFolderId.value = folderCtxMenu.nodeId
+  renameFolderName.value = folderCtxMenu.nodeName
+  showRenameFolder.value = true
+}
+
+async function doRenameFolder() {
+  if (!renameFolderName.value) return
+  await http.put(`/docs/folders/${renameFolderId.value}`, { name: renameFolderName.value })
+  ElMessage.success('文件夹已重命名')
+  showRenameFolder.value = false
+  loadTree()
+}
+
+async function deleteFolder() {
+  folderCtxMenu.show = false
+  try {
+    await ElMessageBox.confirm(`确定删除文件夹「${folderCtxMenu.nodeName}」吗？`, '删除文件夹', { type: 'warning' })
+    await http.delete(`/docs/folders/${folderCtxMenu.nodeId}`)
+    ElMessage.success('文件夹已删除')
+    if (currentFolder.value === folderCtxMenu.nodeId) {
+      currentFolder.value = null
+      loadDocs()
+    }
+    loadTree()
+  } catch {}
 }
 
 async function createDoc(type: string) {
@@ -672,7 +743,13 @@ onMounted(async () => {
   loadTree()
   loadDocs()
   loadSidebarTags()
+  document.addEventListener('click', closeFolderCtxMenu)
 })
+onUnmounted(() => {
+  document.removeEventListener('click', closeFolderCtxMenu)
+})
+
+function closeFolderCtxMenu() { folderCtxMenu.show = false }
 
 async function loadSidebarTags() {
   try {
@@ -889,4 +966,9 @@ async function filterByTag(tagId: string) {
   .card-check { position: static; }
 }
 @media (min-width: 769px) { .menu-btn { display: none !important; } }
+.folder-ctx-menu { background: #fff; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12); padding: 4px 0; min-width: 140px; }
+.folder-ctx-item { padding: 8px 16px; cursor: pointer; font-size: 13px; color: #333; transition: background .15s; }
+.folder-ctx-item:hover { background: #f0f5ff; color: #409eff; }
+.folder-ctx-item.danger { color: #f56c6c; }
+.folder-ctx-item.danger:hover { background: #fef0f0; }
 </style>

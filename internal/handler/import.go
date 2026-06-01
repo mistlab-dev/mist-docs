@@ -155,6 +155,13 @@ type wPPr struct {
 }
 type wRun struct {
 	Text wText `xml:"t"`
+	RPr  *wRPr `xml:"rPr"`
+}
+type wRPr struct {
+	Bold      *struct{} `xml:"b"`
+	Italic    *struct{} `xml:"i"`
+	Underline *struct{} `xml:"u"`
+	Strike    *struct{} `xml:"strike"`
 }
 type wText struct {
 	Text string `xml:",chardata"`
@@ -193,12 +200,38 @@ func docxToHTML(data []byte) (string, error) {
 
 	var html strings.Builder
 	for _, p := range doc.Body.Paragraphs {
-		var text strings.Builder
+		// Build runs with inline formatting
+		var runsHTML strings.Builder
+		hasContent := false
 		for _, run := range p.Runs {
-			text.WriteString(run.Text.Text)
+			t := run.Text.Text
+			if strings.TrimSpace(t) == "" {
+				// Preserve whitespace-only runs as a single space
+				if t != "" {
+					runsHTML.WriteString(" ")
+				}
+				continue
+			}
+			hasContent = true
+			escaped := escapeHTML(t)
+			// Apply inline formatting based on rPr
+			if run.RPr != nil {
+				if run.RPr.Strike != nil {
+					escaped = "<s>" + escaped + "</s>"
+				}
+				if run.RPr.Underline != nil {
+					escaped = "<u>" + escaped + "</u>"
+				}
+				if run.RPr.Italic != nil {
+					escaped = "<em>" + escaped + "</em>"
+				}
+				if run.RPr.Bold != nil {
+					escaped = "<strong>" + escaped + "</strong>"
+				}
+			}
+			runsHTML.WriteString(escaped)
 		}
-		line := strings.TrimSpace(text.String())
-		if line == "" {
+		if !hasContent {
 			html.WriteString("<p><br></p>")
 			continue
 		}
@@ -207,16 +240,16 @@ func docxToHTML(data []byte) (string, error) {
 		if p.PPr != nil {
 			style = p.PPr.PStyle.Val
 		}
-		escaped := escapeHTML(line)
+		content := runsHTML.String()
 		switch {
 		case strings.Contains(style, "Heading1") || strings.HasSuffix(style, "1"):
-			html.WriteString("<h1>" + escaped + "</h1>")
+			html.WriteString("<h1>" + content + "</h1>")
 		case strings.Contains(style, "Heading2") || strings.HasSuffix(style, "2"):
-			html.WriteString("<h2>" + escaped + "</h2>")
+			html.WriteString("<h2>" + content + "</h2>")
 		case strings.Contains(style, "Heading3") || strings.HasSuffix(style, "3") || strings.HasSuffix(style, "4"):
-			html.WriteString("<h3>" + escaped + "</h3>")
+			html.WriteString("<h3>" + content + "</h3>")
 		default:
-			html.WriteString("<p>" + escaped + "</p>")
+			html.WriteString("<p>" + content + "</p>")
 		}
 	}
 
@@ -317,6 +350,13 @@ func xlsxToSheet(data []byte) (string, error) {
 				if idx, err := parseSimpleInt(cell.Value); err == nil && idx < len(sharedStrings) {
 					value = sharedStrings[idx]
 				}
+			} else if cell.Type == "b" {
+				switch cell.Value {
+				case "1":
+					value = "true"
+				default:
+					value = "false"
+				}
 			} else {
 				value = cell.Value
 			}
@@ -333,8 +373,8 @@ func xlsxToSheet(data []byte) (string, error) {
 	if maxRow > 200 {
 		maxRow = 200
 	}
-	if maxCol > 26 {
-		maxCol = 26
+	if maxCol > 702 {
+		maxCol = 702
 	}
 
 	rows := make([][]string, maxRow)
@@ -362,8 +402,13 @@ func parseXlsxSharedStrings(f *zip.File) ([]string, error) {
 	defer rc.Close()
 	data, _ := io.ReadAll(rc)
 
+	// 支持 simple text (<si><t>text</t></si>) 和 rich text (<si><r><t>text</t></r>...</si>)
 	type xSI struct {
-		Text string `xml:"t"`
+		XMLName xml.Name `xml:"si"`
+		Text    string   `xml:"t"`    // simple text
+		Runs    []struct {
+			Text string `xml:"t"`
+		} `xml:"r"` // rich text runs
 	}
 	type xSST struct {
 		Items []xSI `xml:"si"`
@@ -374,7 +419,16 @@ func parseXlsxSharedStrings(f *zip.File) ([]string, error) {
 	}
 	result := make([]string, len(sst.Items))
 	for i, item := range sst.Items {
-		result[i] = item.Text
+		if item.Text != "" {
+			result[i] = item.Text
+		} else {
+			// rich text: concatenate all runs
+			var sb strings.Builder
+			for _, run := range item.Runs {
+				sb.WriteString(run.Text)
+			}
+			result[i] = sb.String()
+		}
 	}
 	return result, nil
 }
@@ -394,12 +448,15 @@ func splitCellRef(ref string) (string, string) {
 func colLetterToIdx(s string) int {
 	idx := 0
 	for _, ch := range s {
-		idx = idx*26 + int(ch-'A')
+		idx = idx*26 + int(ch-'A') + 1
 	}
-	return idx
+	return idx - 1
 }
 
 func parseSimpleInt(s string) (int, error) {
+	if len(s) == 0 {
+		return 0, fmt.Errorf("not a number")
+	}
 	n := 0
 	for _, ch := range s {
 		if ch < '0' || ch > '9' {
@@ -441,19 +498,19 @@ func markdownToHTML(md string) string {
 			continue
 		}
 		if strings.HasPrefix(trimmed, "### ") {
-			html.WriteString("<h3>" + trimmed[4:] + "</h3>")
+			html.WriteString("<h3>" + escapeHTML(trimmed[4:]) + "</h3>")
 		} else if strings.HasPrefix(trimmed, "## ") {
-			html.WriteString("<h2>" + trimmed[3:] + "</h2>")
+			html.WriteString("<h2>" + escapeHTML(trimmed[3:]) + "</h2>")
 		} else if strings.HasPrefix(trimmed, "# ") {
-			html.WriteString("<h1>" + trimmed[2:] + "</h1>")
+			html.WriteString("<h1>" + escapeHTML(trimmed[2:]) + "</h1>")
 		} else if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
 			if !inList {
 				html.WriteString("<ul>")
 				inList = true
 			}
-			html.WriteString("<li>" + trimmed[2:] + "</li>")
+			html.WriteString("<li>" + escapeHTML(trimmed[2:]) + "</li>")
 		} else {
-			html.WriteString("<p>" + trimmed + "</p>")
+			html.WriteString("<p>" + escapeHTML(trimmed) + "</p>")
 		}
 	}
 	if inCode {
@@ -472,7 +529,7 @@ func textToHTML(txt string) string {
 		if strings.TrimSpace(line) == "" {
 			html.WriteString("<br>")
 		} else {
-			html.WriteString("<p>" + strings.TrimSpace(line) + "</p>")
+			html.WriteString("<p>" + escapeHTML(strings.TrimSpace(line)) + "</p>")
 		}
 	}
 	return html.String()

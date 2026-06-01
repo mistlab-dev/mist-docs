@@ -4,10 +4,13 @@
     <div class="sidebar-overlay" :class="{ open: mobileMenu }" @click="mobileMenu = false"></div>
 
     <!-- 侧边栏 -->
-    <el-aside :width="collapsed ? '64px' : '220px'" class="sidebar" :class="{ open: mobileMenu }">
-      <div class="logo" @click="collapsed = !collapsed">
-        <span v-if="!collapsed" class="logo-text">MistDocs</span>
-        <svg v-else class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    <el-aside v-show="!sidebarHidden" :width="collapsed ? '64px' : '220px'" class="sidebar" :class="{ open: mobileMenu }">
+      <div class="sidebar-top">
+        <div class="logo" @click="collapsed = !collapsed">
+          <span v-if="!collapsed" class="logo-text">MistDocs</span>
+          <svg v-else class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <button class="sidebar-hide-btn" @click="sidebarHidden = true" title="隐藏侧边栏">«</button>
       </div>
       <el-menu
         :default-active="route.path"
@@ -61,7 +64,10 @@
     <!-- 主内容 -->
     <el-container>
       <el-header class="topbar">
-        <el-button class="menu-btn" @click="mobileMenu = !mobileMenu" text>
+        <el-button v-if="sidebarHidden" class="menu-btn" @click="sidebarHidden = false" text title="显示侧边栏">
+          <el-icon :size="20"><Operation /></el-icon>
+        </el-button>
+        <el-button v-else class="menu-btn" @click="mobileMenu = !mobileMenu" text>
           <el-icon :size="20"><Operation /></el-icon>
         </el-button>
         <div class="breadcrumb">
@@ -154,6 +160,7 @@ const auth = useAuthStore()
 const isDark = ref(false)
 const collapsed = ref(false)
 const mobileMenu = ref(false)
+const sidebarHidden = ref(false)
 
 function onMenuSelect() {
   // 移动端点击菜单后自动关闭
@@ -266,20 +273,17 @@ onMounted(() => {
 .main-layout { height: 100vh; }
 .sidebar {
   background: #1d1e2c;
-  transition: width 0.3s;
+  transition: width 0.3s, margin-left 0.3s;
   overflow-y: auto;
 }
-.logo {
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 18px;
-  font-weight: bold;
-  cursor: pointer;
-  border-bottom: 1px solid #2a2b3d;
+.sidebar-top { display: flex; align-items: center; border-bottom: 1px solid #2a2b3d; height: 56px; }
+.sidebar-top .logo { flex: 1; height: 56px; }
+.sidebar-hide-btn {
+  width: 24px; height: 24px; border: none; background: transparent;
+  color: #a0a4b8; font-size: 14px; cursor: pointer; border-radius: 4px;
+  margin-right: 8px; display: flex; align-items: center; justify-content: center;
 }
+.sidebar-hide-btn:hover { background: #2a2b3d; color: #fff; }
 .logo-text { letter-spacing: 2px; }
 .logo-icon { font-size: 24px; }
 .logo-svg { width: 24px; height: 24px; }
