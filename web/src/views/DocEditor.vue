@@ -186,7 +186,7 @@
 
     <!-- 文档编辑器 -->
     <div v-if="doc?.type === 'doc' && editor" class="editor-body with-outline">
-      <editor-content :editor="editor as any" class="tiptap-editor" />
+      <editor-content :editor="editor as any" class="tiptap-editor" @click="handleEditorClick" />
       <!-- 大纲导航 -->
       <div class="outline-panel" :class="{ collapsed: outlineCollapsed }">
         <div class="outline-header" @click="outlineCollapsed = !outlineCollapsed">
@@ -307,10 +307,16 @@
     </el-dialog>
 
     <!-- 链接弹窗 -->
-    <el-dialog v-model="linkDialog.show" title="插入链接" width="420px">
+    <el-dialog v-model="linkDialog.show" title="插入链接" width="480px">
       <el-form label-width="60px">
         <el-form-item label="文本"><el-input v-model="linkDialog.text" placeholder="显示文字" /></el-form-item>
-        <el-form-item label="链接"><el-input v-model="linkDialog.url" placeholder="https://" /></el-form-item>
+        <el-form-item label="链接"><el-input v-model="linkDialog.url" placeholder="https:// 或搜索文档..." @input="searchDocsForLink" /></el-form-item>
+        <div v-if="linkDialog.results.length" class="link-search-results">
+          <div v-for="d in linkDialog.results" :key="d.id" class="link-search-item" @click="selectDocLink(d)">
+            <span class="link-doc-title">{{ d.title }}</span>
+            <span class="link-doc-type">{{ d.type === 'doc' ? '文档' : '表格' }}</span>
+          </div>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="linkDialog.show = false">取消</el-button>
@@ -948,7 +954,29 @@ function sheetDiff(oldJson: string, newJson: string): string {
 }
 
 // 链接弹窗
-const linkDialog = reactive({ show: false, text: '', url: '' })
+const linkDialog = reactive({ show: false, text: '', url: '', results: [] as {id: string; title: string; type: string}[] })
+let linkSearchTimer: ReturnType<typeof setTimeout> | null = null
+
+function searchDocsForLink() {
+  clearTimeout(linkSearchTimer!)
+  const q = linkDialog.url.trim()
+  if (!q || q.startsWith('http://') || q.startsWith('https://') || q.startsWith('/')) {
+    linkDialog.results = []
+    return
+  }
+  linkSearchTimer = setTimeout(async () => {
+    try {
+      const { data } = await http.get('/docs/documents/search', { params: { q } })
+      linkDialog.results = (data.data || []).slice(0, 5).map((d: any) => ({ id: d.id, title: d.title, type: d.type }))
+    } catch { linkDialog.results = [] }
+  }, 300)
+}
+
+function selectDocLink(d: {id: string; title: string; type: string}) {
+  linkDialog.url = `${window.location.origin}/docs/${d.id}`
+  if (!linkDialog.text) linkDialog.text = d.title
+  linkDialog.results = []
+}
 // 代码语言弹窗
 const codeLangDialog = reactive({ show: false, lang: 'plaintext' })
 // 版本回退弹窗
@@ -998,8 +1026,7 @@ function initEditor(initialContent: string) {
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const wsUrl = `${wsProtocol}//${window.location.host}/ws/docs/${docId}?token=${token}`
 
-  // Check if we already have Yjs state on the server
-  // If yes, use collaboration mode. If no, use local mode.
+  // Use collab mode for doc type when authenticated
   const useCollab = !!token && doc.value?.type === 'doc'
 
   if (useCollab) {
@@ -1014,15 +1041,6 @@ function initEditor(initialContent: string) {
       wsProvider.onClients = (users) => { collabUsers.value = users.filter((u: CollabUser) => u.id !== currentUserId.value) }
       wsProvider.bind()
 
-      // Load existing HTML into Y.Doc if it's empty
-      const yXmlFragment = ydoc.getXmlFragment('default')
-      if (yXmlFragment.length === 0 && initialContent) {
-        // Use a temp editor to convert HTML to Y.Doc format
-        const tempDiv = document.createElement('div')
-        tempDiv.innerHTML = initialContent
-        // Let Collaboration extension handle initial content
-      }
-
       const userColors = ['#e06c75', '#e5c07b', '#98c379', '#56b6c2', '#61afef', '#c678dd', '#d19a66']
       const userColorIdx = currentUserId.value.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % userColors.length
 
@@ -1030,7 +1048,6 @@ function initEditor(initialContent: string) {
         extensions: [
           StarterKit.configure({
             codeBlock: false,
-            // history: false, // Yjs handles history — removed: not in StarterKitOptions
           }),
           Underline,
           TaskList,
@@ -1086,12 +1103,33 @@ function initEditor(initialContent: string) {
           },
         },
         onUpdate: () => {
-          // In collab mode, Yjs handles sync via WS
-          // Still auto-save HTML snapshot periodically
           scheduleAutoSave()
           updateOutline()
         },
       })
+
+      // Key fix: after sync, if Yjs has no content but we have HTML,
+      // populate the editor with HTML. This seeds the Y.Doc via Collaboration.
+      const syncHandler = (synced: boolean) => {
+        if (!synced) return
+        nextTick(() => {
+          const yXmlFragment = ydoc!.getXmlFragment('default')
+          // Check if Yjs is truly empty — just check length
+          if (yXmlFragment.length === 0 && initialContent && initialContent !== '{}') {
+            console.log('[Collab] Yjs empty after sync, seeding with HTML content')
+            editor.value?.commands.setContent(initialContent)
+          }
+          wsProvider!.onSynced = null
+        })
+      }
+      // If already synced (fast path), check immediately.
+      // Otherwise, wait for sync callback.
+      if (wsProvider.isSynced()) {
+        syncHandler(true)
+      } else {
+        wsProvider.onSynced = syncHandler
+      }
+
       return
     } catch (e) {
       console.warn('Collab mode failed, falling back to local:', e)
@@ -1195,6 +1233,20 @@ function confirmLink() {
 function removeLink() {
   editor.value?.chain().focus().unsetLink().run()
   linkDialog.show = false
+}
+
+// Handle clicks on links inside editor — navigate to internal doc links
+function handleEditorClick(e: MouseEvent) {
+  const target = (e.target as HTMLElement).closest('a.editor-link, .tiptap a[href]')
+  if (!target) return
+  const href = (target as HTMLAnchorElement).href
+  if (!href) return
+  // Internal doc link: /docs/:id
+  const match = href.match(/\/docs\/([a-f0-9-]+)$/)
+  if (match) {
+    e.preventDefault()
+    router.push(`/docs/${match[1]}`)
+  }
 }
 
 // 表格
@@ -1688,6 +1740,13 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .preview-content :deep(p) { margin: 8px 0; }
 .preview-content :deep(pre) { background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 12px; }
 .preview-content :deep(code) { background: #f0f2f5; padding: 2px 4px; border-radius: 3px; }
+
+/* 链接搜索 */
+.link-search-results { border: 1px solid #e8ecf0; border-radius: 8px; max-height: 200px; overflow-y: auto; margin-top: 4px; }
+.link-search-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; transition: background 0.15s; }
+.link-search-item:hover { background: #f0f5ff; }
+.link-doc-title { font-size: 14px; color: #303133; }
+.link-doc-type { font-size: 12px; color: #909399; }
 
 /* 统计 */
 .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center; }
