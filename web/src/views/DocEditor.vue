@@ -73,6 +73,10 @@
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
                 导出...
               </el-dropdown-item>
+              <el-dropdown-item v-if="doc?.type === 'doc'" command="save-template">
+                <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg>
+                保存为模板
+              </el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -140,6 +144,9 @@
         </button>
         <button class="tb-btn" @click="triggerImageUpload" title="图片">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-6 3 4 2-3 3 5z"/><circle cx="13" cy="7" r="2"/></svg>
+        </button>
+        <button class="tb-btn" @click="showMediaLib = true" title="媒体库">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a1 1 0 011-1h12a1 1 0 011 1v2.586l2.707-2.707a1 1 0 011.414 1.414L16.414 7H19a1 1 0 010 2h-4a1 1 0 01-1-1V5H5v10h4a1 1 0 010 2H5a1 1 0 01-1-1V3z"/></svg>
         </button>
         <button class="tb-btn" @click="insertTable" title="表格">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4h14a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V5a1 1 0 011-1zm1 2v3h5V6H4zm0 5v3h5v-3H4zm7-5v3h5V6h-5zm0 5v3h5v-3h-5z"/></svg>
@@ -339,6 +346,29 @@
         <el-button @click="codeLangDialog.show = false">取消</el-button>
         <el-button type="primary" @click="confirmCodeLang">确定</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 媒体库弹窗 -->
+    <el-dialog v-model="showMediaLib" title="媒体库" width="700px" :fullscreen="windowWidth < 768">
+      <div class="media-toolbar">
+        <el-radio-group v-model="mediaFilter" size="small" @change="loadMedia">
+          <el-radio-button value="">全部</el-radio-button>
+          <el-radio-button value="image">图片</el-radio-button>
+          <el-radio-button value="document">文档</el-radio-button>
+        </el-radio-group>
+      </div>
+      <div v-if="mediaLoading" style="text-align:center;padding:40px"><el-skeleton :rows="4" animated /></div>
+      <div v-else-if="!mediaItems.length" style="text-align:center;padding:40px;color:#c0c4cc">暂无文件</div>
+      <div v-else class="media-grid">
+        <div v-for="item in mediaItems" :key="item.name" class="media-item" @click="insertMedia(item)">
+          <div class="media-preview">
+            <img v-if="item.type === 'image'" :src="item.url" :alt="item.name" />
+            <div v-else class="media-file-icon">{{ item.type === 'document' ? '📄' : '📦' }}</div>
+          </div>
+          <div class="media-name" :title="item.name">{{ item.name }}</div>
+          <div class="media-size">{{ formatFileSize(item.size) }}</div>
+        </div>
+      </div>
     </el-dialog>
 
     <!-- 标签 -->
@@ -984,6 +1014,52 @@ const versionDialog = reactive({ show: false, version: 0, loading: false })
 const popularLangs = ['plaintext', 'javascript', 'typescript', 'python', 'go', 'java', 'bash', 'sql', 'html', 'css', 'json', 'yaml', 'markdown']
 const otherLangs = ['c', 'cpp', 'csharp', 'rust', 'ruby', 'php', 'swift', 'kotlin', 'scala', 'lua', 'perl', 'r', 'dockerfile', 'nginx', 'xml', 'diff']
 
+// 媒体库
+const showMediaLib = ref(false)
+const mediaFilter = ref('')
+const mediaItems = ref<{name: string; url: string; size: number; type: string}[]>([])
+const mediaLoading = ref(false)
+
+async function loadMedia() {
+  mediaLoading.value = true
+  try {
+    const params: any = { limit: 50 }
+    if (mediaFilter.value) params.type = mediaFilter.value
+    const { data } = await http.get('/docs/media', { params })
+    mediaItems.value = data.data || []
+  } catch { mediaItems.value = [] }
+  mediaLoading.value = false
+}
+
+function insertMedia(item: {name: string; url: string; size: number; type: string}) {
+  if (item.type === 'image') {
+    editor.value?.chain().focus().setImage({ src: item.url }).run()
+  } else {
+    editor.value?.chain().focus().setLink({ href: item.url }).run()
+  }
+  showMediaLib.value = false
+  ElMessage.success('已插入')
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+watch(showMediaLib, (v) => { if (v) loadMedia() })
+
+// Comment real-time polling
+let commentPollTimer: ReturnType<typeof setInterval> | null = null
+watch(showComments, (v) => {
+  if (v) {
+    loadComments()
+    commentPollTimer = setInterval(loadComments, 10000)
+  } else {
+    if (commentPollTimer) { clearInterval(commentPollTimer); commentPollTimer = null }
+  }
+})
+
 async function loadDoc() {
   const { data } = await http.get(`/docs/documents/${docId}/content`)
   doc.value = data.data
@@ -1478,7 +1554,25 @@ function handleMore(cmd: string) {
     case 'export':
       showExportDialog.value = true
       break
+    case 'save-template':
+      saveAsTemplate()
+      break
   }
+}
+
+async function saveAsTemplate() {
+  const html = editor.value?.getHTML() || ''
+  if (!html || html === '<p></p>') { ElMessage.warning('文档内容为空'); return }
+  const { value: name } = await ElMessageBox.prompt('输入模板名称', '保存为模板', {
+    inputValue: doc.value?.title || '',
+    confirmButtonText: '保存',
+    cancelButtonText: '取消',
+  }).catch(() => ({ value: '' }))
+  if (!name) return
+  try {
+    await http.post('/docs/templates', { name, type: 'doc', content: html, is_public: false })
+    ElMessage.success('模板已保存')
+  } catch { ElMessage.error('保存失败') }
 }
 
 async function handleExport(format: string) {
@@ -1578,6 +1672,7 @@ onMounted(async () => {
 onUnmounted(() => {
   doSave().catch(() => {})
   clearTimeout(autoSaveTimer)
+  if (commentPollTimer) clearInterval(commentPollTimer)
   wsProvider?.destroy()
   ydoc?.destroy()
   editor.value?.destroy()
@@ -1747,6 +1842,17 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .link-search-item:hover { background: #f0f5ff; }
 .link-doc-title { font-size: 14px; color: #303133; }
 .link-doc-type { font-size: 12px; color: #909399; }
+
+/* 媒体库 */
+.media-toolbar { margin-bottom: 12px; }
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; max-height: 400px; overflow-y: auto; }
+.media-item { border: 1px solid #e8ecf0; border-radius: 8px; padding: 8px; cursor: pointer; transition: all 0.15s; text-align: center; }
+.media-item:hover { border-color: #409eff; background: #f0f5ff; }
+.media-preview { width: 100%; height: 80px; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 4px; background: #f5f7fa; margin-bottom: 6px; }
+.media-preview img { max-width: 100%; max-height: 100%; object-fit: cover; }
+.media-file-icon { font-size: 32px; }
+.media-name { font-size: 12px; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-size { font-size: 11px; color: #909399; margin-top: 2px; }
 
 /* 统计 */
 .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center; }

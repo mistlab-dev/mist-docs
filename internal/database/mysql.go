@@ -38,6 +38,25 @@ func Init(cfg config.DatabaseConfig) error {
 		DB.Exec(`ALTER TABLE md_documents ADD FULLTEXT INDEX ft_content_text (content_text)`)
 	}
 
+	// Auto-migrate: md_templates table
+	var tblExists int
+	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_templates'`).Scan(&tblExists)
+	if tblExists == 0 {
+		DB.Exec(`CREATE TABLE md_templates (
+			id VARCHAR(36) PRIMARY KEY,
+			name VARCHAR(255) NOT NULL,
+			type VARCHAR(20) NOT NULL DEFAULT 'doc',
+			content LONGTEXT,
+			user_id VARCHAR(36) NOT NULL,
+			department_id VARCHAR(36) DEFAULT '',
+			is_public TINYINT(1) DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			INDEX idx_user (user_id),
+			INDEX idx_dept (department_id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+	}
+
 	return nil
 }
 

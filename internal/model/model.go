@@ -161,3 +161,20 @@ type DocTagRelation struct {
 	TagID      string    `json:"tag_id" db:"tag_id"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 }
+
+// ==================== 模板 ====================
+
+type DocTemplate struct {
+	ID           string    `json:"id" db:"id"`
+	Name         string    `json:"name" db:"name"`
+	Type         string    `json:"type" db:"type"`           // doc / sheet
+	Content      string    `json:"content" db:"content"`     // HTML content
+	UserID       string    `json:"user_id" db:"user_id"`
+	DepartmentID string    `json:"department_id" db:"department_id"`
+	IsPublic     bool      `json:"is_public" db:"is_public"` // true = 全部门可见
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+
+	// 非数据库字段
+	UserName string `json:"user_name,omitempty"`
+}

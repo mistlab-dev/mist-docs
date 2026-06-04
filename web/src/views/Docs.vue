@@ -295,6 +295,7 @@
               <div class="tpl-label">{{ t.name }}</div>
             </div>
           </div>
+          <div v-if="customTemplates.length" style="margin-top:8px;font-size:12px;color:#909399">自定义模板带 📄 标识</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -372,7 +373,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Star, StarFilled, Clock, Files, MoreFilled, Operation, Monitor, List } from '@element-plus/icons-vue'
@@ -427,8 +428,9 @@ const newDocTitle = ref('')
 const newDocTemplate = ref('')
 const layoutMode = ref<'grid'|'list'>('grid')
 const sortBy = ref('updated')
+const customTemplates = ref<{id: string; name: string; type: string; content: string}[]>([])
 
-const templateList = [
+const builtinTemplateList = [
   { key: '', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg>', name: '空白文档' },
   { key: 'meeting', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h8a2 2 0 012 2v3H6a2 2 0 00-2 2v5H4a2 2 0 01-2-2V5zm4 6a2 2 0 012-2h8a2 2 0 012 2v5a2 2 0 01-2 2H8a2 2 0 01-2-2v-5zm2 0v5h8v-5H8z"/></svg>', name: '会议纪要' },
   { key: 'weekly', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V3zm2 0v14h10V3H5zm1 3h8v2H6V6zm0 4h6v2H6v-2z"/></svg>', name: '周报' },
@@ -436,6 +438,13 @@ const templateList = [
   { key: 'api', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 00-.894.553L5.382 5H4a1 1 0 000 2h12a1 1 0 100-2h-1.382l-.724-1.447A1 1 0 0013 3H7zm0 2h6l.724 1.447A1 1 0 0014.618 7H5.382a1 1 0 00.894-.553L7 5zM5 9h10v6a2 2 0 01-2 2H7a2 2 0 01-2-2V9z"/></svg>', name: 'API 文档' },
   { key: 'readme', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm0 2.5L17.5 8H14V4.5zM6 4h6v6h6v10H6V4z"/></svg>', name: 'README' },
 ]
+
+const templateList = computed(() => {
+  const customs = customTemplates.value.map(t => ({
+    key: `custom:${t.id}`, icon: '📄', name: t.name,
+  }))
+  return [...builtinTemplateList, ...customs]
+})
 
 const templates: Record<string, string> = {
   meeting: '<h2>会议纪要</h2><p><strong>日期：</strong>' + new Date().toLocaleDateString() + '</p><h3>讨论内容</h3><ul><li></li></ul><h3>决议</h3><ul><li></li></ul><h3>待办事项</h3><table><thead><tr><th>任务</th><th>负责人</th><th>截止日期</th><th>状态</th></tr></thead><tbody><tr><td></td><td></td><td></td><td></td></tr></tbody></table>',
@@ -625,7 +634,22 @@ async function deleteFolder() {
 
 async function createDoc(type: string) {
   if (!newDocTitle.value.trim()) return ElMessage.warning('请输入文档标题')
-  const tplContent = type === 'doc' ? (templates[newDocTemplate.value] || '') : ''
+
+  let tplContent = ''
+  if (type === 'doc') {
+    const tplKey = newDocTemplate.value
+    if (tplKey.startsWith('custom:')) {
+      // Load custom template content
+      const tplId = tplKey.slice(7)
+      try {
+        const { data: tplResp } = await http.get(`/docs/templates/${tplId}`)
+        tplContent = tplResp.data?.content || ''
+      } catch { tplContent = '' }
+    } else {
+      tplContent = templates[tplKey] || ''
+    }
+  }
+
   const { data } = await http.post('/docs/documents', {
     title: newDocTitle.value, type, folder_id: currentFolder.value,
     ...(tplContent ? { content: tplContent } : {}),
@@ -773,6 +797,7 @@ onMounted(async () => {
   loadTree()
   loadDocs()
   loadSidebarTags()
+  loadCustomTemplates()
   document.addEventListener('click', closeFolderCtxMenu)
 })
 onUnmounted(() => {
@@ -786,6 +811,13 @@ async function loadSidebarTags() {
     const { data } = await http.get('/docs/tags')
     sidebarTags.value = data || []
     allTags.value = data?.data || data || []
+  } catch {}
+}
+
+async function loadCustomTemplates() {
+  try {
+    const { data } = await http.get('/docs/templates', { params: { type: 'doc' } })
+    customTemplates.value = (data.data || []).map((t: any) => ({ id: t.id, name: t.name, type: t.type, content: '' }))
   } catch {}
 }
 

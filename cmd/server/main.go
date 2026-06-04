@@ -172,6 +172,17 @@ func main() {
 			auth.GET("/docs/tags/:id/documents", handler.GetDocsByTag)
 			auth.GET("/docs/documents/:id/tags", handler.GetDocTags)
 			auth.PUT("/docs/documents/:id/tags", handler.SetDocTags)
+
+			// Templates
+			auth.GET("/docs/templates", handler.ListTemplates)
+			auth.GET("/docs/templates/:id", handler.GetTemplate)
+			auth.POST("/docs/templates", handler.CreateTemplate)
+			auth.PUT("/docs/templates/:id", handler.UpdateTemplate)
+			auth.DELETE("/docs/templates/:id", handler.DeleteTemplate)
+
+			// Media
+			auth.GET("/docs/media", handler.ListMedia)
+			auth.DELETE("/docs/media/:filename", handler.DeleteMedia)
 			auth.POST("/docs/documents", handler.CreateDocument)
 			auth.PUT("/docs/documents/:id", handler.UpdateDocument)
 			auth.DELETE("/docs/documents/:id", handler.DeleteDocument)
