@@ -53,9 +53,9 @@
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
                 移动
               </el-dropdown-item>
-              <el-dropdown-item command="watermark">
+              <el-dropdown-item v-if="isAdmin" command="watermark">
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 2a6 6 0 016 6h-2a4 4 0 00-4-4V4z"/></svg>
-                {{ showWatermark ? '关闭水印' : '水印' }}
+                {{ watermarkOn ? '关闭水印' : '水印' }}
               </el-dropdown-item>
               <el-dropdown-item command="comments">
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H6l-3 3V5z"/></svg>
@@ -71,7 +71,7 @@
               </el-dropdown-item>
               <el-dropdown-item command="export" divided>
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
-                导出
+                导出...
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -188,14 +188,20 @@
     <div v-if="doc?.type === 'doc' && editor" class="editor-body with-outline">
       <editor-content :editor="editor as any" class="tiptap-editor" />
       <!-- 大纲导航 -->
-      <div v-if="outlineItems.length" class="outline-panel">
-        <div class="outline-title">大纲</div>
-        <div
-          v-for="(item, i) in outlineItems" :key="i"
-          class="outline-item"
-          :class="'outline-h' + item.level"
-          @click="scrollToHeading(item.id)"
-        >{{ item.text }}</div>
+      <div class="outline-panel" :class="{ collapsed: outlineCollapsed }">
+        <div class="outline-header" @click="outlineCollapsed = !outlineCollapsed">
+          <span class="outline-title">大纲</span>
+          <el-icon :size="14" class="outline-toggle"><ArrowRight v-if="outlineCollapsed" /><ArrowLeft v-else /></el-icon>
+        </div>
+        <div v-if="!outlineCollapsed && !outlineItems.length" class="outline-empty">暂无标题</div>
+        <div v-if="!outlineCollapsed" class="outline-list">
+          <div
+            v-for="(item, i) in outlineItems" :key="i"
+            class="outline-item"
+            :class="['outline-h' + item.level, { active: outlineActiveId === item.id }]"
+            @click="scrollToHeading(item.id)"
+          >{{ item.text }}</div>
+        </div>
       </div>
     </div>
 
@@ -205,33 +211,43 @@
     </div>
 
     <!-- 水印层 -->
-    <div v-if="showWatermark" class="watermark-layer">
+    <div v-if="watermarkOn" class="watermark-layer">
       <div v-for="i in 40" :key="i" class="watermark-text">{{ currentUser }} · {{ formatTime(new Date().toISOString()) }}</div>
     </div>
 
     <!-- 版本回退确认 -->
-    <el-dialog v-model="versionDialog.show" title="恢复版本" width="480px">
-      <p style="margin-bottom:12px;color:#666">
-        将恢复到 <strong>v{{ versionDialog.version }}</strong>，当前内容将被保存为新版本。
-      </p>
+    <el-dialog v-model="versionDialog.show" title="版本历史" width="560px" :fullscreen="windowWidth < 768">
       <el-timeline style="max-height:400px;overflow-y:auto">
         <el-timeline-item
-          v-for="v in versions"
-          :key="v.version"
-          :timestamp="formatTime(v.created_at)"
+          v-for="v in versions" :key="v.version"
+          :timestamp="formatTime(v.created_at) + ' · ' + (v.created_by_name || '未知')"
           :type="v.version === versionDialog.version ? 'primary' : ''"
           placement="top"
         >
-          版本 v{{ v.version }}
-          <span v-if="v.version === doc?.version" style="color:#409eff;font-size:12px">（当前）</span>
-          <el-button size="small" text type="primary" @click="openDiff(v.version)" style="margin-left:8px">对比</el-button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span>版本 v{{ v.version }}</span>
+            <span v-if="v.version === doc?.version" style="color:#409eff;font-size:12px">（当前）</span>
+            <el-button v-if="v.version !== doc?.version" size="small" text type="primary" @click="previewVersion(v.version)">预览</el-button>
+            <el-button v-if="v.version !== doc?.version" size="small" text type="primary" @click="openDiff(v.version)">对比</el-button>
+            <el-button v-if="v.version !== doc?.version" size="small" text type="warning" @click="selectRestoreVersion(v.version)">恢复</el-button>
+          </div>
         </el-timeline-item>
       </el-timeline>
       <template #footer>
-        <el-button @click="versionDialog.show = false">取消</el-button>
-        <el-button type="primary" @click="confirmRestore" :loading="versionDialog.loading">
-          恢复到 v{{ versionDialog.version }}
-        </el-button>
+        <el-button @click="versionDialog.show = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 版本预览弹窗 -->
+    <el-dialog v-model="previewDialog.show" :title="'预览 v' + previewDialog.version" width="700px" :fullscreen="windowWidth < 768">
+      <div v-if="previewDialog.loading" style="text-align:center;padding:40px">
+        <el-icon class="is-loading" :size="24"><Loading /></el-icon>
+        <p style="margin-top:12px;color:#909399">加载中...</p>
+      </div>
+      <div v-else class="preview-content" v-html="previewDialog.html"></div>
+      <template #footer>
+        <el-button @click="previewDialog.show = false">关闭</el-button>
+        <el-button type="primary" @click="selectRestoreVersion(previewDialog.version); previewDialog.show = false">恢复此版本</el-button>
       </template>
     </el-dialog>
 
@@ -365,7 +381,7 @@
       >
         <template #default="{ node, data }">
           <span :style="{ color: moveTarget === data.id ? '#409eff' : '' }">
-            📁 {{ data.name }}
+            <svg style="width:16px;height:16px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>{{ data.name }}
           </span>
         </template>
       </el-tree>
@@ -375,55 +391,157 @@
       </template>
     </el-dialog>
 
-    <!-- 分享弹窗 -->
-    <el-dialog v-model="showShareDialog" title="分享文档" width="500">
-      <el-form label-width="80px">
-        <el-form-item label="访问密码">
-          <el-input v-model="shareForm.password" placeholder="留空则无需密码" />
-        </el-form-item>
-        <el-form-item label="有效期">
-          <el-select v-model="shareForm.expiresIn" style="width:100%">
+    <!-- 导出弹窗 -->
+    <el-dialog v-model="showExportDialog" title="导出文档" width="420">
+      <div class="export-options">
+        <div class="export-option" @click="handleExport('pdf'); showExportDialog = false">
+          <div class="export-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="24" height="24"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg></div>
+          <div class="export-info">
+            <div class="export-name">PDF</div>
+            <div class="export-desc">适合打印和分享，保留格式</div>
+          </div>
+        </div>
+        <div class="export-option" @click="handleExport('html'); showExportDialog = false">
+          <div class="export-icon">🌐</div>
+          <div class="export-info">
+            <div class="export-name">HTML</div>
+            <div class="export-desc">网页格式，可在浏览器中查看</div>
+          </div>
+        </div>
+        <div class="export-option" @click="handleExport('markdown'); showExportDialog = false">
+          <div class="export-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="24" height="24"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 2h6v1H7V6zm0 2h6v1H7V8zm0 2h4v1H7v-1z"/></svg></div>
+          <div class="export-info">
+            <div class="export-name">Markdown</div>
+            <div class="export-desc">纯文本格式，适合再编辑</div>
+          </div>
+        </div>
+        <div class="export-option" @click="handleExport('docx'); showExportDialog = false">
+          <div class="export-icon">📘</div>
+          <div class="export-info">
+            <div class="export-name">Word</div>
+            <div class="export-desc">兼容 Word / WPS，可继续编辑</div>
+          </div>
+        </div>
+        <div class="export-option" @click="handleExport('txt'); showExportDialog = false">
+          <div class="export-icon">📃</div>
+          <div class="export-info">
+            <div class="export-name">纯文本</div>
+            <div class="export-desc">去除所有格式</div>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 分享/权限弹窗 (Google Docs 风格) -->
+    <el-dialog v-model="showShareDialog" title="共享文档" width="560" destroy-on-close @opened="loadCollaborators">
+      <!-- 添加人员 -->
+      <div class="share-add-row">
+        <el-autocomplete
+          v-model="targetSearch"
+          :fetch-suggestions="searchTargets"
+          placeholder="添加人员或部门..."
+          style="flex:1"
+          @select="onTargetSelect"
+          clearable
+        >
+          <template #default="{ item }">
+            <div class="target-option">
+              <div class="target-avatar" :style="{ background: item.type === 'department' ? '#e6f7ff' : '#f0f0f0' }">
+                <span v-if="item.type === 'department'"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></span>
+                <span v-else><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 10a4 4 0 100-8 4 4 0 000 8zm0 2c-4.418 0-8 1.79-8 4v2h16v-2c0-2.21-3.582-4-8-4z"/></svg></span>
+              </div>
+              <div class="target-info">
+                <div class="target-name">{{ item.name }}</div>
+                <div class="target-sub">{{ item.type === 'department' ? '部门' : item.username }}</div>
+              </div>
+            </div>
+          </template>
+        </el-autocomplete>
+        <el-select v-model="newRole" style="width:120px">
+          <el-option label="查看者" value="viewer" />
+          <el-option label="编辑者" value="editor" />
+        </el-select>
+        <el-button type="primary" @click="addCollaborator" :disabled="!selectedTarget">添加</el-button>
+      </div>
+
+      <!-- 协作者列表 -->
+      <div class="collaborators-list">
+        <div v-if="collaboratorsLoading" style="text-align:center;padding:20px;color:#909399">加载中...</div>
+        <div v-for="c in collaborators" :key="c.id" class="collaborator-item">
+          <div class="collab-left">
+            <div class="collab-avatar" :style="{ background: c.target_type === 'department' ? '#e6f7ff' : '#f0f0f0' }">
+              <span v-if="c.target_type === 'department'"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></span>
+              <span v-else-if="c.target_name">{{ c.target_name.charAt(0) }}</span>
+              <span v-else><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 10a4 4 0 100-8 4 4 0 000 8zm0 2c-4.418 0-8 1.79-8 4v2h16v-2c0-2.21-3.582-4-8-4z"/></svg></span>
+            </div>
+            <div class="collab-info">
+              <div class="collab-name">
+                {{ c.target_name }}
+                <el-tag v-if="c.role === 'owner'" size="small" type="" effect="plain" style="margin-left:6px">所有者</el-tag>
+                <el-tag v-if="c.inherited" size="small" type="info" effect="plain" style="margin-left:6px">继承</el-tag>
+              </div>
+              <div v-if="c.target_type === 'department'" class="collab-sub">部门</div>
+            </div>
+          </div>
+          <div v-if="c.role !== 'owner'" class="collab-right">
+            <el-dropdown trigger="click" @command="(role: string) => updateCollaborator(c.id, role)">
+              <span class="role-dropdown">
+                {{ roleLabel(c.role) }}
+                <el-icon><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="viewer" :class="{ active: c.role === 'viewer' }">查看者</el-dropdown-item>
+                  <el-dropdown-item command="editor" :class="{ active: c.role === 'editor' }">编辑者</el-dropdown-item>
+                  <el-dropdown-item command="admin" :class="{ active: c.role === 'admin' }">管理员</el-dropdown-item>
+                  <el-dropdown-item divided command="remove" style="color:#f56c6c">移除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
+      </div>
+
+      <el-divider />
+
+      <!-- 链接分享 -->
+      <div class="link-share-section">
+        <div class="link-share-header">
+          <span style="font-weight:500">链接分享</span>
+          <el-switch v-model="linkShareEnabled" @change="toggleLinkShare" />
+        </div>
+        <div v-if="linkShareEnabled" class="link-share-body">
+          <el-select v-model="shareForm.expiresIn" size="small" style="width:120px;margin-right:8px">
             <el-option label="永久" :value="0" />
-            <el-option label="1 小时" :value="1" />
             <el-option label="24 小时" :value="24" />
             <el-option label="7 天" :value="168" />
             <el-option label="30 天" :value="720" />
           </el-select>
-        </el-form-item>
-      </el-form>
-      <div v-if="shareResult" style="margin-top:12px">
-        <el-alert type="success" :closable="false" style="margin-bottom:12px">
-          分享链接已生成
-        </el-alert>
-        <el-input :model-value="shareResult.share_url" readonly>
-          <template #append>
-            <el-button @click="copyShareUrl">复制</el-button>
-          </template>
-        </el-input>
+          <el-input v-model="shareForm.password" placeholder="密码（可选）" size="small" style="width:140px;margin-right:8px" />
+          <el-button size="small" type="primary" @click="createShare">生成链接</el-button>
+        </div>
+        <div v-if="shareResult" class="share-link-result">
+          <el-input :model-value="shareResult.share_url" readonly size="small">
+            <template #append>
+              <el-button @click="copyShareUrl" size="small">复制</el-button>
+            </template>
+          </el-input>
+        </div>
+        <!-- 已有分享链接 -->
+        <div v-if="existingShares.length > 0" class="existing-shares">
+          <div v-for="s in existingShares" :key="s.id" class="share-link-item">
+            <span class="share-link-token"><svg style="width:14px;height:14px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M12.586 4.586a2 2 0 112.828 2.828l-3.879 3.879a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3.879-3.879a4 4 0 00-5.656-5.656L8.12 5.464a1 1 0 001.414 1.414l3.052-3.292z"/></svg> {{ s.token }}</span>
+            <span v-if="s.has_password" class="share-link-badge"><svg style="width:14px;height:14px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg></span>
+            <span v-if="s.expired" class="share-link-badge expired">已过期</span>
+            <span class="share-link-count">{{ s.access_count }} 次访问</span>
+            <el-button link type="danger" size="small" @click="deleteShare(s.id)">删除</el-button>
+          </div>
+        </div>
       </div>
-      <template #footer>
-        <el-button @click="showShareDialog = false; shareResult = null">关闭</el-button>
-        <el-button type="primary" @click="createShare">生成链接</el-button>
-      </template>
-    </el-dialog>
 
-    <!-- 已有分享列表 -->
-    <el-dialog v-model="showShareList" title="分享记录" width="500">
-      <el-table :data="shares" stripe>
-        <el-table-column label="链接" prop="token" width="120" />
-        <el-table-column label="密码保护" width="80">
-          <template #default="{ row }">{{ row.has_password ? '是' : '否' }}</template>
-        </el-table-column>
-        <el-table-column label="访问次数" prop="access_count" width="80" />
-        <el-table-column label="过期" width="60">
-          <template #default="{ row }">{{ row.expired ? '是' : '否' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="80">
-          <template #default="{ row }">
-            <el-button link type="danger" size="small" @click="deleteShare(row.id)">取消</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <template #footer>
+        <el-button @click="showShareDialog = false; shareResult = null">完成</el-button>
+      </template>
     </el-dialog>
 
     <!-- 评论面板 -->
@@ -469,10 +587,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -489,6 +607,7 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
 import { common, createLowlight } from 'lowlight'
+import 'highlight.js/styles/github-dark.min.css'
 import * as Y from 'yjs'
 import { MistWSProvider, type CollabUser } from '@/utils/collab'
 import http from '@/utils/http'
@@ -514,15 +633,24 @@ let saveTimer: any = null
 let autoSaveTimer: any = null
 let dataLoaded = false // 防止加载数据前自动保存空内容
 
-// 分享
+// 分享 & 协作
 const showShareDialog = ref(false)
-const showWatermark = ref(false)
-
-function toggleWatermark() { showWatermark.value = !showWatermark.value }
-const showShareList = ref(false)
+const _watermarkToggle = ref(false)
+const isAdmin = computed(() => auth.isAdmin)
+// 普通用户强制水印，管理员可手动开关
+const watermarkOn = computed(() => !isAdmin.value || _watermarkToggle.value)
+function toggleWatermark() { _watermarkToggle.value = !_watermarkToggle.value }
 const shareForm = reactive({ password: '', expiresIn: 0 })
 const shareResult = ref<any>(null)
-const shares = ref<any[]>([])
+const existingShares = ref<any[]>([])
+const linkShareEnabled = ref(false)
+
+// 协作者
+const collaborators = ref<any[]>([])
+const collaboratorsLoading = ref(false)
+const targetSearch = ref('')
+const selectedTarget = ref<any>(null)
+const newRole = ref('viewer')
 
 // 评论
 const showComments = ref(false)
@@ -560,6 +688,8 @@ function selectMention(u: any) {
 }
 const commentCount = ref(0)
 const outlineItems = ref<{text: string; level: number; id: string}[]>([])
+const outlineCollapsed = ref(false)
+const outlineActiveId = ref('')
 
 // 提取大纲
 function updateOutline() {
@@ -573,6 +703,23 @@ function updateOutline() {
     }
   })
   outlineItems.value = items
+}
+
+// 滚动时高亮当前标题
+function onEditorScroll() {
+  if (!outlineItems.value.length) return
+  const container = document.querySelector('.tiptap-editor')
+  if (!container) return
+  const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6')
+  let activeId = ''
+  for (const h of headings) {
+    const rect = h.getBoundingClientRect()
+    const containerRect = container.getBoundingClientRect()
+    if (rect.top - containerRect.top <= 60) {
+      activeId = outlineItems.value.find(o => o.text === h.textContent)?.id || ''
+    }
+  }
+  outlineActiveId.value = activeId
 }
 
 function scrollToHeading(id: string) {
@@ -650,6 +797,8 @@ watch(showTagDialog, (v) => { if (v) loadAllTags() })
 const showStats = ref(false)
 const stats = ref<any>(null)
 
+const showExportDialog = ref(false)
+
 async function loadAndShowStats() {
   try {
     const res = await http.get(`/docs/documents/${docId}/stats`)
@@ -714,8 +863,8 @@ async function loadDiff() {
     const newErr = checkError(newText, '新版本')
     if (oldErr || newErr) {
       diffHtml.value = '<div style="font-size:14px;line-height:1.8">' +
-        (oldErr ? `<p style="color:#f56c6c">⚠️ ${oldErr}</p>` : '') +
-        (newErr ? `<p style="color:#f56c6c">⚠️ ${newErr}</p>` : '') +
+        (oldErr ? '<p style="color:#f56c6c"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 10a4 4 0 100-8 4 4 0 000 8zm0 2c-4.418 0-8 1.79-8 4v2h16v-2c0-2.21-3.582-4-8-4z"/></svg> ' + oldErr + '</p>' : '') +
+        (newErr ? '<p style="color:#f56c6c"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 10a4 4 0 100-8 4 4 0 000 8zm0 2c-4.418 0-8 1.79-8 4v2h16v-2c0-2.21-3.582-4-8-4z"/></svg> ' + newErr + '</p>' : '') +
         '<p style="color:#909399">提示：旧版本数据可能使用了不同加密密钥，无法解密</p>' +
         '</div>'
     } else {
@@ -746,7 +895,7 @@ function simpleDiff(oldHtml: string, newHtml: string): string {
   const removed = oldWords.filter(w => !newSet.has(w))
   const added = newWords.filter(w => !oldSet.has(w))
   if (removed.length === 0 && added.length === 0) {
-    html += '<p style="color:#67c23a">✅ 两个版本内容相同</p>'
+    html += '<p style="color:#67c23a"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg> 两个版本内容相同</p>'
   } else {
     if (removed.length) html += '<p><strong style="color:#f56c6c">删除（' + removed.length + ' 词）：</strong></p><p>' + removed.slice(0, 50).map(w => `<span style="background:#fde2e2;color:#f56c6c;padding:1px 3px;border-radius:3px">${w}</span>`).join(' ') + (removed.length > 50 ? ' ...' : '') + '</p>'
     if (added.length) html += '<p><strong style="color:#67c23a">新增（' + added.length + ' 词）：</strong></p><p>' + added.slice(0, 50).map(w => `<span style="background:#e1f3d8;color:#67c23a;padding:1px 3px;border-radius:3px">${w}</span>`).join(' ') + (added.length > 50 ? ' ...' : '') + '</p>'
@@ -765,8 +914,8 @@ function sheetDiff(oldJson: string, newJson: string): string {
     for (let si = 0; si < maxSheets; si++) {
       const os = oldSheets[si], ns = newSheets[si]
       const name = ns?.name || os?.name || `Sheet${si + 1}`
-      if (!os) { html += `<p>📄 <strong>${name}</strong>: <span style="color:#67c23a">新增工作表</span></p>`; hasDiff = true; continue }
-      if (!ns) { html += `<p>📄 <strong>${name}</strong>: <span style="color:#f56c6c">删除工作表</span></p>`; hasDiff = true; continue }
+      if (!os) { html += '<p><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg> <strong>' + name + '</strong>: <span style="color:#67c23a">新增工作表</span></p>'; hasDiff = true; continue }
+      if (!ns) { html += '<p><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg> <strong>' + name + '</strong>: <span style="color:#f56c6c">删除工作表</span></p>'; hasDiff = true; continue }
       const oldRows = os.rows || [], newRows = ns.rows || []
       const maxR = Math.max(oldRows.length, newRows.length)
       for (let ri = 0; ri < maxR; ri++) {
@@ -779,7 +928,7 @@ function sheetDiff(oldJson: string, newJson: string): string {
             hasDiff = true
             const colName = String.fromCharCode(65 + ci)
             const cellRef = `${colName}${ri + 1}`
-            html += `<p>📄 ${name} ${cellRef}: `
+            html += '<p><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg> ' + name + ' ' + cellRef + ': '
             if (ov) html += `<span style="background:#fde2e2;color:#f56c6c;padding:1px 3px;border-radius:3px">${String(ov).substring(0, 50)}</span>`
             html += ' → '
             if (nv) html += `<span style="background:#e1f3d8;color:#67c23a;padding:1px 3px;border-radius:3px">${String(nv).substring(0, 50)}</span>`
@@ -790,7 +939,7 @@ function sheetDiff(oldJson: string, newJson: string): string {
         }
       }
     }
-    if (!hasDiff) html += '<p style="color:#67c23a">✅ 两个版本内容相同</p>'
+    if (!hasDiff) html += '<p style="color:#67c23a"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg> 两个版本内容相同</p>'
     html += '</div>'
     return html
   } catch {
@@ -1122,33 +1271,132 @@ function handleVersion(ver: number) {
   versionDialog.show = true
 }
 
-async function confirmRestore() {
-  versionDialog.loading = true
+const previewDialog = reactive({ show: false, version: 0, html: '', loading: false })
+
+async function previewVersion(ver: number) {
+  previewDialog.version = ver
+  previewDialog.html = ''
+  previewDialog.loading = true
+  previewDialog.show = true
   try {
-    await http.post(`/docs/documents/${docId}/restore`, { version: versionDialog.version })
-    ElMessage.success(`已恢复到 v${versionDialog.version}`)
-    versionDialog.show = false
-    await loadDoc()
-    await loadVersions()
-    if (doc.value?.type === 'doc' && editor.value) {
-      const content = doc.value?.content || ''
-      editor.value.commands.setContent(content === '{}' ? '' : content)
-    } else if (doc.value?.type === 'sheet') {
-      sheetData.value = doc.value?.content || '{}'
-    }
+    const resp = await fetch(`/api/docs/documents/${docId}/versions/${ver}/content`, { headers: authHeader() })
+    const text = await resp.text()
+    try {
+      const obj = JSON.parse(text)
+      if (obj.error) { ElMessage.error(obj.error); previewDialog.show = false; return }
+    } catch {}
+    previewDialog.html = text || '<p style="color:#999;text-align:center">（空文档）</p>'
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error || '恢复失败')
+    ElMessage.error('加载版本内容失败')
+    previewDialog.show = false
   }
-  versionDialog.loading = false
+  previewDialog.loading = false
+}
+
+function selectRestoreVersion(ver: number) {
+  ElMessageBox.confirm(
+    `将恢复到 v${ver}，当前内容将被保存为新版本。是否继续？`,
+    '恢复确认',
+    { type: 'warning', confirmButtonText: '恢复', cancelButtonText: '取消' }
+  ).then(async () => {
+    versionDialog.loading = true
+    try {
+      await http.post(`/docs/documents/${docId}/restore`, { version: ver })
+      ElMessage.success(`已恢复到 v${ver}`)
+      versionDialog.show = false
+      await loadDoc()
+      await loadVersions()
+      if (doc.value?.type === 'doc' && editor.value) {
+        const content = doc.value?.content || ''
+        editor.value.commands.setContent(content === '{}' ? '' : content)
+      } else if (doc.value?.type === 'sheet') {
+        sheetData.value = doc.value?.content || '{}'
+      }
+    } catch (e: any) {
+      ElMessage.error(e?.response?.data?.error || '恢复失败')
+    }
+    versionDialog.loading = false
+  }).catch(() => {})
 }
 
 function onSheetChange() { console.log('[SAVE] onSheetChange triggered, dataLoaded:', dataLoaded); scheduleAutoSave() }
 
-// === 分享 ===
+// === 分享 & 协作 ===
+const permRoleMap: any = { read: 'viewer', write: 'editor', admin: '管理员' }
+function roleLabel(role: string) {
+  const m: any = { viewer: '查看者', editor: '编辑者', admin: '管理员', owner: '所有者' }
+  return m[role] || role
+}
+
+async function loadCollaborators() {
+  collaboratorsLoading.value = true
+  try {
+    const [collabRes, shareRes] = await Promise.all([
+      http.get(`/docs/documents/${docId}/collaborators`),
+      http.get(`/docs/documents/${docId}/shares`),
+    ])
+    collaborators.value = collabRes.data.data || []
+    existingShares.value = shareRes.data.data || []
+    linkShareEnabled.value = existingShares.value.length > 0
+  } finally {
+    collaboratorsLoading.value = false
+  }
+}
+
+function searchTargets(query: string, cb: any) {
+  if (!query) { cb([]); return }
+  http.get('/docs/search-targets', { params: { q: query } }).then(({ data }) => {
+    const items = (data.data || []).map((t: any) => ({ ...t, value: t.display }))
+    cb(items)
+  }).catch(() => cb([]))
+}
+
+function onTargetSelect(item: any) {
+  selectedTarget.value = item
+}
+
+async function addCollaborator() {
+  if (!selectedTarget.value) return
+  await http.post(`/docs/documents/${docId}/collaborators`, {
+    target_type: selectedTarget.value.type,
+    target_id: selectedTarget.value.id,
+    role: newRole.value,
+  })
+  ElMessage.success('已添加')
+  selectedTarget.value = null
+  targetSearch.value = ''
+  loadCollaborators()
+}
+
+async function updateCollaborator(id: string, role: string) {
+  if (role === 'remove') {
+    await ElMessageBox.confirm('确定移除此协作者？', '确认')
+    await http.delete(`/docs/collaborators/${id}`)
+    ElMessage.success('已移除')
+  } else {
+    await http.put(`/docs/collaborators/${id}`, { role })
+    ElMessage.success('已更新')
+  }
+  loadCollaborators()
+}
+
+function toggleLinkShare(val: boolean) {
+  if (!val && existingShares.value.length > 0) {
+    // 取消时删除所有分享链接
+    ElMessageBox.confirm('关闭链接分享将删除所有分享链接，确定？', '确认').then(async () => {
+      for (const s of existingShares.value) {
+        await http.delete(`/docs/shares/${s.id}`)
+      }
+      existingShares.value = []
+    }).catch(() => { linkShareEnabled.value = true })
+  }
+}
+
 async function createShare() {
   const { data } = await http.post(`/docs/documents/${docId}/share`, shareForm)
   shareResult.value = data
   ElMessage.success('分享链接已生成')
+  loadCollaborators()
 }
 
 function copyShareUrl() {
@@ -1158,16 +1406,10 @@ function copyShareUrl() {
   ElMessage.success('已复制到剪贴板')
 }
 
-async function loadShares() {
-  const { data } = await http.get(`/docs/documents/${docId}/shares`)
-  shares.value = data.data || []
-  showShareList.value = true
-}
-
 async function deleteShare(id: string) {
   await http.delete(`/docs/shares/${id}`)
-  ElMessage.success('已取消分享')
-  loadShares()
+  ElMessage.success('已删除')
+  loadCollaborators()
 }
 
 // === 导出 ===
@@ -1182,7 +1424,7 @@ function handleMore(cmd: string) {
       if (versions.value.length) handleVersion(versions.value[0].version)
       break
     case 'export':
-      handleExport('html')
+      showExportDialog.value = true
       break
   }
 }
@@ -1274,6 +1516,11 @@ onMounted(async () => {
     const content = doc.value?.content || ''
     initEditor(content === '{}' ? '' : content)
   }
+  // Attach scroll listener for outline tracking
+  nextTick(() => {
+    const container = document.querySelector('.tiptap-editor')
+    if (container) container.addEventListener('scroll', onEditorScroll, { passive: true })
+  })
 })
 
 onUnmounted(() => {
@@ -1283,6 +1530,8 @@ onUnmounted(() => {
   ydoc?.destroy()
   editor.value?.destroy()
   document.removeEventListener('keydown', handleGlobalKeydown)
+  const container = document.querySelector('.tiptap-editor')
+  if (container) container.removeEventListener('scroll', onEditorScroll)
 })
 
 function handleGlobalKeydown(e: KeyboardEvent) {
@@ -1365,7 +1614,7 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .tb-btn.active { background: #409eff; color: #fff; }
 
 /* ── 编辑器主体 ── */
-.editor-page { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.editor-page { display: flex; flex-direction: column; height: calc(var(--vh, 1vh) * 100); overflow: hidden; }
 .editor-body { flex: 1; display: flex; overflow: hidden; }
 .editor-body.with-outline { gap: 0; }
 .sheet-body { flex: 1; }
@@ -1389,18 +1638,33 @@ document.addEventListener('keydown', handleGlobalKeydown)
 
 /* 大纲 */
 .outline-panel {
-  width: 200px; border-left: 1px solid #e8ecf0; padding: 16px 12px;
+  width: 200px; border-left: 1px solid #e8ecf0;
   overflow-y: auto; flex-shrink: 0; background: #fafbfc;
+  transition: width 0.2s;
 }
-.outline-title { font-size: 12px; font-weight: 600; color: #909399; text-transform: uppercase; margin-bottom: 8px; }
-.outline-item { font-size: 13px; color: #666; padding: 4px 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.outline-item:hover { color: #409eff; }
-.outline-h2 { padding-left: 8px; }
-.outline-h3 { padding-left: 16px; }
+.outline-panel.collapsed { width: 40px; }
+.outline-panel.collapsed .outline-list,
+.outline-panel.collapsed .outline-empty { display: none; }
+.outline-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px; cursor: pointer; user-select: none;
+}
+.outline-header:hover { background: #f0f5ff; }
+.outline-title { font-size: 12px; font-weight: 600; color: #909399; text-transform: uppercase; }
+.outline-toggle { color: #909399; }
+.outline-list { padding: 0 12px 12px; }
+.outline-empty { padding: 0 12px; font-size: 12px; color: #c0c4cc; }
+.outline-item { font-size: 13px; color: #666; padding: 4px 8px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; transition: all 0.15s; }
+.outline-item:hover { color: #409eff; background: #f0f5ff; }
+.outline-item.active { color: #409eff; background: #ecf5ff; font-weight: 500; }
+.outline-h1 { }
+.outline-h2 { padding-left: 16px; }
+.outline-h3 { padding-left: 24px; }
+.outline-h4 { padding-left: 32px; }
 
 /* 水印 */
 .watermark-layer {
-  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  position: fixed; top: 0; left: 0; width: 100vw; height: calc(var(--vh, 1vh) * 100);
   pointer-events: none; z-index: 9999; display: flex; flex-wrap: wrap;
   align-items: center; justify-content: center; gap: 80px;
   transform: rotate(-25deg); opacity: 0.06;
@@ -1412,6 +1676,18 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .diff-content { border: 1px solid #e8ecf0; border-radius: 8px; padding: 16px; max-height: 400px; overflow-y: auto; }
 .diff-content :deep(.diff-add) { background: #f0f9eb; }
 .diff-content :deep(.diff-remove) { background: #fef0f0; text-decoration: line-through; }
+
+/* 版本预览 */
+.preview-content {
+  border: 1px solid #e8ecf0; border-radius: 8px; padding: 24px;
+  max-height: 500px; overflow-y: auto; line-height: 1.8;
+}
+.preview-content :deep(h1) { font-size: 24px; font-weight: 700; margin: 16px 0 8px; }
+.preview-content :deep(h2) { font-size: 20px; font-weight: 600; margin: 14px 0 6px; }
+.preview-content :deep(h3) { font-size: 16px; font-weight: 600; margin: 12px 0 4px; }
+.preview-content :deep(p) { margin: 8px 0; }
+.preview-content :deep(pre) { background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 12px; }
+.preview-content :deep(code) { background: #f0f2f5; padding: 2px 4px; border-radius: 3px; }
 
 /* 统计 */
 .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center; }
@@ -1443,14 +1719,150 @@ document.addEventListener('keydown', handleGlobalKeydown)
 
 /* 移动端 */
 @media (max-width: 768px) {
-  .editor-header { flex-wrap: wrap; padding: 8px; }
+  .editor-header { flex-wrap: wrap; padding: 8px; gap: 4px; }
   .header-left { flex: 1 1 100%; }
-  .header-right { width: 100%; justify-content: flex-end; }
-  .title-input { max-width: none; }
+  .header-right { width: 100%; justify-content: flex-end; flex-wrap: wrap; gap: 4px; }
+  .title-input { max-width: none; font-size: 16px; }
   .doc-badges { display: none; }
   .btn-label { display: none; }
-  .toolbar { padding: 2px 4px; overflow-x: auto; flex-wrap: nowrap; }
+  .toolbar { padding: 2px 4px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .toolbar::-webkit-scrollbar { display: none; }
   .outline-panel { display: none; }
-  .tiptap-editor { padding: 16px; }
+  .outline-panel.collapsed { display: none; }
+  .tiptap-editor { padding: 12px 16px; }
+  .tiptap-editor :deep(.tiptap) { font-size: 15px; }
+  .tiptap-editor :deep(.tiptap h1) { font-size: 22px; }
+  .tiptap-editor :deep(.tiptap h2) { font-size: 18px; }
+  .tiptap-editor :deep(.tiptap h3) { font-size: 16px; }
+  .tiptap-editor :deep(.tiptap pre) { font-size: 12px; padding: 12px; }
+  .tiptap-editor :deep(.tiptap table td),
+  .tiptap-editor :deep(.tiptap table th) { padding: 6px 8px; min-width: 60px; }
+  /* 评论抽屉全屏 */
+  .comment-list { gap: 8px; }
+  .comment-item { padding: 8px 0; }
+  .comment-reply { margin-left: 12px; padding-left: 8px; }
+  /* 弹窗全屏 */
+  :deep(.el-dialog) { margin: 8px !important; }
+  :deep(.el-dialog__body) { max-height: 60vh; overflow-y: auto; }
+  /* 版本预览 */
+  .preview-content { padding: 12px; max-height: 50vh; }
+  .diff-content { padding: 8px; max-height: 50vh; }
+  /* 统计 */
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+@media (max-width: 480px) {
+  .editor-header { padding: 6px; }
+  .tb-btn { padding: 4px 6px; }
+  .header-right .el-button { padding: 6px 8px; }
+  .stats-grid { grid-template-columns: 1fr; }
+}
+
+.export-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.export-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.export-option:hover {
+  border-color: #409eff;
+  background: #ecf5ff;
+}
+.export-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.export-info {
+  flex: 1;
+}
+.export-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+.export-desc {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+/* 分享/协作者弹窗 */
+.share-add-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.target-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.target-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0;
+}
+.target-info { line-height: 1.3; }
+.target-name { font-size: 14px; color: #303133; }
+.target-sub { font-size: 12px; color: #909399; }
+
+.collaborators-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.collaborator-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.collaborator-item:last-child { border-bottom: none; }
+.collab-left { display: flex; align-items: center; gap: 10px; }
+.collab-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 500; flex-shrink: 0;
+  background: #f0f0f0;
+}
+.collab-info { line-height: 1.3; }
+.collab-name { font-size: 14px; color: #303133; display: flex; align-items: center; }
+.collab-sub { font-size: 12px; color: #909399; }
+.collab-right { flex-shrink: 0; }
+.role-dropdown {
+  display: inline-flex; align-items: center; gap: 4px;
+  cursor: pointer; color: #606266; font-size: 13px;
+  padding: 4px 8px; border-radius: 6px; border: 1px solid #dcdfe6;
+}
+.role-dropdown:hover { border-color: #409eff; color: #409eff; }
+
+.link-share-section { margin-top: 4px; }
+.link-share-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.link-share-body {
+  display: flex; align-items: center;
+  margin-bottom: 8px;
+}
+.share-link-result { margin-top: 8px; }
+.existing-shares { margin-top: 8px; }
+.share-link-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; font-size: 13px; color: #606266;
+}
+.share-link-token { font-family: monospace; font-size: 12px; }
+.share-link-badge { font-size: 11px; }
+.share-link-badge.expired { color: #f56c6c; }
+.share-link-count { color: #909399; font-size: 12px; }
 </style>

@@ -96,6 +96,37 @@ func GetFolderTree(ctx context.Context, deptID string) ([]*model.DocFolder, erro
 		f.Children = []*model.DocFolder{}
 		nodeMap[f.ID] = f
 	}
+
+	// 统计每个文件夹的文档数
+	if len(all) > 0 {
+		ids := make([]string, len(all))
+		for i, f := range all {
+			ids[i] = f.ID
+		}
+		placeholders := strings.Repeat("?,", len(ids))
+		placeholders = placeholders[:len(placeholders)-1]
+		args2 := make([]interface{}, len(ids))
+		for i, id := range ids {
+			args2[i] = id
+		}
+		countRows, err := database.DB.QueryContext(ctx,
+			`SELECT folder_id, COUNT(*) FROM md_documents WHERE folder_id IN (`+placeholders+`) AND status=1 GROUP BY folder_id`,
+			args2...,
+		)
+		if err == nil {
+			defer countRows.Close()
+			for countRows.Next() {
+				var folderID string
+				var cnt int
+				if countRows.Scan(&folderID, &cnt) == nil {
+					if f, ok := nodeMap[folderID]; ok {
+						f.DocCount = cnt
+					}
+				}
+			}
+		}
+	}
+
 	roots := []*model.DocFolder{}
 	for _, f := range all {
 		if f.ParentID == "" {
@@ -258,8 +289,8 @@ func SaveDocumentContent(ctx context.Context, docID string, content []byte, user
 
 	// Update document
 	_, err = database.DB.ExecContext(ctx,
-		`UPDATE md_documents SET file_path=?, file_size=?, version=?, updated_by=?, updated_at=NOW() WHERE id=?`,
-		path, size, newVersion, userID, doc.ID,
+		`UPDATE md_documents SET file_path=?, file_size=?, version=?, updated_by=?, updated_at=NOW(), content_text=? WHERE id=?`,
+		path, size, newVersion, userID, stripHTMLTags(string(content)), doc.ID,
 	)
 	if err != nil {
 		return nil, err
@@ -485,12 +516,20 @@ func cleanOldVersions(docID, deptID string) {
 // ==================== 搜索 ====================
 
 func SearchDocuments(ctx context.Context, keyword, deptID string, page, pageSize int) ([]*model.Document, int, error) {
-	// First pass: search by title
+	return SearchDocumentsWithTags(ctx, keyword, deptID, "", page, pageSize)
+}
+
+// SearchDocumentsWithTags searches documents by keyword, dept, and optional tag filter.
+func SearchDocumentsWithTags(ctx context.Context, keyword, deptID, tagID string, page, pageSize int) ([]*model.Document, int, error) {
+	// First pass: search by title + creator + content_text (full-text)
 	where := "WHERE d.status = 1 AND (d.title LIKE ?"
 	args := []interface{}{"%" + keyword + "%"}
 
-	// Also search by creator name
 	where += " OR d.created_by IN (SELECT id FROM md_users WHERE name LIKE ?)"
+	args = append(args, "%"+keyword+"%")
+
+	// Full-text search on content
+	where += " OR d.content_text LIKE ?"
 	args = append(args, "%"+keyword+"%")
 
 	where += ")"
@@ -498,6 +537,10 @@ func SearchDocuments(ctx context.Context, keyword, deptID string, page, pageSize
 	if deptID != "" {
 		where += " AND d.department_id = ?"
 		args = append(args, deptID)
+	}
+	if tagID != "" {
+		where += " AND d.id IN (SELECT dt.document_id FROM md_doc_tags dt WHERE dt.tag_id = ?)"
+		args = append(args, tagID)
 	}
 
 	var total int
@@ -523,14 +566,13 @@ func SearchDocuments(ctx context.Context, keyword, deptID string, page, pageSize
 		docs = append(docs, doc)
 	}
 
-	// Second pass: search document content for keyword
-	// Only search docs not already found by title
+	// Second pass: search document content
 	foundIDs := map[string]bool{}
 	for _, d := range docs {
 		foundIDs[d.ID] = true
 	}
 
-	contentHits, err := searchDocumentContent(ctx, keyword, deptID)
+	contentHits, err := searchDocumentContent(ctx, keyword, deptID, tagID)
 	if err == nil {
 		for _, doc := range contentHits {
 			if !foundIDs[doc.ID] {
@@ -545,7 +587,7 @@ func SearchDocuments(ctx context.Context, keyword, deptID string, page, pageSize
 }
 
 // searchDocumentContent searches decrypted document content for a keyword
-func searchDocumentContent(ctx context.Context, keyword, deptID string) ([]*model.Document, error) {
+func searchDocumentContent(ctx context.Context, keyword, deptID, tagID string) ([]*model.Document, error) {
 	where := "WHERE status = 1 AND type = 'doc'"
 	args := []interface{}{}
 	if deptID != "" {
@@ -553,6 +595,12 @@ func searchDocumentContent(ctx context.Context, keyword, deptID string) ([]*mode
 		args = append(args, deptID)
 	}
 	where += " ORDER BY updated_at DESC LIMIT 50"
+
+	if tagID != "" {
+		where += `
+		AND id IN (SELECT dt.document_id FROM md_doc_tags dt WHERE dt.tag_id = ?)`
+		args = append(args, tagID)
+	}
 
 	rows, err := database.DB.QueryContext(ctx, "SELECT id, IFNULL(folder_id,''), department_id, title, type, file_size, version, IFNULL(created_by,''), IFNULL(updated_by,''), created_at, updated_at FROM md_documents "+where, args...)
 	if err != nil {
@@ -586,6 +634,9 @@ func searchDocumentContent(ctx context.Context, keyword, deptID string) ([]*mode
 }
 
 // stripHTMLTags removes HTML tags for plain text search
+// StripHTMLTags exports stripHTMLTags for handler use.
+func StripHTMLTags(s string) string { return stripHTMLTags(s) }
+
 func stripHTMLTags(s string) string {
 	var buf strings.Builder
 	inTag := false

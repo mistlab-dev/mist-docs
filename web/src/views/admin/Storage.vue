@@ -42,7 +42,7 @@
         <div class="panel-title">加密状态</div>
         <div class="encrypt-badge">
           <el-tag :type="encryption.enabled ? 'success' : 'danger'" effect="dark" round size="large">
-            {{ encryption.enabled ? '🔒 AES-256-GCM 已启用' : '🔓 未启用加密' }}
+            {{ encryption.enabled ? 'AES-256-GCM 已启用' : '未启用加密' }}
           </el-tag>
         </div>
         <div class="encrypt-detail">
@@ -99,7 +99,7 @@
         </div>
       </div>
       <div v-if="warnings.length" class="warnings">
-        <div v-for="w in warnings" :key="w" class="warning-item">⚠️ {{ w }}</div>
+        <div v-for="w in warnings" :key="w" class="warning-item"><el-icon color="#e6a23c" style="vertical-align:middle;margin-right:4px"><WarningFilled /></el-icon>{{ w }}</div>
       </div>
     </div>
   </div>
@@ -107,6 +107,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { WarningFilled } from '@element-plus/icons-vue'
 import http from '@/utils/http'
 
 const checkNames: any = {

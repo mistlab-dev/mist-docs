@@ -8,7 +8,7 @@
       <div class="sidebar-top">
         <div class="logo" @click="collapsed = !collapsed">
           <span v-if="!collapsed" class="logo-text">MistDocs</span>
-          <svg v-else class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <svg v-else class="logo-svg" viewBox="0 0 24 24" fill="#4f6ef7" stroke="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8" fill="#fff" stroke="none"/></svg>
         </div>
         <button class="sidebar-hide-btn" @click="sidebarHidden = true" title="隐藏侧边栏">«</button>
       </div>
@@ -29,6 +29,10 @@
           <el-icon><Delete /></el-icon>
           <template #title>回收站</template>
         </el-menu-item>
+        <el-menu-item index="/help">
+          <el-icon><QuestionFilled /></el-icon>
+          <template #title>帮助</template>
+        </el-menu-item>
 
         <el-divider v-if="auth.isAdmin" />
 
@@ -45,10 +49,6 @@
             <el-icon><OfficeBuilding /></el-icon>
             <template #title>部门管理</template>
           </el-menu-item>
-          <el-menu-item index="/admin/permissions">
-            <el-icon><Lock /></el-icon>
-            <template #title>权限管理</template>
-          </el-menu-item>
           <el-menu-item index="/admin/audits">
             <el-icon><List /></el-icon>
             <template #title>审计日志</template>
@@ -59,6 +59,12 @@
           </el-menu-item>
         </template>
       </el-menu>
+      <div class="sidebar-bottom">
+        <div class="help-btn" @click="showHelp = true" :title="collapsed ? '帮助' : ''">
+          <el-icon><QuestionFilled /></el-icon>
+          <span v-if="!collapsed">帮助</span>
+        </div>
+      </div>
     </el-aside>
 
     <!-- 主内容 -->
@@ -142,12 +148,43 @@
         <div v-if="!notifications.length" class="no-data">暂无通知</div>
       </div>
     </el-drawer>
+
+    <!-- 帮助 -->
+    <el-dialog v-model="showHelp" title="使用帮助" width="520">
+      <div class="help-content">
+        <h4>文档管理</h4>
+        <ul>
+          <li>点击左侧「文档」进入文档列表</li>
+          <li>点击「新建文档」创建空白文档，支持富文本编辑</li>
+          <li>点击「表格」创建智能表格</li>
+          <li>右键文件夹可以新建子文件夹、重命名</li>
+          <li>拖拽文档可以移动到不同文件夹</li>
+        </ul>
+        <h4>分享与协作</h4>
+        <ul>
+          <li>打开文档后，点击右上角「分享」按钮</li>
+          <li>搜索用户或部门，设置权限（查看/评论/编辑）</li>
+          <li>开启「链接分享」可生成分享链接，支持设置密码和有效期</li>
+        </ul>
+        <h4>快捷键</h4>
+        <ul>
+          <li><kbd>Ctrl</kbd>+<kbd>S</kbd> 手动保存</li>
+          <li><kbd>Ctrl</kbd>+<kbd>/</kbd> 查看编辑器快捷键</li>
+        </ul>
+        <h4>文件夹</h4>
+        <ul>
+          <li>文件夹名称旁的数字显示该文件夹内的文档数量</li>
+          <li>支持多级文件夹嵌套</li>
+          <li>文件夹权限会自动继承给子文件夹和文档</li>
+        </ul>
+      </div>
+    </el-dialog>
   </el-container>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Sunny, Moon } from '@element-plus/icons-vue'
+import { Sunny, Moon, Folder, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
@@ -161,6 +198,7 @@ const isDark = ref(false)
 const collapsed = ref(false)
 const mobileMenu = ref(false)
 const sidebarHidden = ref(false)
+const showHelp = ref(false)
 
 function onMenuSelect() {
   // 移动端点击菜单后自动关闭
@@ -253,6 +291,11 @@ async function changePassword() {
 }
 
 onMounted(() => {
+  // iOS Safari 100vh fix
+  const setVh = () => document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`)
+  setVh()
+  window.addEventListener('resize', setVh)
+
   // Restore theme preference
   const saved = localStorage.getItem('mistdocs-theme')
   if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -270,11 +313,17 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.main-layout { height: 100vh; }
+.main-layout { height: calc(var(--vh, 1vh) * 100); }
 .sidebar {
   background: #1d1e2c;
   transition: width 0.3s, margin-left 0.3s;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar :deep(.el-menu) {
+  flex: 1;
+  border-right: none;
 }
 .sidebar-top { display: flex; align-items: center; border-bottom: 1px solid #2a2b3d; height: 56px; }
 .sidebar-top .logo { flex: 1; height: 56px; }
@@ -284,9 +333,22 @@ onMounted(() => {
   margin-right: 8px; display: flex; align-items: center; justify-content: center;
 }
 .sidebar-hide-btn:hover { background: #2a2b3d; color: #fff; }
+.sidebar-bottom {
+  margin-top: auto;
+  padding: 8px 0 12px;
+  border-top: 1px solid #2a2b3d;
+}
+.help-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 20px; cursor: pointer;
+  color: #a0a4b8; font-size: 14px;
+  transition: all 0.2s;
+}
+.help-btn:hover { background: #2a2b3d; color: #fff; }
+.help-btn .el-icon { font-size: 18px; }
 .logo-text { letter-spacing: 2px; }
 .logo-icon { font-size: 24px; }
-.logo-svg { width: 24px; height: 24px; }
+.logo-svg { width: 28px; height: 28px; }
 .topbar {
   display: flex;
   align-items: center;
@@ -313,6 +375,12 @@ onMounted(() => {
 .notif-actions { margin-top: 4px; display: flex; gap: 8px; }
 .no-data { text-align: center; padding: 40px; color: #c0c4cc; }
 
+.help-content h4 { margin: 16px 0 8px; color: #303133; }
+.help-content h4:first-child { margin-top: 0; }
+.help-content ul { padding-left: 20px; margin: 4px 0; }
+.help-content li { margin: 6px 0; color: #606266; font-size: 14px; line-height: 1.6; }
+.help-content kbd { background: #f5f5f5; border: 1px solid #dcdfe6; border-radius: 3px; padding: 1px 6px; font-size: 12px; }
+
 /* Mobile */
 .menu-btn { display: none; color: #fff !important; }
 .sidebar-overlay { display: none; }
@@ -322,7 +390,7 @@ onMounted(() => {
   .sidebar-overlay {
     display: none;
     position: fixed; top: 0; left: 0;
-    width: 100vw; height: 100vh;
+    width: 100vw; height: calc(var(--vh, 1vh) * 100);
     background: rgba(0,0,0,0.4);
     z-index: 199;
   }
@@ -330,7 +398,7 @@ onMounted(() => {
   .el-aside.sidebar {
     position: fixed !important;
     top: 0; left: -260px;
-    height: 100vh;
+    height: calc(var(--vh, 1vh) * 100);
     z-index: 200;
     transition: left 0.3s;
   }

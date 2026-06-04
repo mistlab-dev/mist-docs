@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -229,6 +230,9 @@ func buildRouter() *gin.Engine {
 			auth.POST("/permissions", handler.SetPermission)
 			auth.DELETE("/permissions/:id", handler.RemovePermission)
 			auth.GET("/permissions/check", handler.CheckPermission)
+
+			auth.GET("/docs/documents/search", handler.SearchDocuments)
+			auth.GET("/docs/documents/:id/export", handler.ExportDocument)
 
 			auth.POST("/docs/documents/:id/share", handler.CreateShare)
 			auth.GET("/docs/documents/:id/shares", handler.ListShares)
@@ -1531,5 +1535,269 @@ func TestAccessInvalidShare(t *testing.T) {
 	w := request("GET", "/api/s/nonexistent-token", nil, "")
 	if w.Code != 404 {
 		t.Errorf("invalid share should return 404, got %d", w.Code)
+	}
+}
+
+// ==================== 导出功能测试 ====================
+
+func TestExportMarkdown(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "导出测试", dept1ID)
+
+	w := request("GET", "/api/docs/documents/"+docID+"/export?format=markdown", nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("export markdown failed: %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "测试内容") {
+		t.Errorf("markdown export should contain content, got: %s", body)
+	}
+	cd := w.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, ".md") {
+		t.Errorf("should suggest .md filename, got: %s", cd)
+	}
+}
+
+func TestExportHTML(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "HTML导出", dept1ID)
+
+	w := request("GET", "/api/docs/documents/"+docID+"/export?format=html", nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("export html failed: %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "<!DOCTYPE html>") {
+		t.Error("should return full HTML document")
+	}
+	if !strings.Contains(body, "<title>HTML导出</title>") {
+		t.Error("should contain title")
+	}
+}
+
+func TestExportText(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "文本导出", dept1ID)
+
+	w := request("GET", "/api/docs/documents/"+docID+"/export?format=txt", nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("export text failed: %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "<") {
+		t.Errorf("text export should not contain HTML tags: %s", body)
+	}
+}
+
+func TestExportDocx(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "Word导出", dept1ID)
+
+	w := request("GET", "/api/docs/documents/"+docID+"/export?format=docx", nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("export docx failed: %d %s", w.Code, w.Body.String())
+	}
+	cd := w.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, ".doc") {
+		t.Errorf("should suggest .doc filename, got: %s", cd)
+	}
+}
+
+func TestExportPDF(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "PDF导出", dept1ID)
+
+	w := request("GET", "/api/docs/documents/"+docID+"/export?format=pdf", nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("export pdf failed: %d %s", w.Code, w.Body.String())
+	}
+	ct := w.Header().Get("Content-Type")
+	if !strings.Contains(ct, "application/pdf") {
+		t.Errorf("should return pdf content type, got: %s", ct)
+	}
+}
+
+func TestExportUnsupportedFormat(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "格式测试", dept1ID)
+
+	w := request("GET", "/api/docs/documents/"+docID+"/export?format=xyz", nil, adminToken)
+	if w.Code != 400 {
+		t.Errorf("unsupported format should return 400, got %d", w.Code)
+	}
+}
+
+func TestExportNonexistentDoc(t *testing.T) {
+	w := request("GET", "/api/docs/documents/nonexistent/export?format=html", nil, adminToken)
+	if w.Code != 404 {
+		t.Errorf("nonexistent doc export should return 404, got %d", w.Code)
+	}
+}
+
+// ==================== 分享权限检查测试 ====================
+
+func TestSharePermissionCheck(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "分享权限测试", dept1ID)
+
+	// admin 可以分享
+	w := request("POST", "/api/docs/documents/"+docID+"/share", map[string]interface{}{
+		"expires_in": 0,
+	}, adminToken)
+	if w.Code != 200 {
+		t.Errorf("admin should be able to share, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestShareByMemberWithReadPermission(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "成员分享测试", dept1ID)
+
+	// 给 member1 设读权限
+	w := request("POST", "/api/permissions", map[string]interface{}{
+		"resource_type": "document",
+		"resource_id":   docID,
+		"target_type":   "user",
+		"target_id":     member1ID,
+		"permission":    "read",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("set permission failed: %d %s", w.Code, w.Body.String())
+	}
+
+	// member1 有读权限，应该可以分享
+	w = request("POST", "/api/docs/documents/"+docID+"/share", map[string]interface{}{
+		"expires_in": 0,
+	}, member1Tkn)
+	if w.Code != 200 {
+		t.Errorf("member with read permission should be able to share, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestShareByMemberNoPermission(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "无权限分享测试", dept1ID)
+
+	// member2 没有权限，不能分享（member2 不在 dept1）
+	w := request("POST", "/api/docs/documents/"+docID+"/share", map[string]interface{}{
+		"expires_in": 0,
+	}, member2Tkn)
+	if w.Code != 403 {
+		t.Errorf("member without permission should get 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSharePasswordProtection(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "密码分享测试", dept1ID)
+
+	// 创建带密码的分享
+	w := request("POST", "/api/docs/documents/"+docID+"/share", map[string]interface{}{
+		"password": "secret",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("create share failed: %d %s", w.Code, w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	token := getString(resp["token"])
+
+	// 获取 info
+	w = request("GET", "/api/s/"+token+"/info", nil, "")
+	if w.Code != 200 {
+		t.Fatalf("share info failed: %d %s", w.Code, w.Body.String())
+	}
+	info := parseJSON(t, w)
+	hasPwd, _ := info["has_password"].(bool)
+	if !hasPwd {
+		t.Error("share info should indicate has_password")
+	}
+
+	// 无密码访问失败
+	w = request("GET", "/api/s/"+token, nil, "")
+	if w.Code != 403 {
+		t.Errorf("no password should return 403, got %d", w.Code)
+	}
+
+	// 正确密码访问成功
+	w = request("GET", "/api/s/"+token+"?password=secret", nil, "")
+	if w.Code != 200 {
+		t.Errorf("correct password should succeed, got %d", w.Code)
+	}
+}
+
+// ==================== 全文搜索测试 ====================
+
+func TestSearchByTitle(t *testing.T) {
+	createTestDoc(t, adminToken, "UniqueSearchTitle_7f3a", dept1ID)
+
+	w := request("GET", "/api/docs/documents/search?q=UniqueSearchTitle_7f3a", nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("search failed: %d %s", w.Code, w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	data, ok := resp["data"].([]interface{})
+	if !ok || len(data) == 0 {
+		t.Errorf("should find doc by title, got: %v", resp)
+	}
+}
+
+func TestSearchNoKeyword(t *testing.T) {
+	w := request("GET", "/api/docs/documents/search?q=", nil, adminToken)
+	if w.Code != 400 {
+		t.Errorf("empty keyword should return 400, got %d", w.Code)
+	}
+}
+
+func TestSearchNonexistentKeyword(t *testing.T) {
+	w := request("GET", "/api/docs/documents/search?q=AbsolutelyNonexistentKeyword_9x2z", nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("search failed: %d %s", w.Code, w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	data, ok := resp["data"].([]interface{})
+	if !ok || len(data) != 0 {
+		t.Errorf("should find nothing for nonexistent keyword, got: %v", resp)
+	}
+}
+
+func TestSearchByTag(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "TagSearchTest_4b1c", dept1ID)
+
+	// Create a tag
+	w := request("POST", "/api/docs/tags", map[string]interface{}{
+		"name": "SearchTestTag",
+	}, adminToken)
+	tagResp := parseJSON(t, w)
+	tagID := getString(tagResp["id"])
+
+	// Attach tag to doc
+	request("POST", "/api/docs/documents/"+docID+"/tags", map[string]interface{}{
+		"tag_id": tagID,
+	}, adminToken)
+
+	// Search with tag filter
+	w = request("GET", "/api/docs/documents/search?q=TagSearchTest_4b1c&tag_id="+tagID, nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("search with tag failed: %d %s", w.Code, w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	data, ok := resp["data"].([]interface{})
+	if !ok || len(data) == 0 {
+		t.Errorf("should find doc by tag, got: %v", resp)
+	}
+}
+
+func TestSearchFullTextContent(t *testing.T) {
+	// Create a doc with unique content
+	docID := createTestDoc(t, adminToken, "全文搜索测试", dept1ID)
+
+	// Save content with a unique keyword
+	uniqueKeyword := "FullTextSearchKeyword_8d2e"
+	w := request("PUT", "/api/docs/documents/"+docID+"/content", map[string]interface{}{
+		"content": "<p>" + uniqueKeyword + " is hidden in the content</p>",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("save content failed: %d %s", w.Code, w.Body.String())
+	}
+
+	// Search by content keyword (not title)
+	w = request("GET", "/api/docs/documents/search?q="+uniqueKeyword, nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("full-text search failed: %d %s", w.Code, w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	data, ok := resp["data"].([]interface{})
+	if !ok || len(data) == 0 {
+		t.Errorf("should find doc by content text, got: %v", resp)
 	}
 }

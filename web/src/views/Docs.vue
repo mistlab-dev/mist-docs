@@ -17,9 +17,12 @@
         </el-button>
       </div>
       <div class="toolbar-right">
-        <el-input v-model="search" placeholder="搜索文档..." class="search-box" clearable @keyup.enter="doSearch" @clear="clearSearch" size="default">
+        <el-input v-model="search" placeholder="搜索文档..." class="search-box" clearable @input="debounceSearch" @clear="clearSearch" size="default">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
+        <el-select v-model="searchTagId" placeholder="全部标签" clearable class="tag-filter" size="default" @change="doSearch">
+          <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
+        </el-select>
         <el-select v-model="sortBy" size="default" class="sort-select" @change="sortDocs">
           <el-option label="更新时间" value="updated" />
           <el-option label="创建时间" value="created" />
@@ -102,7 +105,7 @@
               <template #default="{ data }">
                 <span class="tree-node">
                   <svg viewBox="0 0 20 20" fill="currentColor" class="folder-icon"><path d="M3 4a1 1 0 011-1h4a1 1 0 01.8.4L10.5 6H17a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>
-                  <span>{{ data.name }}</span>
+                  <span>{{ data.name }}<span v-if="data.doc_count > 0" class="doc-count-badge">{{ data.doc_count }}</span></span>
                 </span>
               </template>
             </el-tree>
@@ -124,7 +127,7 @@
 
         <!-- 空状态 -->
         <div v-else-if="!docs.length" class="empty-state">
-          <div class="empty-icon">📄</div>
+          <div class="empty-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="48" height="48"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg></div>
           <p v-if="viewMode === 'recent'">还没有打开过文档</p>
           <p v-else-if="viewMode === 'favorites'">还没有收藏文档</p>
           <p v-else>暂无文档，点击「新建文档」开始</p>
@@ -149,7 +152,8 @@
               </el-icon>
             </div>
             <div class="card-body">
-              <div class="card-title">{{ doc.title }}</div>
+              <div class="card-title" v-html="doc.titleHtml || doc.title"></div>
+              <div v-if="doc.snippetHtml || doc.snippet" class="card-snippet" v-html="doc.snippetHtml || doc.snippet"></div>
               <div class="card-meta">
                 <el-tag :type="doc.type === 'doc' ? '' : 'success'" size="small" effect="light" round>
                   {{ doc.type === 'doc' ? '文档' : '表格' }}
@@ -203,7 +207,7 @@
                   <div class="type-dot" :class="row.type">
                     <el-icon :size="14"><Document v-if="row.type==='doc'" /><Grid v-else /></el-icon>
                   </div>
-                  <span>{{ row.title }}</span>
+                  <span v-html="row.titleHtml || row.title"></span>
                 </div>
               </template>
             </el-table-column>
@@ -287,7 +291,7 @@
         <el-form-item label="选择模板">
           <div class="template-grid">
             <div v-for="t in templateList" :key="t.key" class="tpl-card" :class="{ active: newDocTemplate === t.key }" @click="newDocTemplate = t.key">
-              <div class="tpl-icon">{{ t.icon }}</div>
+              <div class="tpl-icon" v-html="t.icon"></div>
               <div class="tpl-label">{{ t.name }}</div>
             </div>
           </div>
@@ -386,6 +390,18 @@ const viewMode = ref('all')
 const loading = ref(false)
 const search = ref('')
 const searchMode = ref(false)
+const searchTagId = ref('')
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+function debounceSearch() {
+  clearTimeout(searchTimer!)
+  if (!search.value && !searchTagId.value) {
+    clearSearch()
+    return
+  }
+  searchTimer = setTimeout(doSearch, 400)
+}
+const allTags = ref<any[]>([])
 const favoriteIds = ref<Set<string>>(new Set())
 const sidebarOpen = ref(false)
 
@@ -413,12 +429,12 @@ const layoutMode = ref<'grid'|'list'>('grid')
 const sortBy = ref('updated')
 
 const templateList = [
-  { key: '', icon: '📝', name: '空白文档' },
-  { key: 'meeting', icon: '📋', name: '会议纪要' },
-  { key: 'weekly', icon: '📊', name: '周报' },
-  { key: 'requirement', icon: '📐', name: '需求文档' },
-  { key: 'api', icon: '🔌', name: 'API 文档' },
-  { key: 'readme', icon: '📖', name: 'README' },
+  { key: '', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg>', name: '空白文档' },
+  { key: 'meeting', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h8a2 2 0 012 2v3H6a2 2 0 00-2 2v5H4a2 2 0 01-2-2V5zm4 6a2 2 0 012-2h8a2 2 0 012 2v5a2 2 0 01-2 2H8a2 2 0 01-2-2v-5zm2 0v5h8v-5H8z"/></svg>', name: '会议纪要' },
+  { key: 'weekly', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V3zm2 0v14h10V3H5zm1 3h8v2H6V6zm0 4h6v2H6v-2z"/></svg>', name: '周报' },
+  { key: 'requirement', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 2h6v1H7V6zm0 2h6v1H7V8zm0 2h4v1H7v-1z"/><path d="M8 12l2 2 4-4" stroke=\'currentColor\' fill=\'none\' stroke-width=\'1.5\'/></svg>', name: '需求文档' },
+  { key: 'api', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 00-.894.553L5.382 5H4a1 1 0 000 2h12a1 1 0 100-2h-1.382l-.724-1.447A1 1 0 0013 3H7zm0 2h6l.724 1.447A1 1 0 0014.618 7H5.382a1 1 0 00.894-.553L7 5zM5 9h10v6a2 2 0 01-2 2H7a2 2 0 01-2-2V9z"/></svg>', name: 'API 文档' },
+  { key: 'readme', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm0 2.5L17.5 8H14V4.5zM6 4h6v6h6v10H6V4z"/></svg>', name: 'README' },
 ]
 
 const templates: Record<string, string> = {
@@ -439,10 +455,18 @@ function sortDocs() {
   }
 }
 
+function highlightText(text: string, keyword: string): string {
+  if (!keyword || !text) return text
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="search-hl">$1</mark>')
+}
+
 function setDocs(list: any[]) {
   docs.value = list.map((d: any) => ({
     ...d,
     is_favorite: favoriteIds.value.has(d.id),
+    titleHtml: searchMode.value ? highlightText(d.title, search.value) : '',
+    snippetHtml: d.snippet ? highlightText(d.snippet, search.value) : '',
   }))
   sortDocs()
 }
@@ -515,9 +539,11 @@ function onFolderClick(node: any) {
 }
 
 async function doSearch() {
-  if (!search.value) return
+  if (!search.value && !searchTagId.value) return
   searchMode.value = true
-  const { data } = await http.get('/docs/documents/search', { params: { q: search.value } })
+  const params: any = { q: search.value || '' }
+  if (searchTagId.value) params.tag_id = searchTagId.value
+  const { data } = await http.get('/docs/documents/search', { params })
   setDocs(data.data || [])
 }
 
@@ -759,6 +785,7 @@ async function loadSidebarTags() {
   try {
     const { data } = await http.get('/docs/tags')
     sidebarTags.value = data || []
+    allTags.value = data?.data || data || []
   } catch {}
 }
 
@@ -782,6 +809,7 @@ async function filterByTag(tagId: string) {
 .toolbar-left { display: flex; align-items: center; gap: 8px; }
 .toolbar-right { display: flex; align-items: center; gap: 8px; }
 .search-box { width: 220px; }
+.tag-filter { width: 140px; }
 .sort-select { width: 120px; }
 
 /* 批量操作 */
@@ -834,6 +862,12 @@ async function filterByTag(tagId: string) {
 .folder-tree :deep(.el-tree-node.is-current > .el-tree-node__content) { background: #e8f0fe; color: #4f6ef7; }
 .tree-node { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .folder-icon { width: 16px; height: 16px; color: #fa8c16; }
+.doc-count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  background: #e8f0fe; color: #4f6ef7; border-radius: 10px;
+  font-size: 11px; font-weight: 600; margin-left: 6px;
+}
 
 /* 右侧文档区 */
 .doc-area { flex: 1; overflow-y: auto; min-width: 0; }
@@ -843,6 +877,7 @@ async function filterByTag(tagId: string) {
   background: #fff; border-radius: 12px; font-size: 14px; color: #606266;
   box-shadow: 0 2px 12px rgba(0,0,0,0.04);
 }
+.search-hl { background: #fef08a; color: inherit; padding: 0 2px; border-radius: 2px; }
 
 /* 空状态 */
 .empty-state {
@@ -885,6 +920,7 @@ async function filterByTag(tagId: string) {
   font-size: 14px; font-weight: 600; color: #1a1a2e; margin-bottom: 8px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.card-snippet { font-size: 12px; color: #909399; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.5; }
 .card-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .card-version { color: #909399; font-size: 12px; }
 .card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
@@ -953,14 +989,14 @@ async function filterByTag(tagId: string) {
 
   .sidebar {
     position: fixed; top: 0; left: 0;
-    width: 280px; height: 100vh; z-index: 200;
+    width: 280px; height: calc(var(--vh, 1vh) * 100); z-index: 200;
     border-radius: 0; box-shadow: none;
     transform: translateX(-100%); transition: transform 0.25s ease;
   }
   .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.15); }
   .sidebar-overlay.open {
     display: block; position: fixed; top: 0; left: 0;
-    width: 100vw; height: 100vh; background: rgba(0,0,0,0.3); z-index: 199;
+    width: 100vw; height: calc(var(--vh, 1vh) * 100); background: rgba(0,0,0,0.3); z-index: 199;
   }
 
   .doc-grid { grid-template-columns: 1fr; }

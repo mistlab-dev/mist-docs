@@ -18,7 +18,7 @@
 
     <!-- 空状态 -->
     <div v-if="!filteredTrash.length && !loading" class="empty-state">
-      <div class="empty-icon">🗑️</div>
+      <div class="empty-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="48" height="48"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg></div>
       <p v-if="searchKey" class="empty-title">没有匹配的文档</p>
       <template v-else>
         <p class="empty-title">回收站为空</p>

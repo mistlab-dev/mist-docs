@@ -287,11 +287,11 @@
     <!-- Sheet Tab 右键菜单 -->
     <div v-if="tabMenu.show" class="ctx-menu" :style="{ left: tabMenu.x + 'px', top: tabMenu.y + 'px' }">
       <div class="ctx-item" @click="renameSheet(tabMenu.idx); tabMenu.show = false">重命名</div>
-      <div class="ctx-item" @click="setTabColor('#1a73e8')">🔵 蓝色</div>
-      <div class="ctx-item" @click="setTabColor('#34a853')">🟢 绿色</div>
-      <div class="ctx-item" @click="setTabColor('#ea4335')">🔴 红色</div>
-      <div class="ctx-item" @click="setTabColor('#fbbc04')">🟡 黄色</div>
-      <div class="ctx-item" @click="setTabColor('#9334e6')">🟣 紫色</div>
+      <div class="ctx-item" @click="setTabColor('#1a73e8')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#1a73e8;vertical-align:middle;margin-right:4px"></span>蓝色</div>
+      <div class="ctx-item" @click="setTabColor('#34a853')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#34a853;vertical-align:middle;margin-right:4px"></span>绿色</div>
+      <div class="ctx-item" @click="setTabColor('#ea4335')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ea4335;vertical-align:middle;margin-right:4px"></span>红色</div>
+      <div class="ctx-item" @click="setTabColor('#fbbc04')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#fbbc04;vertical-align:middle;margin-right:4px"></span>黄色</div>
+      <div class="ctx-item" @click="setTabColor('#9334e6')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#9334e6;vertical-align:middle;margin-right:4px"></span>紫色</div>
       <div class="ctx-item" @click="setTabColor('')">无颜色</div>
     </div>
 
@@ -357,6 +357,7 @@
                 :colspan="getColspan(ri, c - 1)"
                 :rowspan="getRowspan(ri, c - 1)"
                 @mousedown.prevent="onCellMouseDown(ri, c - 1, $event)"
+                @touchend.prevent="onCellTouchEnd(ri, c - 1, $event)"
                 @mouseenter="onCellMouseEnter(ri, c - 1, $event); showCellComment(ri, c - 1, $event)"
                 @dblclick="startEdit(ri, c - 1)"
                 @mouseleave="hideCellComment()"
@@ -396,9 +397,9 @@
 
     <!-- 右键菜单 -->
     <div v-if="contextMenu.show" class="ctx-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
-      <div class="ctx-item" @click="ctxCut"><span class="ctx-icon">✂</span> 剪切<span class="ctx-key">Ctrl+X</span></div>
-      <div class="ctx-item" @click="ctxCopy"><span class="ctx-icon">📋</span> 复制<span class="ctx-key">Ctrl+C</span></div>
-      <div class="ctx-item" @click="ctxPaste"><span class="ctx-icon">📄</span> 粘贴<span class="ctx-key">Ctrl+V</span></div>
+      <div class="ctx-item" @click="ctxCut"><span class="ctx-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><circle cx="6" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8.5" y1="7.5" x2="16" y2="14" stroke="currentColor" stroke-width="1.5"/><line x1="8.5" y1="12.5" x2="16" y2="6" stroke="currentColor" stroke-width="1.5"/></svg></span> 剪切<span class="ctx-key">Ctrl+X</span></div>
+      <div class="ctx-item" @click="ctxCopy"><span class="ctx-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><rect x="6" y="2" width="12" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 6v12h12" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span> 复制<span class="ctx-key">Ctrl+C</span></div>
+      <div class="ctx-item" @click="ctxPaste"><span class="ctx-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M14 2H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/></svg></span> 粘贴<span class="ctx-key">Ctrl+V</span></div>
       <div class="ctx-item" @click="ctxPasteValues">只粘贴值</div>
       <div class="ctx-item" @click="ctxPasteFormat">只粘贴格式</div>
       <div class="ctx-item" @click="ctxPasteTranspose">转置粘贴</div>
@@ -408,8 +409,8 @@
       <div class="ctx-item" @click="ctxInsertColLeft">← 左侧插入列</div>
       <div class="ctx-item" @click="ctxInsertColRight">→ 右侧插入列</div>
       <div class="ctx-sep" />
-      <div class="ctx-item" @click="ctxDeleteRow">🗑 删除行</div>
-      <div class="ctx-item" @click="ctxDeleteCol">🗑 删除列</div>
+      <div class="ctx-item" @click="ctxDeleteRow"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg>删除行</div>
+      <div class="ctx-item" @click="ctxDeleteCol"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg>删除列</div>
       <div class="ctx-item" @click="ctxHideRows">隐藏行</div>
       <div class="ctx-item" @click="ctxHideCols">隐藏列</div>
       <div class="ctx-item" @click="ctxUnhideAll">显示所有隐藏</div>
@@ -417,14 +418,14 @@
       <div class="ctx-item" @click="ctxClearCells">清空内容</div>
       <div class="ctx-item" @click="ctxMergeToggle">{{ hasMerge ? '取消合并' : '合并单元格' }}</div>
       <div class="ctx-sep" />
-      <div class="ctx-item" @click="ctxAddComment">💬 {{ getComment(ctxRow, ctxCol) ? '编辑批注' : '添加批注' }}</div>
-      <div class="ctx-item" @click="ctxSetLink">🔗 {{ getCellMeta(ctxRow, ctxCol).link ? '编辑链接' : '插入链接' }}</div>
-      <div v-if="getComment(ctxRow, ctxCol)" class="ctx-item" @click="ctxDeleteComment">🗑 删除批注</div>
+      <div class="ctx-item" @click="ctxAddComment"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M18 10c0 3.866-3.582 7-8 7a8.8 8.8 0 01-2.808-.464l-3.508 1.168A1 1 0 012.28 16.28l.88-2.638C2.064 12.474 2 11.26 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z"/></svg>{{ getComment(ctxRow, ctxCol) ? '编辑批注' : '添加批注' }}</div>
+      <div class="ctx-item" @click="ctxSetLink"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M12.586 4.586a2 2 0 112.828 2.828l-3.879 3.879a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3.879-3.879a4 4 0 00-5.656-5.656L8.12 5.464a1 1 0 001.414 1.414l3.052-3.292z"/></svg> {{ getCellMeta(ctxRow, ctxCol).link ? '编辑链接' : '插入链接' }}</div>
+      <div v-if="getComment(ctxRow, ctxCol)" class="ctx-item" @click="ctxDeleteComment"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg>删除批注</div>
       <div class="ctx-sep" />
-      <div class="ctx-item" @click="ctxSetValidation">📝 数据验证</div>
-      <div class="ctx-item" @click="ctxToggleLock">{{ getCellMeta(ctxRow, ctxCol).locked ? '🔓 解锁单元格' : '🔒 锁定单元格' }}</div>
-      <div class="ctx-item" @click="ctxToggleProtect">{{ sheet.protected ? '🔓 取消保护' : '🔐 保护工作表' }}</div>
-      <div class="ctx-item" @click="ctxGroupRows">📁 分组折叠</div>
+      <div class="ctx-item" @click="ctxSetValidation"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg> 数据验证</div>
+      <div class="ctx-item" @click="ctxToggleLock"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg> {{ getCellMeta(ctxRow, ctxCol).locked ? '解锁单元格' : '锁定单元格' }}</div>
+      <div class="ctx-item" @click="ctxToggleProtect"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg> {{ sheet.protected ? '取消保护' : '保护工作表' }}</div>
+      <div class="ctx-item" @click="ctxGroupRows"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg> 分组折叠</div>
     </div>
 
     <!-- 图表面板 -->
@@ -488,9 +489,9 @@
         </el-tab-pane>
         <el-tab-pane label="图标集">
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <el-button size="small" @click="applyIconSet('arrows')">🟢↑ 🟡→ 🔴↓ 箭头</el-button>
-            <el-button size="small" @click="applyIconSet('flags')">🚩 旗帜</el-button>
-            <el-button size="small" @click="applyIconSet('traffic')">🟢🟡🔴 红绿灯</el-button>
+            <el-button size="small" @click="applyIconSet('arrows')">▲ → ▼ 箭头</el-button>
+            <el-button size="small" @click="applyIconSet('flags')">⚑ 旗帜</el-button>
+            <el-button size="small" @click="applyIconSet('traffic')">●●● 红绿灯</el-button>
           </div>
           <div style="color:#999;font-size:12px;margin-top:8px">根据数值大小自动分配图标，应用到当前选区</div>
         </el-tab-pane>
@@ -828,6 +829,9 @@ function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); she
 // Ensure all cell values are strings (JSON may contain numbers)
 function stringifyRows(r: string[][]) { return r.map(row => row.map(cell => String(cell ?? ''))) }
 
+// Touch detection
+function isTouchDevice() { return 'ontouchstart' in window || navigator.maxTouchPoints > 0 }
+
 // Data Load
 function loadData() {
   if (!props.initialData) { sheets.value = [makeSheet('Sheet1')]; return }
@@ -1031,6 +1035,8 @@ function isFormulaRangeEditing(): boolean {
 
 function onCellMouseDown(r: number, c: number, e: MouseEvent) {
   if (e.button !== 0) return
+  // 触摸设备由 touchend 处理，跳过模拟的 mousedown
+  if (isTouchDevice()) return
   // 公式范围选择模式：拖选单元格直接填入范围引用
   if (formulaRangeMode) {
     // 记住公式要写入的目标单元格（当前活动单元格）
@@ -1048,11 +1054,25 @@ function onCellMouseDown(r: number, c: number, e: MouseEvent) {
   if (e.shiftKey && selection.value) {
     selection.value.endRow = r
     selection.value.endCol = c
+  } else if (selection.value && selection.value.startRow === r && selection.value.startCol === c && !editingCell.value && isTouchDevice()) {
+    // 触摸设备点击已选中单元格 → 进入编辑（弹出虚拟键盘）
+    startEdit(r, c)
+    return
   } else {
     selectCell(r, c, e)
   }
   isDragging = true
   document.addEventListener('mouseup', stopDrag, { once: true })
+}
+
+function onCellTouchEnd(r: number, c: number, _e: TouchEvent) {
+  if (editingCell.value?.row === r && editingCell.value?.col === c) return // already editing
+  if (selection.value && selection.value.startRow === r && selection.value.startCol === c) {
+    // tap on selected cell → start edit (triggers virtual keyboard)
+    startEdit(r, c)
+  } else {
+    selectCell(r, c)
+  }
 }
 
 function onCellMouseEnter(r: number, c: number, _e: MouseEvent) {
@@ -1114,10 +1134,11 @@ function updateToolbarState() {
 function moveNext() { if (!selection.value) return; const nc = selection.value.startCol + 1; if (nc >= colCount.value) selectCell(selection.value.startRow + 1, 0); else selectCell(selection.value.startRow, nc); updateFormula() }
 
 // Editing
-function startEdit(r: number, c: number) {
+function startEdit(r: number, c: number, initialChar?: string) {
   if (editingCell.value?.row === r && editingCell.value?.col === c) return
   if (sheet.value.protected && getCellMeta(r, c).locked) return
-  finishEdit(); editingCell.value = { row: r, col: c }; editingValue.value = rows.value[r]?.[c] || ''
+  finishEdit(); editingCell.value = { row: r, col: c }
+  editingValue.value = initialChar !== undefined ? initialChar : (rows.value[r]?.[c] || '')
   nextTick(() => { editInput.value?.[0]?.focus() })
 }
 function finishEdit() {
@@ -2059,7 +2080,7 @@ function onGlobalKeydown(e: KeyboardEvent) {
   else if (e.key === 'ArrowDown') { selectCell(Math.min(selection.value.startRow + 1, rows.value.length - 1), selection.value.startCol) }
   else if (e.key === 'ArrowLeft') { if (selection.value.startCol > 0) selectCell(selection.value.startRow, selection.value.startCol - 1) }
   else if (e.key === 'ArrowRight') { if (selection.value.startCol < colCount.value - 1) selectCell(selection.value.startRow, selection.value.startCol + 1) }
-  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.isComposing) { editingValue.value = e.key; startEdit(selection.value.startRow, selection.value.startCol) }
+  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.isComposing) { e.preventDefault(); startEdit(selection.value.startRow, selection.value.startCol, e.key) }
 }
 
 // ─── Text to Columns (分列) ───
@@ -2319,9 +2340,9 @@ function applyIconSet(type: 'arrows' | 'flags' | 'traffic') {
       const n = parseFloat(rows.value[r]?.[c] || ''); if (isNaN(n)) continue
       const pct = (n - minV) / range
       let icon = ''
-      if (type === 'arrows') icon = pct > 0.66 ? '🟢↑' : pct > 0.33 ? '🟡→' : '🔴↓'
-      else if (type === 'flags') icon = pct > 0.66 ? '🚩' : pct > 0.33 ? '🏁' : '🏳️'
-      else icon = pct > 0.66 ? '🟢' : pct > 0.33 ? '🟡' : '🔴'
+      if (type === 'arrows') icon = pct > 0.66 ? '▲' : pct > 0.33 ? '→' : '▼'
+      else if (type === 'flags') icon = pct > 0.66 ? '⚑' : pct > 0.33 ? '⚐' : '○'
+      else icon = pct > 0.66 ? '●' : pct > 0.33 ? '◐' : '○'
       setCellMeta(r, c, { comment: icon + ' ' + (rows.value[r][c] || '') })
     }
   emitChange()
@@ -2383,11 +2404,13 @@ function getData(): string {
 // Lifecycle
 let isLoadingData = true
 loadData()
+if (!selection.value) selection.value = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 }
 isLoadingData = false
 watch(() => props.initialData, (newVal) => {
   if (newVal && newVal !== '{}') {
     isLoadingData = true
     loadData()
+    if (!selection.value) selection.value = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 }
     isLoadingData = false
   }
 })

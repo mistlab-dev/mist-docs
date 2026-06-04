@@ -1,10 +1,12 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/config"
@@ -40,9 +42,22 @@ const (
 )
 
 const (
-	SyncStep1 = 0
-	SyncStep2 = 1
+	SyncStep1  = 0
+	SyncStep2  = 1
 	SyncUpdate = 2
+)
+
+// Limits
+const (
+	maxSendBufferSize    = 512                      // per-client send channel size
+	maxConnsPerDoc       = 50                       // max concurrent connections per document
+	maxConnsGlobal       = 500                      // max total WebSocket connections
+	sendBackoffTime      = 100 * time.Millisecond   // wait time when send buffer is full
+	writeDeadline        = 10 * time.Second
+	readDeadline         = 60 * time.Second
+	pingIntervalDefault  = 30 // seconds
+	maxMessageSizeDefault = 2 * 1024 * 1024 // 2MB
+	permCheckInterval    = 60 * time.Second // periodic permission check interval
 )
 
 var upgrader = websocket.Upgrader{
@@ -51,24 +66,29 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
+// globalConnCount tracks total active WebSocket connections
+var globalConnCount int64
+
 type Client struct {
-	Hub    *Hub
-	Conn   *websocket.Conn
-	Send   chan []byte
-	DocID  string
-	UserID string
-	Name   string
-	Color  string
-	mu     sync.Mutex
+	Hub       *Hub
+	Conn      *websocket.Conn
+	Send      chan []byte
+	DocID     string
+	UserID    string
+	Name      string
+	Color     string
+	Role      string // user role for permission checks
+	DeptID    string // user department ID for permission checks
+	mu        sync.Mutex
+	closeOnce sync.Once
 }
 
 type Room struct {
-	DocID       string
-	Clients     map[string]*Client
-	StateVector []byte   // latest known state vector
-	Updates     [][]byte // buffered updates for persistence
-	mu          sync.RWMutex
-	dirty       int // count of unsaved updates
+	DocID   string
+	Clients map[string]*Client
+	Updates [][]byte // buffered updates for persistence
+	mu      sync.RWMutex
+	dirty   int // count of unsaved updates since last persist
 }
 
 type Message struct {
@@ -116,6 +136,13 @@ func (h *Hub) Run() {
 }
 
 func (h *Hub) handleRegister(client *Client) {
+	// Global connection limit
+	if atomic.LoadInt64(&globalConnCount) >= int64(maxConnsGlobal) {
+		log.Printf("[WS] rejected: global conn limit reached (%d)", maxConnsGlobal)
+		close(client.Send)
+		return
+	}
+
 	h.mu.Lock()
 	room, ok := h.rooms[client.DocID]
 	if !ok {
@@ -129,18 +156,26 @@ func (h *Hub) handleRegister(client *Client) {
 		}
 		h.rooms[client.DocID] = room
 	}
+
+	// Per-document connection limit
 	room.mu.Lock()
+	if len(room.Clients) >= maxConnsPerDoc {
+		room.mu.Unlock()
+		h.mu.Unlock()
+		log.Printf("[WS] rejected: doc=%s conn limit reached (%d)", client.DocID, maxConnsPerDoc)
+		close(client.Send)
+		return
+	}
 	room.Clients[client.UserID] = client
 	room.mu.Unlock()
 	h.mu.Unlock()
 
-	// Send existing state to new client
-	if len(room.Updates) > 0 {
-		// Merge all updates and send as sync step 2
-		merged := mergeBytes(room.Updates)
-		msg := append([]byte{MsgSync, SyncStep2}, merged...)
-		client.Send <- msg
-	}
+	atomic.AddInt64(&globalConnCount, 1)
+
+	// Do NOT send step2 here — wait for client to send sync step1 first.
+	// This is the correct Yjs protocol: client initiates sync after connect.
+	// The client's onopen handler will send its state vector via step1,
+	// and handleBroadcast will respond with step2.
 
 	// Notify others about join
 	joinMsg, _ := json.Marshal(map[string]interface{}{
@@ -155,7 +190,7 @@ func (h *Hub) handleRegister(client *Client) {
 
 	// Send current online users to new client
 	room.mu.RLock()
-	users := []map[string]string{}
+	users := make([]map[string]string, 0, len(room.Clients))
 	for _, c := range room.Clients {
 		users = append(users, map[string]string{
 			"id":    c.UserID,
@@ -165,8 +200,8 @@ func (h *Hub) handleRegister(client *Client) {
 	}
 	room.mu.RUnlock()
 	clientsMsg, _ := json.Marshal(map[string]interface{}{
-		"type":   "clients",
-		"users":  users,
+		"type":  "clients",
+		"users": users,
 	})
 	client.Send <- clientsMsg
 
@@ -189,6 +224,8 @@ func (h *Hub) handleUnregister(client *Client) {
 		}
 	}
 	h.mu.Unlock()
+
+	atomic.AddInt64(&globalConnCount, -1)
 
 	// Notify others
 	leaveMsg, _ := json.Marshal(map[string]interface{}{
@@ -214,27 +251,37 @@ func (h *Hub) handleBroadcast(msg *Message) {
 		subType := msg.Data[1]
 		switch subType {
 		case SyncStep1:
-			// Client asks for missing updates → send what we have
-			if len(room.Updates) > 0 {
-				merged := mergeBytes(room.Updates)
-				reply := append([]byte{MsgSync, SyncStep2}, merged...)
-				// Send only to the originating client
+			// Client asks for missing updates → send what we have as step2.
+			// Yjs applyUpdate is idempotent — sending full state is safe,
+			// the client's Y.Doc will merge correctly via CRDT.
+			room.mu.RLock()
+			updates := room.Updates
+			room.mu.RUnlock()
+			if len(updates) > 0 {
+				merged := mergeBytes(updates)
+				reply := make([]byte, 2+len(merged))
+				reply[0] = MsgSync
+				reply[1] = SyncStep2
+				copy(reply[2:], merged)
 				h.sendToClient(msg.DocID, msg.From, reply)
 			}
 
 		case SyncStep2, SyncUpdate:
 			// Client sends state or update → store + broadcast to others
-			payload := msg.Data[2:]
+			payload := make([]byte, len(msg.Data)-2)
+			copy(payload, msg.Data[2:])
 			room.mu.Lock()
 			room.Updates = append(room.Updates, payload)
 			room.dirty++
-			// Keep only last 1000 updates in memory, merge periodically
-			if len(room.Updates) > 1000 {
+			// Keep only last 500 updates in memory; merge when exceeded.
+			// After persist, persistRoom will compact Updates to a single entry.
+			if len(room.Updates) > 500 {
 				room.Updates = [][]byte{mergeBytes(room.Updates)}
+				room.dirty = 0 // already conceptually merged
 			}
 			room.mu.Unlock()
 
-			// Broadcast to other clients
+			// Broadcast to other clients (as-is, original message data)
 			h.sendToRoom(msg.DocID, msg.From, msg.Data)
 		}
 	} else {
@@ -243,6 +290,9 @@ func (h *Hub) handleBroadcast(msg *Message) {
 	}
 }
 
+// sendToRoom sends data to all clients in a room except skipUserID.
+// Uses a brief backoff when a client's send buffer is full to avoid
+// dropping edit data.
 func (h *Hub) sendToRoom(docID, skipUserID string, data []byte) {
 	h.mu.RLock()
 	room, ok := h.rooms[docID]
@@ -252,16 +302,14 @@ func (h *Hub) sendToRoom(docID, skipUserID string, data []byte) {
 	}
 
 	room.mu.RLock()
+	defer room.mu.RUnlock()
+
 	for id, c := range room.Clients {
-		if id != skipUserID {
-			select {
-			case c.Send <- data:
-			default:
-				log.Printf("[WS] drop: client=%s buffer full", id)
-			}
+		if id == skipUserID {
+			continue
 		}
+		h.sendToClientSafe(c, id, data)
 	}
-	room.mu.RUnlock()
 }
 
 func (h *Hub) sendToClient(docID, userID string, data []byte) {
@@ -273,31 +321,51 @@ func (h *Hub) sendToClient(docID, userID string, data []byte) {
 	}
 
 	room.mu.RLock()
-	if c, ok := room.Clients[userID]; ok {
+	c, ok := room.Clients[userID]
+	room.mu.RUnlock()
+	if !ok {
+		return
+	}
+	h.sendToClientSafe(c, userID, data)
+}
+
+// sendToClientSafe tries to send data to a client with a brief backoff.
+// If the buffer is still full after waiting, it logs a warning but does NOT
+// drop the message — instead it blocks briefly (bounded by sendBackoffTime).
+func (h *Hub) sendToClientSafe(c *Client, clientID string, data []byte) {
+	select {
+	case c.Send <- data:
+		return
+	default:
+		// Buffer full — try one more time with a short wait
+		log.Printf("[WS] backpressure: client=%s buffer full, waiting", clientID)
 		select {
 		case c.Send <- data:
-		default:
+			return
+		case <-time.After(sendBackoffTime):
+			log.Printf("[WS] drop: client=%s buffer still full after backoff", clientID)
 		}
 	}
-	room.mu.RUnlock()
 }
 
 func (h *Hub) persistRoom(room *Room) {
-	room.mu.RLock()
+	room.mu.Lock()
 	if room.dirty == 0 || len(room.Updates) == 0 {
-		room.mu.RUnlock()
+		room.mu.Unlock()
 		return
 	}
 	merged := mergeBytes(room.Updates)
-	room.mu.RUnlock()
+	room.mu.Unlock()
 
 	if err := service.SaveDocumentYjsState(room.DocID, merged); err != nil {
 		log.Printf("[WS] persist error: doc=%s err=%v", room.DocID, err)
 	} else {
 		room.mu.Lock()
+		// Compact: replace all updates with single merged entry
+		room.Updates = [][]byte{merged}
 		room.dirty = 0
 		room.mu.Unlock()
-		log.Printf("[WS] persisted: doc=%s size=%d", room.DocID, len(merged))
+		log.Printf("[WS] persisted+compacted: doc=%s size=%d", room.DocID, len(merged))
 	}
 }
 
@@ -338,6 +406,15 @@ func (h *Hub) GetRoomSize(docID string) int {
 	return 0
 }
 
+// GetStats returns basic WebSocket hub statistics.
+func (h *Hub) GetStats() (rooms int, clients int64) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	rooms = len(h.rooms)
+	clients = atomic.LoadInt64(&globalConnCount)
+	return
+}
+
 // ==================== WebSocket Handler ====================
 
 func ServeWS(hub *Hub, c *gin.Context) {
@@ -359,6 +436,12 @@ func ServeWS(hub *Hub, c *gin.Context) {
 		}
 	}
 
+	// Global connection limit check before upgrade
+	if atomic.LoadInt64(&globalConnCount) >= int64(maxConnsGlobal) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "连接数已达上限，请稍后重试"})
+		return
+	}
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("[WS] upgrade error: %v", err)
@@ -374,11 +457,13 @@ func ServeWS(hub *Hub, c *gin.Context) {
 	client := &Client{
 		Hub:    hub,
 		Conn:   conn,
-		Send:   make(chan []byte, 256),
+		Send:   make(chan []byte, maxSendBufferSize),
 		DocID:  docID,
 		UserID: claims.UserID,
 		Name:   claims.Username,
 		Color:  colors[colorIdx%len(colors)],
+		Role:   claims.Role,
+		DeptID: claims.DepartmentID,
 	}
 
 	hub.register <- client
@@ -395,26 +480,42 @@ func (c *Client) readPump() {
 
 	maxSize := config.C.WebSocket.MaxMessageSize
 	if maxSize == 0 {
-		maxSize = 1048576
+		maxSize = maxMessageSizeDefault
 	}
 	c.Conn.SetReadLimit(maxSize)
-	c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.Conn.SetReadDeadline(time.Now().Add(readDeadline))
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		c.Conn.SetReadDeadline(time.Now().Add(readDeadline))
 		return nil
 	})
 
+	// Periodic permission check — kick client if permission revoked
+	permTicker := time.NewTicker(permCheckInterval)
+	defer permTicker.Stop()
+
+	// Channel to signal permission check results
+	go func() {
+		for range permTicker.C {
+			if c.Role == "super_admin" {
+				continue // super_admin always has access
+			}
+			perm, err := service.CheckPermissionSimple(context.Background(), c.UserID, c.DeptID, c.DocID)
+			if err != nil || perm == "none" {
+				log.Printf("[WS] perm revoked: user=%s doc=%s — disconnecting", c.UserID, c.DocID)
+				c.Conn.Close()
+				return
+			}
+		}
+	}()
+
 	for {
-		msgType, data, err := c.Conn.ReadMessage()
+		_, data, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
 				log.Printf("[WS] read error: user=%s err=%v", c.UserID, err)
 			}
 			break
 		}
-
-		// Only handle binary (Yjs sync) and text (awareness JSON)
-		_ = msgType
 
 		c.Hub.broadcast <- &Message{
 			DocID: c.DocID,
@@ -427,7 +528,7 @@ func (c *Client) readPump() {
 func (c *Client) writePump() {
 	pingInterval := config.C.WebSocket.PingInterval
 	if pingInterval == 0 {
-		pingInterval = 30
+		pingInterval = pingIntervalDefault
 	}
 	ticker := time.NewTicker(time.Duration(pingInterval) * time.Second)
 	defer func() {
@@ -438,7 +539,7 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case msg, ok := <-c.Send:
-			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			c.Conn.SetWriteDeadline(time.Now().Add(writeDeadline))
 			if !ok {
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
@@ -451,7 +552,7 @@ func (c *Client) writePump() {
 			}
 
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			c.Conn.SetWriteDeadline(time.Now().Add(writeDeadline))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

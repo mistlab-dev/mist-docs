@@ -39,7 +39,7 @@
           <template #default="{ row }">
             <div class="target-cell">
               <el-tag size="small" :type="row.target_type === 'user' ? '' : 'warning'" effect="light" round>
-                {{ row.target_type === 'user' ? '👤 用户' : '📁 部门' }}
+                {{ row.target_type === 'user' ? '用户' : '部门' }}
               </el-tag>
               <code class="mono-id sm">{{ row.target_id?.slice(0, 8) }}...</code>
             </div>

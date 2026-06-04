@@ -51,6 +51,7 @@ type DocFolder struct {
 
 	// 非数据库字段
 	Children []*DocFolder `json:"children,omitempty"`
+	DocCount  int          `json:"doc_count,omitempty"`
 }
 
 // ==================== 文档 ====================

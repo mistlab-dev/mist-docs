@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
@@ -192,6 +193,7 @@ func SearchDocuments(c *gin.Context) {
 		return
 	}
 	deptID := c.Query("department_id")
+	tagID := c.Query("tag_id")
 	role := c.GetString("role")
 	if role == "dept_admin" {
 		deptID = c.GetString("department_id")
@@ -199,13 +201,30 @@ func SearchDocuments(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	docs, total, err := service.SearchDocuments(c.Request.Context(), keyword, deptID, page, pageSize)
+	docs, total, err := service.SearchDocumentsWithTags(c.Request.Context(), keyword, deptID, tagID, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if docs == nil { docs = []*model.Document{} }
-	c.JSON(http.StatusOK, gin.H{"data": docs, "total": total, "page": page, "page_size": pageSize})
+
+	// Add content snippets for search results
+	type docWithSnippet struct {
+		*model.Document
+		Snippet string `json:"snippet,omitempty"`
+	}
+	result := make([]docWithSnippet, len(docs))
+	for i, d := range docs {
+		result[i] = docWithSnippet{d, ""}
+		// Try to get content snippet
+		content, _, err := service.GetDocumentContent(c.Request.Context(), d.ID)
+		if err == nil && len(content) > 0 {
+			plain := service.StripHTMLTags(string(content))
+			result[i].Snippet = extractSnippet(plain, keyword, 120)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result, "total": total, "page": page, "page_size": pageSize})
 }
 
 func RecentDocuments(c *gin.Context) {
@@ -614,6 +633,90 @@ func CheckPermission(c *gin.Context) {
 
 // ==================== 审计 ====================
 
+// ==================== Google Docs 风格协作者管理 ====================
+
+// ListCollaborators GET /docs/documents/:id/collaborators
+func ListCollaborators(c *gin.Context) {
+	resourceID := c.Param("id")
+	collabs, err := service.ListCollaborators(c.Request.Context(), "document", resourceID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": collabs})
+}
+
+// AddCollaborator POST /docs/documents/:id/collaborators
+func AddCollaborator(c *gin.Context) {
+	resourceID := c.Param("id")
+	var req struct {
+		TargetType string `json:"target_type" binding:"required"` // user / department
+		TargetID   string `json:"target_id" binding:"required"`
+		Role       string `json:"role" binding:"required"` // viewer / commenter / editor / admin
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	if err := service.AddCollaborator(c.Request.Context(), "document", resourceID, req.TargetType, req.TargetID, req.Role, userID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	targetName := req.TargetID
+	roleMap := map[string]string{"viewer": "查看者", "commenter": "评论者", "editor": "编辑者", "admin": "管理员"}
+	audit(c, "add_collaborator", "document", resourceID, "", fmt.Sprintf("添加 %s 为 %s", targetName, roleMap[req.Role]))
+
+	c.JSON(http.StatusOK, gin.H{"message": "已添加"})
+}
+
+// UpdateCollaborator PUT /docs/collaborators/:id
+func UpdateCollaborator(c *gin.Context) {
+	permID := c.Param("id")
+	var req struct {
+		Role string `json:"role" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if err := service.UpdateCollaborator(c.Request.Context(), permID, req.Role); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已更新"})
+}
+
+// RemoveCollaborator DELETE /docs/collaborators/:id
+func RemoveCollaborator(c *gin.Context) {
+	permID := c.Param("id")
+	if err := service.RemoveCollaborator(c.Request.Context(), permID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已移除"})
+}
+
+// SearchTargets GET /docs/search-targets?q=xxx
+func SearchTargets(c *gin.Context) {
+	q := c.Query("q")
+	if q == "" {
+		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
+		return
+	}
+	targets, err := service.SearchTargets(c.Request.Context(), q, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": targets})
+}
+
+// ==================== 审计 ====================
+
 func ListAudits(c *gin.Context) {
 	role := c.GetString("role")
 	if role != "super_admin" && role != "dept_admin" {
@@ -678,4 +781,39 @@ func atoi(s string, def int) int {
 		return def
 	}
 	return n
+}
+
+// extractSnippet returns a context window around the keyword in text.
+func extractSnippet(text, keyword string, maxLen int) string {
+	lower := strings.ToLower(text)
+	kw := strings.ToLower(keyword)
+	idx := strings.Index(lower, kw)
+	if idx < 0 {
+		// Keyword not in content, return beginning
+		if len(text) > maxLen {
+			return text[:maxLen] + "..."
+		}
+		return text
+	}
+
+	// Center the snippet around the keyword
+	half := maxLen / 2
+	start := idx - half
+	if start < 0 {
+		start = 0
+	}
+	end := start + maxLen
+	if end > len(text) {
+		end = len(text)
+	}
+
+	snippet := ""
+	if start > 0 {
+		snippet += "..."
+	}
+	snippet += text[start:end]
+	if end < len(text) {
+		snippet += "..."
+	}
+	return snippet
 }

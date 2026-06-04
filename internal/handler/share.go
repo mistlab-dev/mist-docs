@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c-wind/mist-docs/internal/store"
-
 	"github.com/c-wind/mist-docs/internal/database"
+	"github.com/c-wind/mist-docs/internal/service"
+	"github.com/c-wind/mist-docs/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -20,6 +20,17 @@ func CreateShare(c *gin.Context) {
 	docID := c.Param("id")
 	userID, _ := c.Get("user_id")
 	userName, _ := c.Get("username")
+	role, _ := c.Get("role")
+	deptID, _ := c.Get("department_id")
+
+	// Permission check: need at least 'read' to share
+	if role != "super_admin" {
+		perm, err := service.CheckPermission(c.Request.Context(), userID.(string), deptID.(string), "document", docID)
+		if err != nil || perm == "none" {
+			c.JSON(403, gin.H{"error": "无权限分享此文档"})
+			return
+		}
+	}
 
 	var req struct {
 		Password  string `json:"password"`

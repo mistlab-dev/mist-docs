@@ -29,6 +29,15 @@ func Init(cfg config.DatabaseConfig) error {
 	if err = DB.Ping(); err != nil {
 		return fmt.Errorf("ping db: %w", err)
 	}
+
+	// Auto-migrate: ensure content_text column exists for full-text search
+	var colExists int
+	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_documents' AND COLUMN_NAME='content_text'`).Scan(&colExists)
+	if colExists == 0 {
+		DB.Exec(`ALTER TABLE md_documents ADD COLUMN content_text LONGTEXT DEFAULT NULL`)
+		DB.Exec(`ALTER TABLE md_documents ADD FULLTEXT INDEX ft_content_text (content_text)`)
+	}
+
 	return nil
 }
 

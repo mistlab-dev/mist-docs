@@ -3,6 +3,10 @@
 </template>
 
 <style>
+/* iOS Safari 100vh fix */
+:root {
+  --vh: 1vh;
+}
 body {
   font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }

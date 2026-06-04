@@ -218,6 +218,13 @@ func main() {
 			auth.GET("/docs/documents/:id/shares", handler.ListShares)
 			auth.DELETE("/docs/shares/:id", handler.DeleteShare)
 
+			// Google Docs 风格协作者管理
+			auth.GET("/docs/documents/:id/collaborators", handler.ListCollaborators)
+			auth.POST("/docs/documents/:id/collaborators", handler.AddCollaborator)
+			auth.PUT("/docs/collaborators/:id", handler.UpdateCollaborator)
+			auth.DELETE("/docs/collaborators/:id", handler.RemoveCollaborator)
+			auth.GET("/docs/search-targets", handler.SearchTargets)
+
 			// 文档导出
 			auth.GET("/docs/documents/:id/export", handler.ExportDocument)
 

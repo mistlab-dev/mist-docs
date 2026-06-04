@@ -148,25 +148,56 @@ func EnsureDEK(ctx context.Context) error {
 
 // GetActiveDEK returns the current active DEK (decrypted)
 func GetActiveDEK(ctx context.Context) ([]byte, error) {
+	return getDEKByStatus(ctx, "active")
+}
+
+// GetAllDEKs returns all DEKs (decrypted), active first
+func GetAllDEKs(ctx context.Context) ([][]byte, error) {
+	rows, err := database.DB.QueryContext(ctx,
+		`SELECT encrypted FROM md_keys WHERE type='dek' ORDER BY status='active' DESC, created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var deks [][]byte
+	for rows.Next() {
+		var encrypted string
+		if err := rows.Scan(&encrypted); err != nil {
+			continue
+		}
+		cipherData, err := base64.StdEncoding.DecodeString(encrypted)
+		if err != nil {
+			continue
+		}
+		dek, err := Decrypt(cipherData, masterKey)
+		if err != nil {
+			continue
+		}
+		deks = append(deks, dek)
+	}
+	if len(deks) == 0 {
+		return nil, fmt.Errorf("no usable DEKs")
+	}
+	return deks, nil
+}
+
+func getDEKByStatus(ctx context.Context, status string) ([]byte, error) {
 	var encrypted string
 	err := database.DB.QueryRowContext(ctx,
-		`SELECT encrypted FROM md_keys WHERE type='dek' AND status='active' ORDER BY created_at DESC LIMIT 1`).Scan(&encrypted)
+		`SELECT encrypted FROM md_keys WHERE type='dek' AND status=? ORDER BY created_at DESC LIMIT 1`, status).Scan(&encrypted)
 	if err != nil {
-		return nil, fmt.Errorf("no active DEK: %w", err)
+		return nil, fmt.Errorf("no %s DEK: %w", status, err)
 	}
 
-	// encrypted is base64(nonce+ciphertext), decode it first
 	cipherData, err := base64.StdEncoding.DecodeString(encrypted)
 	if err != nil {
 		return nil, fmt.Errorf("decode encrypted DEK: %w", err)
 	}
 
-	// Decrypt with master key
 	dek, err := Decrypt(cipherData, masterKey)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt DEK: %w", err)
 	}
-
 	return dek, nil
 }
 
@@ -230,21 +261,26 @@ func DecryptDocument(ciphertext []byte) ([]byte, error) {
 		return ciphertext, nil // no encryption
 	}
 
-	dek, err := GetActiveDEK(context.Background())
+	ctx := context.Background()
+
+	// Try all DEKs (active first), not just current
+	deks, err := GetAllDEKs(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get DEK: %w", err)
+		return nil, fmt.Errorf("get DEKs: %w", err)
 	}
 
-	plaintext, err := Decrypt(ciphertext, dek)
-	if err != nil {
-		// Fallback: data may have been saved without encryption
-		// Check if it looks like valid UTF-8 plaintext
-		if utf8.Valid(ciphertext) {
-			return ciphertext, nil
+	for _, dek := range deks {
+		plaintext, err := Decrypt(ciphertext, dek)
+		if err == nil {
+			return plaintext, nil
 		}
-		return nil, fmt.Errorf("decrypt: %w", err)
 	}
-	return plaintext, nil
+
+	// Fallback: data may have been saved without encryption
+	if utf8.Valid(ciphertext) {
+		return ciphertext, nil
+	}
+	return nil, fmt.Errorf("decrypt: no matching DEK found")
 }
 
 // KeyInfo returns info about current keys
