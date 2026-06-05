@@ -14,6 +14,11 @@
             <svg class="tag-icon" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="8" r="3"/><circle cx="12" cy="8" r="3" opacity="0.5"/></svg>
             {{ collabUsers.length + 1 }} 人在线
           </el-tag>
+          <div v-if="collabUsers.length" class="collab-avatars">
+            <el-tooltip v-for="u in collabUsers" :key="u.id" :content="u.name" placement="bottom">
+              <span class="collab-avatar" :style="{ background: u.color }">{{ u.name?.charAt(0) || '?' }}</span>
+            </el-tooltip>
+          </div>
         </div>
       </div>
       <div class="header-right">
@@ -259,40 +264,90 @@
     </el-dialog>
 
     <!-- 统计弹窗 -->
-    <el-dialog v-model="showStats" title="文档统计" width="500px">
-      <div v-if="stats" class="stats-grid">
-        <div class="stat-item">
-          <div class="stat-value">{{ stats.word_count }}</div>
-          <div class="stat-label">字数</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ stats.char_count }}</div>
-          <div class="stat-label">字符数</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ stats.edit_count }}</div>
-          <div class="stat-label">编辑次数</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ stats.contributors }}</div>
-          <div class="stat-label">贡献者</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ stats.comment_count }}</div>
-          <div class="stat-label">评论数</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ stats.edit_count + 1 }}</div>
-          <div class="stat-label">版本数</div>
-        </div>
-      </div>
-      <div v-if="stats?.daily_edits?.length" style="margin-top:16px">
-        <p style="color:#999;font-size:13px;margin-bottom:8px">编辑活动（近30天）</p>
-        <div class="activity-chart">
-          <div v-for="(d, i) in stats.daily_edits" :key="i" class="activity-bar"
-               :style="{ height: Math.min(d.count * 20, 60) + 'px' }"
-               :title="d.date + ': ' + d.count + ' 次'">
+    <el-dialog v-model="showStats" title="文档统计" width="580px" :fullscreen="windowWidth < 768">
+      <div v-if="stats" class="stats-section">
+        <!-- 核心指标 -->
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-value">{{ stats.word_count?.toLocaleString() }}</div>
+            <div class="stat-label">字数</div>
           </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ stats.char_count?.toLocaleString() }}</div>
+            <div class="stat-label">字符数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ stats.reading_time }} 分钟</div>
+            <div class="stat-label">预计阅读</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ stats.edit_count }}</div>
+            <div class="stat-label">编辑次数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ stats.contributors }}</div>
+            <div class="stat-label">贡献者</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ stats.comment_count }}</div>
+            <div class="stat-label">评论数</div>
+          </div>
+        </div>
+
+        <!-- 文档结构 -->
+        <div class="stats-subsection">
+          <div class="stats-subtitle">文档结构</div>
+          <div class="stats-structure">
+            <span v-if="stats.headings" title="标题">📑 {{ stats.headings }} 标题</span>
+            <span v-if="stats.paragraphs" title="段落">¶ {{ stats.paragraphs }} 段落</span>
+            <span v-if="stats.images" title="图片">🖼 {{ stats.images }} 图片</span>
+            <span v-if="stats.links" title="链接">🔗 {{ stats.links }} 链接</span>
+            <span v-if="stats.tables" title="表格">📊 {{ stats.tables }} 表格</span>
+            <span v-if="stats.code_blocks" title="代码块">💻 {{ stats.code_blocks }} 代码块</span>
+          </div>
+        </div>
+
+        <!-- 贡献者列表 -->
+        <div v-if="stats.contributor_list?.length" class="stats-subsection">
+          <div class="stats-subtitle">贡献者</div>
+          <div class="stats-contributors">
+            <el-tag v-for="u in stats.contributor_list" :key="u.id" size="small" type="info" style="margin:2px 4px">{{ u.name }}</el-tag>
+          </div>
+        </div>
+
+        <!-- 时间信息 -->
+        <div v-if="stats.first_edit || stats.file_size" class="stats-subsection">
+          <div class="stats-subtitle">时间信息</div>
+          <div class="stats-meta">
+            <span v-if="stats.first_edit">📅 创建于 {{ stats.first_edit }}</span>
+            <span v-if="stats.last_edit">✏️ 最后编辑 {{ stats.last_edit }}</span>
+            <span v-if="stats.file_size">💾 {{ formatFileSize(stats.file_size) }}</span>
+          </div>
+        </div>
+
+        <!-- 编辑活动图 -->
+        <div v-if="stats.daily_edits?.length" class="stats-subsection">
+          <div class="stats-subtitle">编辑活动（近30天）</div>
+          <div class="activity-chart">
+            <div v-for="(d, i) in stats.daily_edits" :key="i" class="activity-bar"
+                 :style="{ height: Math.min(d.count * 20, 60) + 'px' }"
+                 :title="d.date + ': ' + d.count + ' 次'">
+            </div>
+          </div>
+        </div>
+
+        <!-- 活跃时段 -->
+        <div v-if="stats.hourly_edits" class="stats-subsection">
+          <div class="stats-subtitle">活跃时段</div>
+          <div class="hourly-chart">
+            <div v-for="(count, h) in stats.hourly_edits" :key="h" class="hourly-cell"
+                 :class="{ active: count > 0 }"
+                 :style="{ opacity: count > 0 ? Math.min(count / Math.max(...stats.hourly_edits.filter((v: number) => v > 0) || [1]), 1) * 0.8 + 0.2 : 0.1 }"
+                 :title="h + ':00 — ' + count + ' 次编辑'">
+              {{ h }}
+            </div>
+          </div>
+          <div class="hourly-labels"><span>0时</span><span>6时</span><span>12时</span><span>18时</span><span>23时</span></div>
         </div>
       </div>
     </el-dialog>
@@ -771,6 +826,7 @@ const currentUser = ref('')
 // 协同编辑
 const collabStatus = ref<'connecting' | 'connected' | 'disconnected'>('disconnected')
 const collabUsers = ref<CollabUser[]>([])
+const remoteCursors = ref<any[]>([])
 let ydoc: Y.Doc | null = null
 let wsProvider: MistWSProvider | null = null
 
@@ -1113,7 +1169,21 @@ function initEditor(initialContent: string) {
       wsProvider = new MistWSProvider(wsUrl, ydoc)
       wsProvider.onStatus = (status) => { collabStatus.value = status }
       wsProvider.onUserJoin = (user) => { collabUsers.value = [...collabUsers.value, user] }
-      wsProvider.onUserLeave = (userId) => { collabUsers.value = collabUsers.value.filter(u => u.id !== userId) }
+      wsProvider.onUserLeave = (userId) => {
+        collabUsers.value = collabUsers.value.filter(u => u.id !== userId)
+        remoteCursors.value = remoteCursors.value.filter(c => c.userId !== userId)
+      }
+      wsProvider.onAwareness = (data: any) => {
+        // Handle incoming cursor/selection awareness from other users
+        if (data?.userId && data.userId !== currentUserId.value) {
+          const existing = remoteCursors.value.find(c => c.userId === data.userId)
+          if (existing) {
+            Object.assign(existing, data)
+          } else {
+            remoteCursors.value.push(data)
+          }
+        }
+      }
       wsProvider.onClients = (users) => { collabUsers.value = users.filter((u: CollabUser) => u.id !== currentUserId.value) }
       wsProvider.bind()
 
@@ -1181,6 +1251,18 @@ function initEditor(initialContent: string) {
         onUpdate: () => {
           scheduleAutoSave()
           updateOutline()
+        },
+        onSelectionUpdate: ({ editor: ed }) => {
+          // Broadcast cursor position via awareness
+          if (!wsProvider || !ed) return
+          const { from, to } = ed.state.selection
+          wsProvider.sendAwareness({
+            userId: currentUserId.value,
+            userName: auth.user?.name || '匿名',
+            color: userColors[userColorIdx],
+            cursor: { from, to },
+            timestamp: Date.now(),
+          })
         },
       })
 
@@ -1854,8 +1936,33 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .media-name { font-size: 12px; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .media-size { font-size: 11px; color: #909399; margin-top: 2px; }
 
+/* 协作头像 */
+.collab-avatars { display: inline-flex; margin-left: 6px; }
+.collab-avatar { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 600; margin-left: -4px; border: 2px solid #fff; cursor: default; }
+
+/* 协作光标 */
+.collab-cursor-flag { position: absolute; pointer-events: none; z-index: 100; }
+.collab-cursor-flag .flag-name { font-size: 11px; padding: 1px 6px; border-radius: 3px 3px 3px 0; color: #fff; white-space: nowrap; }
+.collab-cursor-flag .flag-line { width: 2px; height: 20px; }
+
 /* 统计 */
+.stats-section { display: flex; flex-direction: column; gap: 16px; }
+.stats-subsection { border-top: 1px solid #f0f0f0; padding-top: 12px; }
+.stats-subtitle { font-size: 13px; color: #909399; margin-bottom: 8px; font-weight: 500; }
+.stats-structure { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: #606266; }
+.stats-structure span { background: #f5f7fa; padding: 4px 10px; border-radius: 12px; }
+.stats-contributors { display: flex; flex-wrap: wrap; gap: 4px; }
+.stats-meta { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: #606266; }
 .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center; }
+.stat-item { padding: 12px 0; border-radius: 8px; background: #f8fafc; }
+.stat-value { font-size: 22px; font-weight: 700; color: #303133; }
+.stat-label { font-size: 12px; color: #909399; margin-top: 4px; }
+.activity-chart { display: flex; align-items: flex-end; gap: 2px; height: 60px; }
+.activity-bar { flex: 1; min-width: 4px; background: #409eff; border-radius: 2px 2px 0 0; transition: height 0.2s; }
+.hourly-chart { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; }
+.hourly-cell { text-align: center; padding: 4px 0; font-size: 10px; border-radius: 3px; background: #e6f0ff; color: #909399; cursor: default; }
+.hourly-cell.active { background: #409eff; color: #fff; }
+.hourly-labels { display: flex; justify-content: space-between; font-size: 10px; color: #c0c4cc; margin-top: 2px; }
 .stat-item { background: #f5f7fa; border-radius: 8px; padding: 16px; }
 .stat-value { font-size: 24px; font-weight: 700; color: #303133; }
 .stat-label { font-size: 13px; color: #909399; margin-top: 4px; }

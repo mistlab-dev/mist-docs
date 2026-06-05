@@ -34,6 +34,7 @@ export class MistWSProvider {
   public onUserJoin: ((user: CollabUser) => void) | null = null
   public onUserLeave: ((userId: string) => void) | null = null
   public onClients: ((users: CollabUser[]) => void) | null = null
+  public onAwareness: ((data: any) => void) | null = null
 
   constructor(url: string, doc: Y.Doc) {
     this.url = url
@@ -93,6 +94,7 @@ export class MistWSProvider {
           if (msg.type === 'join') this.onUserJoin?.(msg.user)
           else if (msg.type === 'leave') this.onUserLeave?.(msg.user.id)
           else if (msg.type === 'clients') this.onClients?.(msg.users)
+          else if (msg.type === 'awareness') this.onAwareness?.(msg.data)
         } catch {}
       }
     }

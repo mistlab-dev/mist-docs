@@ -13,7 +13,6 @@ import (
 // DocStats GET /docs/documents/:id/stats
 func DocStats(c *gin.Context) {
 	docID := c.Param("id")
-
 	stats := gin.H{}
 
 	// 1. Version count (edit count)
@@ -26,7 +25,6 @@ func DocStats(c *gin.Context) {
 	content, _, err := service.GetDocumentContent(c.Request.Context(), docID)
 	if err == nil && len(content) > 0 {
 		plain := stripHTMLTagsFast(string(content))
-		// Count words: CJK characters + space-separated words
 		cjkCount := 0
 		asciiWords := 0
 		inWord := false
@@ -44,40 +42,74 @@ func DocStats(c *gin.Context) {
 		}
 		stats["word_count"] = cjkCount + asciiWords
 		stats["char_count"] = len([]rune(plain))
+
+		// Reading time (~300 words/min CJK)
+		totalWords := cjkCount + asciiWords
+		readingMinutes := totalWords / 300
+		if readingMinutes < 1 {
+			readingMinutes = 1
+		}
+		stats["reading_time"] = readingMinutes
+
+		// Structure stats
+		htmlStr := string(content)
+		stats["paragraphs"] = strings.Count(htmlStr, "<p>") + strings.Count(htmlStr, "<p ")
+		stats["headings"] = strings.Count(htmlStr, "<h1") + strings.Count(htmlStr, "<h2") + strings.Count(htmlStr, "<h3") + strings.Count(htmlStr, "<h4")
+		stats["images"] = strings.Count(htmlStr, "<img")
+		stats["links"] = strings.Count(htmlStr, "<a ") + strings.Count(htmlStr, "<a>")
+		stats["tables"] = strings.Count(htmlStr, "<table")
+		stats["code_blocks"] = strings.Count(htmlStr, "<pre")
 	} else {
 		stats["word_count"] = 0
 		stats["char_count"] = 0
+		stats["reading_time"] = 1
+		stats["paragraphs"] = 0
+		stats["headings"] = 0
+		stats["images"] = 0
+		stats["links"] = 0
+		stats["tables"] = 0
+		stats["code_blocks"] = 0
 	}
 
-	// 3. Contributor count
-	var contributors int
-	database.DB.QueryRowContext(c.Request.Context(),
-		"SELECT COUNT(DISTINCT created_by) FROM md_versions WHERE document_id = ?", docID).Scan(&contributors)
-	stats["contributors"] = contributors
-
-	// 4. Edit activity by hour (last 30 days)
+	// 3. Contributor list (with names)
 	rows, err := database.DB.QueryContext(c.Request.Context(),
+		`SELECT DISTINCT v.created_by, IFNULL(u.name, '未知用户')
+		FROM md_versions v LEFT JOIN md_users u ON v.created_by = u.id
+		WHERE v.document_id = ?`, docID)
+	if err == nil {
+		var contributors []gin.H
+		for rows.Next() {
+			var uid, name string
+			rows.Scan(&uid, &name)
+			contributors = append(contributors, gin.H{"id": uid, "name": name})
+		}
+		rows.Close()
+		stats["contributor_list"] = contributors
+		stats["contributors"] = len(contributors)
+	}
+
+	// 4. Hourly edit activity (last 30 days)
+	rows, err = database.DB.QueryContext(c.Request.Context(),
 		`SELECT HOUR(created_at) AS h, COUNT(*) AS c FROM md_versions
 		 WHERE document_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
 		 GROUP BY h ORDER BY h`, docID)
 	if err == nil {
-		defer rows.Close()
 		hourly := make([]int, 24)
 		for rows.Next() {
 			var h, cnt int
 			rows.Scan(&h, &cnt)
 			hourly[h] = cnt
 		}
+		rows.Close()
 		stats["hourly_edits"] = hourly
 	}
 
-	// 5. Edit activity by day (last 30 days)
+	// 5. Daily edit activity (last 30 days)
 	rows2, err := database.DB.QueryContext(c.Request.Context(),
 		`SELECT DATE(created_at) AS d, COUNT(*) AS c FROM md_versions
 		 WHERE document_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
 		 GROUP BY d ORDER BY d`, docID)
 	if err == nil {
-		defer rows2.Close()
 		type dayEntry struct {
 			Date  string `json:"date"`
 			Count int    `json:"count"`
@@ -89,6 +121,7 @@ func DocStats(c *gin.Context) {
 			rows2.Scan(&d, &cnt)
 			daily = append(daily, dayEntry{Date: d.Format("2006-01-02"), Count: cnt})
 		}
+		rows2.Close()
 		stats["daily_edits"] = daily
 	}
 
@@ -98,7 +131,7 @@ func DocStats(c *gin.Context) {
 		"SELECT COUNT(*) FROM md_comments WHERE document_id = ?", docID).Scan(&commentCount)
 	stats["comment_count"] = commentCount
 
-	// 7. First and last edit
+	// 7. First and last edit time
 	var firstEdit, lastEdit string
 	database.DB.QueryRowContext(c.Request.Context(),
 		"SELECT created_at FROM md_versions WHERE document_id = ? ORDER BY version ASC LIMIT 1", docID).Scan(&firstEdit)
@@ -106,6 +139,12 @@ func DocStats(c *gin.Context) {
 		"SELECT created_at FROM md_versions WHERE document_id = ? ORDER BY version DESC LIMIT 1", docID).Scan(&lastEdit)
 	stats["first_edit"] = firstEdit
 	stats["last_edit"] = lastEdit
+
+	// 8. Document file size
+	var fileSize int64
+	database.DB.QueryRowContext(c.Request.Context(),
+		"SELECT file_size FROM md_documents WHERE id = ?", docID).Scan(&fileSize)
+	stats["file_size"] = fileSize
 
 	c.JSON(http.StatusOK, gin.H{"data": stats})
 }
