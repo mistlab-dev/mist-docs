@@ -57,6 +57,23 @@ func Init(cfg config.DatabaseConfig) error {
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
 	}
 
+	// Auto-migrate: md_team_folders table (team-scoped folder tree)
+	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_team_folders'`).Scan(&tblExists)
+	if tblExists == 0 {
+		DB.Exec(`CREATE TABLE md_team_folders (
+			id VARCHAR(36) PRIMARY KEY,
+			team_id VARCHAR(64) NOT NULL,
+			parent_id VARCHAR(36) DEFAULT '',
+			name VARCHAR(200) NOT NULL,
+			sort_order INT DEFAULT 0,
+			created_by VARCHAR(64) NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			INDEX idx_team (team_id),
+			INDEX idx_parent (parent_id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+	}
+
 	return nil
 }
 
