@@ -158,6 +158,35 @@ func extractToken(c *gin.Context) string {
 	return c.Query("token")
 }
 
+// TeamAuth ensures the user has access to the specified team.
+// Requires JWTAuth to have already run (sets user_id).
+// Validates team_id param and sets current_team_id + current_team_role.
+func TeamAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		teamID := c.Param("team_id")
+		if teamID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing team_id"})
+			c.Abort()
+			return
+		}
+
+		userID := c.GetString("user_id")
+		var role string
+		err := database.DB.QueryRow(
+			`SELECT role FROM team_members WHERE team_id = ? AND user_id = ?`, teamID, userID,
+		).Scan(&role)
+		if err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "不是该团队成员"})
+			c.Abort()
+			return
+		}
+
+		c.Set("current_team_id", teamID)
+		c.Set("current_team_role", role)
+		c.Next()
+	}
+}
+
 // GenerateToken generates a MistLab-compatible JWT for testing.
 // DEPRECATED: Only used by integration tests.
 func GenerateToken(userID, username, role, departmentID string) (string, error) {

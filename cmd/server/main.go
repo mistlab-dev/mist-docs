@@ -151,7 +151,88 @@ func main() {
 			auth.PUT("/users/:id/reset-password", handler.ResetPassword)
 			auth.POST("/users/import", handler.ImportUsers)
 
-			// 文档
+			// 团队级 API（新）
+			teams := auth.Group("/teams/:team_id")
+			teams.Use(middleware.TeamAuth())
+			{
+				// 文件夹树
+				teams.GET("/folders/tree", handler.TeamFolderTree)
+				teams.POST("/folders", handler.CreateTeamFolder)
+				teams.PUT("/folders/:id", handler.UpdateTeamFolder)
+				teams.DELETE("/folders/:id", handler.DeleteTeamFolder)
+
+				// 文档
+				teams.GET("/documents", handler.TeamListDocuments)
+				teams.GET("/documents/search", handler.TeamSearchDocuments)
+				teams.GET("/documents/recent", handler.TeamRecentDocuments)
+				teams.POST("/documents", handler.TeamCreateDocument)
+				teams.GET("/documents/:id", handler.TeamGetDocument)
+				teams.PUT("/documents/:id", handler.TeamUpdateDocument)
+				teams.DELETE("/documents/:id", handler.TeamDeleteDocument)
+				teams.GET("/documents/:id/content", handler.TeamGetDocumentContent)
+				teams.PUT("/documents/:id/content", handler.TeamSaveDocumentContent)
+				teams.GET("/documents/:id/stats", handler.TeamDocStats)
+				teams.GET("/documents/:id/versions", handler.TeamListVersions)
+				teams.GET("/documents/:id/versions/:ver/content", handler.TeamGetVersionContent)
+				teams.POST("/documents/:id/restore", handler.TeamRestoreVersion)
+				teams.POST("/documents/:id/lock", handler.TeamLockDocument)
+				teams.POST("/documents/:id/unlock", handler.TeamUnlockDocument)
+				teams.POST("/documents/:id/share", handler.TeamCreateShare)
+				teams.GET("/documents/:id/shares", handler.TeamListShares)
+				teams.GET("/documents/:id/collaborators", handler.TeamListCollaborators)
+				teams.POST("/documents/:id/collaborators", handler.TeamAddCollaborator)
+				teams.GET("/documents/:id/comments", handler.TeamListComments)
+				teams.POST("/documents/:id/comments", handler.TeamCreateComment)
+				teams.GET("/documents/:id/export", handler.TeamExportDocument)
+
+				// 回收站
+				teams.GET("/trash", handler.TeamListTrash)
+				teams.POST("/trash/restore/:id", handler.TeamRestoreFromTrash)
+				teams.DELETE("/trash/purge/:id", handler.TeamPurgeFromTrash)
+				teams.DELETE("/trash/empty", handler.TeamEmptyTrash)
+
+				// 标签
+				teams.GET("/tags", handler.TeamListTags)
+				teams.POST("/tags", handler.TeamCreateTag)
+				teams.DELETE("/tags/:id", handler.TeamDeleteTag)
+				teams.GET("/documents/:id/tags", handler.TeamGetDocTags)
+				teams.PUT("/documents/:id/tags", handler.TeamSetDocTags)
+
+				// 模板
+				teams.GET("/templates", handler.TeamListTemplates)
+				teams.GET("/templates/:id", handler.TeamGetTemplate)
+				teams.POST("/templates", handler.TeamCreateTemplate)
+				teams.PUT("/templates/:id", handler.TeamUpdateTemplate)
+				teams.DELETE("/templates/:id", handler.TeamDeleteTemplate)
+
+				// 权限
+				teams.GET("/permissions", handler.TeamListPermissions)
+				teams.POST("/permissions", handler.TeamSetPermission)
+				teams.DELETE("/permissions/:id", handler.TeamRemovePermission)
+				teams.GET("/permissions/check", handler.TeamCheckPermission)
+
+				// 审计
+				teams.GET("/audits", handler.TeamListAudits)
+				teams.GET("/audits/export", handler.TeamExportAudits)
+				teams.GET("/audits/stats", handler.TeamAuditStats)
+
+				// 收藏
+				teams.GET("/favorites", handler.TeamListFavorites)
+				teams.POST("/favorites/:id", handler.TeamAddFavorite)
+				teams.DELETE("/favorites/:id", handler.TeamRemoveFavorite)
+
+				// 存储
+				teams.GET("/storage/status", handler.TeamStorageStatus)
+
+				// Webhooks
+				teams.GET("/webhooks", handler.TeamListWebhooks)
+				teams.POST("/webhooks", handler.TeamCreateWebhook)
+				teams.DELETE("/webhooks/:id", handler.TeamDeleteWebhook)
+				teams.PUT("/webhooks/:id/toggle", handler.TeamToggleWebhook)
+				teams.GET("/webhooks/:id/logs", handler.TeamListWebhookLogs)
+			}
+
+			// 文档（兼容旧路由，deprecated）
 			auth.GET("/docs/tree", handler.DocTree)
 			auth.POST("/docs/folders", handler.CreateFolder)
 			auth.PUT("/docs/folders/:id", handler.UpdateFolder)
