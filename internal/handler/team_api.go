@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -213,29 +214,33 @@ func TeamListDocuments(c *gin.Context) {
 	defer rows.Close()
 
 	type Doc struct {
-		ID           string `json:"id"`
-		TeamID       string `json:"team_id"`
-		FolderID     string `json:"folder_id"`
-		Title        string `json:"title"`
-		Type         string `json:"type"`
-		FileSize     int64  `json:"file_size"`
-		Version      int    `json:"version"`
-		LockedBy     string `json:"locked_by"`
-		LockedAt     string `json:"locked_at,omitempty"`
-		Status       int    `json:"status"`
-		CreatedBy    string `json:"created_by"`
-		UpdatedBy    string `json:"updated_by"`
-		CreatedAt    string `json:"created_at"`
-		UpdatedAt    string `json:"updated_at"`
-		CreatorName  string `json:"creator_name"`
-		UpdaterName  string `json:"updater_name"`
+		ID          string `json:"id"`
+		TeamID      string `json:"team_id"`
+		FolderID    string `json:"folder_id"`
+		Title       string `json:"title"`
+		Type        string `json:"type"`
+		FileSize    int64  `json:"file_size"`
+		Version     int    `json:"version"`
+		LockedBy    string `json:"locked_by"`
+		LockedAt    string `json:"locked_at,omitempty"`
+		Status      int    `json:"status"`
+		CreatedBy   string `json:"created_by"`
+		UpdatedBy   string `json:"updated_by"`
+		CreatedAt   string `json:"created_at"`
+		UpdatedAt   string `json:"updated_at"`
+		CreatorName string `json:"creator_name"`
+		UpdaterName string `json:"updater_name"`
 	}
 	var docs []Doc
 	for rows.Next() {
 		var d Doc
-		rows.Scan(&d.ID, &d.TeamID, &d.FolderID, &d.Title, &d.Type, &d.FileSize, &d.Version,
-			&d.LockedBy, &d.LockedAt, &d.Status, &d.CreatedBy, &d.UpdatedBy, &d.CreatedAt, &d.UpdatedAt,
+		var folderID, lockedBy, lockedAt sql.NullString
+		rows.Scan(&d.ID, &d.TeamID, &folderID, &d.Title, &d.Type, &d.FileSize, &d.Version,
+			&lockedBy, &lockedAt, &d.Status, &d.CreatedBy, &d.UpdatedBy, &d.CreatedAt, &d.UpdatedAt,
 			&d.CreatorName, &d.UpdaterName)
+		d.FolderID = folderID.String
+		d.LockedBy = lockedBy.String
+		d.LockedAt = lockedAt.String
 		docs = append(docs, d)
 	}
 	if docs == nil {
