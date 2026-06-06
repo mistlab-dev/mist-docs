@@ -14,20 +14,13 @@ const (
 	PermAdmin = "admin"
 )
 
-// Roles
-const (
-	RoleSuperAdmin = "super_admin"
-	RoleDeptAdmin  = "dept_admin"
-	RoleMember     = "member"
-)
-
-// RequirePermission checks if the current user has the required permission on a resource
-func RequirePermission(resourceType, requiredPerm string) gin.HandlerFunc {
+// RequireTeamPermission checks if the current user has the required permission on a resource.
+// Uses team role + folder ACL + doc share (three-layer model).
+func RequireTeamPermission(resourceType, requiredPerm string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		role := c.GetString("role")
-
-		// Super admin bypasses all checks
-		if role == RoleSuperAdmin {
+		// Team admin bypasses all checks
+		teamRole := c.GetString("current_team_role")
+		if teamRole == "admin" {
 			c.Next()
 			return
 		}
@@ -42,9 +35,9 @@ func RequirePermission(resourceType, requiredPerm string) gin.HandlerFunc {
 		}
 
 		userID := c.GetString("user_id")
-		deptID := c.GetString("department_id")
+		teamID := c.GetString("current_team_id")
 
-		if service.HasPermission(c.Request.Context(), userID, deptID, role, resourceType, resourceID, requiredPerm) {
+		if service.HasTeamPermission(c.Request.Context(), userID, teamID, teamRole, resourceType, resourceID, requiredPerm) {
 			c.Next()
 			return
 		}
