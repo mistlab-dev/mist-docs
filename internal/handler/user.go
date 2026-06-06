@@ -3,11 +3,10 @@ package handler
 import (
 	"encoding/csv"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 
-	"github.com/c-wind/mist-docs/internal/middleware"
+	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/service"
 	"github.com/gin-gonic/gin"
@@ -22,45 +21,10 @@ type LoginReq struct {
 }
 
 func Login(c *gin.Context) {
-	var req LoginReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名和密码不能为空"})
-		return
-	}
-
-	user, err := service.GetUserByUsername(c.Request.Context(), req.Username)
-	if err != nil {
-		log.Printf("[Login] query user error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
-		return
-	}
-
-	token, err := middleware.GenerateToken(user.ID, user.Username, user.Role, user.DepartmentID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成 token 失败"})
-		return
-	}
-
-	service.UpdateLastLogin(c.Request.Context(), user.ID)
-
-	c.JSON(http.StatusOK, gin.H{
-		"token": token,
-		"user": gin.H{
-			"id":            user.ID,
-			"username":      user.Username,
-			"name":          user.Name,
-			"role":          user.Role,
-			"department_id": user.DepartmentID,
-		},
+	// SSO deprecated: use Portal login instead
+	c.JSON(http.StatusGone, gin.H{
+		"error":      "此登录接口已废弃，请通过 mistlab.dev 登录",
+		"portal_url": "https://mistlab.dev/login",
 	})
 }
 
@@ -70,20 +34,47 @@ func Logout(c *gin.Context) {
 
 func Me(c *gin.Context) {
 	userID := c.GetString("user_id")
-	user, err := service.GetUserByID(c.Request.Context(), userID)
-	if err != nil || user == nil {
+
+	// Query from shared users table
+	var username, displayName, email string
+	var isAdmin bool
+	err := database.DB.QueryRow(
+		`SELECT username, display_name, email, is_admin FROM users WHERE id = ?`, userID,
+	).Scan(&username, &displayName, &email, &isAdmin)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
+
+	// Get team memberships
+	type teamEntry struct {
+		TeamID   string `json:"team_id"`
+		TeamName string `json:"team_name"`
+		Role     string `json:"role"`
+	}
+	rows, err := database.DB.Query(
+		`SELECT tm.team_id, t.name, tm.role FROM team_members tm JOIN teams t ON t.id = tm.team_id WHERE tm.user_id = ?`, userID,
+	)
+	var teams []teamEntry
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var t teamEntry
+			if rows.Scan(&t.TeamID, &t.TeamName, &t.Role) == nil {
+				teams = append(teams, t)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
-		"id":            user.ID,
-		"username":      user.Username,
-		"name":          user.Name,
-		"email":         user.Email,
-		"phone":         user.Phone,
-		"role":          user.Role,
-		"department_id": user.DepartmentID,
-		"status":        user.Status,
+		"id":           userID,
+		"username":     username,
+		"name":         displayName,
+		"display_name": displayName,
+		"email":        email,
+		"is_admin":     isAdmin,
+		"role":         c.GetString("role"),
+		"teams":        teams,
 	}})
 }
 

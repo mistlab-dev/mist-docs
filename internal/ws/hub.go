@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/config"
+	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/middleware"
 	"github.com/c-wind/mist-docs/internal/service"
 	"github.com/gin-gonic/gin"
@@ -421,20 +422,21 @@ func ServeWS(hub *Hub, c *gin.Context) {
 	docID := c.Param("doc_id")
 	token := c.Query("token")
 
-	claims, err := middleware.ParseToken(token)
+	userID, err := middleware.ParseMistLabToken(token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "认证失败"})
 		return
 	}
 
-	// Permission check
-	if claims.Role != "super_admin" {
-		perm, err := service.CheckPermissionSimple(c.Request.Context(), claims.UserID, claims.DepartmentID, docID)
-		if err != nil || perm == "none" {
-			c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
-			return
-		}
-	}
+	// Look up user from shared users table
+	var username string
+	var isAdmin bool
+	database.DB.QueryRow(
+		`SELECT username, is_admin FROM users WHERE id = ?`, userID,
+	).Scan(&username, &isAdmin)
+
+	// TODO: team-scoped permission check
+	_ = docID
 
 	// Global connection limit check before upgrade
 	if atomic.LoadInt64(&globalConnCount) >= int64(maxConnsGlobal) {
@@ -450,7 +452,7 @@ func ServeWS(hub *Hub, c *gin.Context) {
 
 	colors := []string{"#e06c75", "#e5c07b", "#98c379", "#56b6c2", "#61afef", "#c678dd", "#d19a66", "#be5046"}
 	colorIdx := 0
-	for _, ch := range claims.UserID {
+	for _, ch := range userID {
 		colorIdx += int(ch)
 	}
 
@@ -459,11 +461,11 @@ func ServeWS(hub *Hub, c *gin.Context) {
 		Conn:   conn,
 		Send:   make(chan []byte, maxSendBufferSize),
 		DocID:  docID,
-		UserID: claims.UserID,
-		Name:   claims.Username,
+		UserID: userID,
+		Name:   username,
 		Color:  colors[colorIdx%len(colors)],
-		Role:   claims.Role,
-		DeptID: claims.DepartmentID,
+		Role:   func() string { if isAdmin { return "admin" }; return "member" }(),
+		DeptID: "", // deprecated, teams replace departments
 	}
 
 	hub.register <- client

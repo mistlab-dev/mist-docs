@@ -7,14 +7,14 @@ import (
 )
 
 type Config struct {
-	Server     ServerConfig     `yaml:"server"`
-	Database   DatabaseConfig   `yaml:"database"`
-	Storage    StorageConfig    `yaml:"storage"`
-	JWT        JWTConfig        `yaml:"jwt"`
-	WebSocket  WebSocketConfig  `yaml:"websocket"`
-	Audit      AuditConfig      `yaml:"audit"`
-	MistTerm   MistTermConfig   `yaml:"mistterm"`
-	Log        LogConfig        `yaml:"log"`
+	Server    ServerConfig    `yaml:"server"`
+	Database  DatabaseConfig  `yaml:"database"`
+	Storage   StorageConfig   `yaml:"storage"`
+	JWT       JWTConfig       `yaml:"jwt"`
+	WebSocket WebSocketConfig `yaml:"websocket"`
+	Audit     AuditConfig     `yaml:"audit"`
+	Portal    PortalConfig    `yaml:"portal"`
+	Log       LogConfig       `yaml:"log"`
 }
 
 type ServerConfig struct {
@@ -56,9 +56,8 @@ type AuditConfig struct {
 	RetainDays int `yaml:"retain_days"`
 }
 
-type MistTermConfig struct {
-	APIURL string `yaml:"api_url"`
-	APIKey string `yaml:"api_key"`
+type PortalConfig struct {
+	URL string `yaml:"url"` // Portal base URL, e.g. https://mistlab.dev
 }
 
 type LogConfig struct {
