@@ -74,7 +74,7 @@ func DocStats(c *gin.Context) {
 	// 3. Contributor list (with names)
 	rows, err := database.DB.QueryContext(c.Request.Context(),
 		`SELECT DISTINCT v.created_by, IFNULL(u.name, '未知用户')
-		FROM md_versions v LEFT JOIN md_users u ON v.created_by = u.id
+		FROM md_versions v LEFT JOIN users u ON v.created_by = u.id
 		WHERE v.document_id = ?`, docID)
 	if err == nil {
 		var contributors []gin.H

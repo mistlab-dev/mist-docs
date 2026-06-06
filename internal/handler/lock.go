@@ -22,7 +22,7 @@ func LockDocument(c *gin.Context) {
 	if lockedBy != "" && lockedBy != userID {
 		var name string
 		database.DB.QueryRowContext(c.Request.Context(),
-			"SELECT name FROM md_users WHERE id = ?", lockedBy).Scan(&name)
+			"SELECT name FROM users WHERE id = ?", lockedBy).Scan(&name)
 		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("文档已被 %s 锁定", name)})
 		return
 	}

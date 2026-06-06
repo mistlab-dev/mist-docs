@@ -18,13 +18,13 @@ func DashboardStats(c *gin.Context) {
 
 	// 用户统计
 	var userCount, activeUsers int
-	db.QueryRow("SELECT COUNT(*) FROM md_users").Scan(&userCount)
-	db.QueryRow("SELECT COUNT(*) FROM md_users WHERE status = 1").Scan(&activeUsers)
+	db.QueryRow("SELECT COUNT(*) FROM users").Scan(&userCount)
+	db.QueryRow("SELECT COUNT(*) FROM users WHERE status = 1").Scan(&activeUsers)
 	stats["users"] = gin.H{"total": userCount, "active": activeUsers}
 
 	// 部门统计
 	var deptCount int
-	db.QueryRow("SELECT COUNT(*) FROM md_departments").Scan(&deptCount)
+	db.QueryRow("SELECT COUNT(*) FROM md_team_folders").Scan(&deptCount)
 	stats["departments"] = deptCount
 
 	// 文档统计
@@ -158,7 +158,7 @@ func SystemInfo(c *gin.Context) {
 	info["db_time"] = fmt.Sprintf("%v", uptime)
 
 	// 各表行数
-	tables := []string{"md_users", "md_departments", "md_documents", "md_folders", "md_audits", "md_permissions", "md_versions", "md_favorites", "md_shares", "md_comments"}
+	tables := []string{"users", "md_team_folders", "md_documents", "md_folders", "md_audits", "md_permissions", "md_versions", "md_favorites", "md_shares", "md_comments"}
 	tableStats := []gin.H{}
 	for _, t := range tables {
 		var cnt int

@@ -50,7 +50,7 @@ func resolveDeptID(c *gin.Context, folderID string, userDeptID string) string {
 	}
 	// 3. 兜底：第一个部门
 	var fallback string
-	_ = database.DB.QueryRow("SELECT id FROM md_departments WHERE status = 1 ORDER BY created_at LIMIT 1").Scan(&fallback)
+	_ = database.DB.QueryRow("SELECT id FROM md_team_folders WHERE status = 1 ORDER BY created_at LIMIT 1").Scan(&fallback)
 	return fallback
 }
 
@@ -411,7 +411,7 @@ func SaveDocumentContent(c *gin.Context) {
 	database.DB.QueryRowContext(c.Request.Context(), "SELECT locked_by FROM md_documents WHERE id = ?", id).Scan(&lockedBy)
 	if lockedBy != "" && lockedBy != userID && role != "super_admin" {
 		var name string
-		database.DB.QueryRowContext(c.Request.Context(), "SELECT name FROM md_users WHERE id = ?", lockedBy).Scan(&name)
+		database.DB.QueryRowContext(c.Request.Context(), "SELECT name FROM users WHERE id = ?", lockedBy).Scan(&name)
 		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("文档已被 %s 锁定，无法编辑", name)})
 		return
 	}

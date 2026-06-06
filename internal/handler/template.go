@@ -19,7 +19,7 @@ func ListTemplates(c *gin.Context) {
 
 	// Show: user's own + public templates from same department + system built-in (front-end)
 	query := `SELECT t.id, t.name, t.type, t.user_id, t.department_id, t.is_public, t.created_at, t.updated_at,
-		IFNULL((SELECT name FROM md_users WHERE id = t.user_id), '未知') as user_name
+		IFNULL((SELECT name FROM users WHERE id = t.user_id), '未知') as user_name
 		FROM md_templates t
 		WHERE t.type = ? AND (t.user_id = ? OR t.is_public = 1`
 	args := []interface{}{docType, userID}
