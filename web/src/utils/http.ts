@@ -21,7 +21,8 @@ http.interceptors.response.use(
     if (err.response?.status === 401) {
       const auth = useAuthStore()
       auth.logout()
-      router.push('/login')
+      // Redirect to Portal login
+      auth.redirectToPortalLogin()
     }
     return Promise.reject(err)
   },

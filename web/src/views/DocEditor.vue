@@ -1212,7 +1212,7 @@ function initEditor(initialContent: string) {
           CollaborationCursor.configure({
             provider: { awareness: null } as any,
             user: {
-              name: auth.user?.name || auth.user?.username || '匿名',
+              name: auth.user?.display_name || auth.user?.username || '匿名',
               color: userColors[userColorIdx],
               fallbackColor: userColors[userColorIdx],
             },
@@ -1258,7 +1258,7 @@ function initEditor(initialContent: string) {
           const { from, to } = ed.state.selection
           wsProvider.sendAwareness({
             userId: currentUserId.value,
-            userName: auth.user?.name || '匿名',
+            userName: auth.user?.display_name || '匿名',
             color: userColors[userColorIdx],
             cursor: { from, to },
             timestamp: Date.now(),

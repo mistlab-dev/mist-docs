@@ -92,8 +92,8 @@
 
           <el-dropdown @command="handleCommand">
             <span class="user-name">
-              <el-avatar :size="28" class="user-avatar">{{ (auth.user?.name || auth.user?.username || '?')[0] }}</el-avatar>
-              <span class="user-name-text">{{ auth.user?.name || auth.user?.username }}</span>
+              <el-avatar :size="28" class="user-avatar">{{ (auth.user?.display_name || auth.user?.username || '?')[0] }}</el-avatar>
+              <span class="user-name-text">{{ auth.user?.display_name || auth.user?.username }}</span>
               <el-icon><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
