@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/c-wind/mist-docs/internal/database"
+	"github.com/c-wind/mist-docs/internal/service"
 	"github.com/c-wind/mist-docs/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/jung-kurt/gofpdf"
@@ -16,8 +17,15 @@ import (
 // ExportDocument exports a document in the specified format.
 // GET /docs/documents/:id/export?format=markdown|html|txt
 func ExportDocument(c *gin.Context) {
-	docID := c.Param("id")
+	// PDF export requires Team plan
 	format := c.DefaultQuery("format", "html")
+	if format == "pdf" {
+		if !service.RequirePlanFeature(c, "pdf_export") {
+			return
+		}
+	}
+
+	docID := c.Param("id")
 
 	// Get document info
 	var title, docType, deptID string

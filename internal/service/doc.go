@@ -226,10 +226,10 @@ func ListDocuments(ctx context.Context, folderID, deptID, docType string, page, 
 	offset := (page - 1) * pageSize
 	listSQL := `SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version, d.status,
 	            IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at,
-	            u1.name as creator_name, u2.name as updater_name
+	            u1.display_name as creator_name, u2.display_name as updater_name
 	            FROM md_documents d
-	            LEFT JOIN users u1 ON IFNULL(d.created_by,'') = u1.id
-	            LEFT JOIN users u2 ON IFNULL(d.updated_by,'') = u2.id ` +
+	            LEFT JOIN users u1 ON IFNULL(d.created_by,'') COLLATE utf8mb4_unicode_ci = u1.id
+	            LEFT JOIN users u2 ON IFNULL(d.updated_by,'') COLLATE utf8mb4_unicode_ci = u2.id ` +
 		where + " ORDER BY d.updated_at DESC LIMIT ? OFFSET ?"
 	args = append(args, pageSize, offset)
 
@@ -400,8 +400,8 @@ func EmptyTrash(ctx context.Context, deptID string) (int, error) {
 
 func ListVersions(ctx context.Context, docID string) ([]*model.DocVersion, error) {
 	rows, err := database.DB.QueryContext(ctx,
-		`SELECT v.id, v.document_id, v.version, v.file_size, v.created_by, v.created_at, u.name as creator_name
-		 FROM md_versions v LEFT JOIN users u ON v.created_by = u.id
+		`SELECT v.id, v.document_id, v.version, v.file_size, v.created_by, v.created_at, u.display_name as creator_name
+		 FROM md_versions v LEFT JOIN users u ON v.created_by COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE v.document_id = ? ORDER BY v.version DESC`, docID)
 	if err != nil {
 		return nil, err
@@ -525,7 +525,7 @@ func SearchDocumentsWithTags(ctx context.Context, keyword, deptID, tagID string,
 	where := "WHERE d.status = 1 AND (d.title LIKE ?"
 	args := []interface{}{"%" + keyword + "%"}
 
-	where += " OR d.created_by IN (SELECT id FROM users WHERE name LIKE ?)"
+	where += " OR d.created_by IN (SELECT id FROM users WHERE display_name LIKE ?)"
 	args = append(args, "%"+keyword+"%")
 
 	// Full-text search on content
@@ -665,11 +665,11 @@ func RecentDocuments(ctx context.Context, userID string, limit int) ([]*model.Do
 	rows, err := database.DB.QueryContext(ctx, `
 		SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version,
 		       IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at,
-		       u1.name as creator_name, u2.name as updater_name
+		       u1.display_name as creator_name, u2.display_name as updater_name
 		FROM md_documents d
 		INNER JOIN md_audits a ON a.resource_id = d.id AND a.user_id = ? AND a.action = 'view'
-		LEFT JOIN users u1 ON IFNULL(d.created_by,'') = u1.id
-		LEFT JOIN users u2 ON IFNULL(d.updated_by,'') = u2.id
+		LEFT JOIN users u1 ON IFNULL(d.created_by,'') COLLATE utf8mb4_unicode_ci = u1.id
+		LEFT JOIN users u2 ON IFNULL(d.updated_by,'') COLLATE utf8mb4_unicode_ci = u2.id
 		WHERE d.status = 1
 		GROUP BY d.id
 		ORDER BY MAX(a.created_at) DESC
@@ -715,11 +715,11 @@ func ListFavorites(ctx context.Context, userID string) ([]*model.Document, error
 	rows, err := database.DB.QueryContext(ctx, `
 		SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version,
 		       IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at,
-		       u1.name as creator_name, u2.name as updater_name
+		       u1.display_name as creator_name, u2.display_name as updater_name
 		FROM md_favorites f
 		INNER JOIN md_documents d ON d.id = f.document_id AND d.status = 1
-		LEFT JOIN users u1 ON IFNULL(d.created_by,'') = u1.id
-		LEFT JOIN users u2 ON IFNULL(d.updated_by,'') = u2.id
+		LEFT JOIN users u1 ON IFNULL(d.created_by,'') COLLATE utf8mb4_unicode_ci = u1.id
+		LEFT JOIN users u2 ON IFNULL(d.updated_by,'') COLLATE utf8mb4_unicode_ci = u2.id
 		WHERE f.user_id = ?
 		ORDER BY f.created_at DESC
 	`, userID)

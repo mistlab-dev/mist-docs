@@ -14,6 +14,7 @@ type Config struct {
 	WebSocket WebSocketConfig `yaml:"websocket"`
 	Audit     AuditConfig     `yaml:"audit"`
 	Portal    PortalConfig    `yaml:"portal"`
+	Billing   BillingConfig   `yaml:"billing"`
 	Log       LogConfig       `yaml:"log"`
 }
 
@@ -58,6 +59,14 @@ type AuditConfig struct {
 
 type PortalConfig struct {
 	URL string `yaml:"url"` // Portal base URL, e.g. https://mistlab.dev
+}
+
+// BillingConfig controls plan-based feature gating.
+// When Enabled=false (private deployment), all features are unlocked.
+type BillingConfig struct {
+	Enabled     bool   `yaml:"enabled"`      // true = check plan via Portal API
+	PortalURL   string `yaml:"portal_url"`  // Portal API URL, e.g. https://api.mistlab.dev
+	AdminSecret string `yaml:"admin_secret"` // shared secret for internal API calls
 }
 
 type LogConfig struct {

@@ -57,7 +57,7 @@ func ListPermissions(ctx context.Context, resourceType, resourceID string) ([]ma
 		`SELECT p.id, p.target_type, p.target_id, p.permission, p.inherit, p.created_by, p.created_at,
 		        IFNULL(u.display_name, '') as target_name
 		 FROM md_permissions p
-		 LEFT JOIN users u ON p.target_type='user' AND p.target_id=u.id
+		 LEFT JOIN users u ON p.target_type='user' AND p.target_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE p.resource_type=? AND p.resource_id=?`,
 		resourceType, resourceID,
 	)

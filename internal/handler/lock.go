@@ -6,11 +6,15 @@ import (
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
+	"github.com/c-wind/mist-docs/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
 // LockDocument POST /docs/documents/:id/lock
 func LockDocument(c *gin.Context) {
+	if !service.RequirePlanFeature(c, "doc_lock") {
+		return
+	}
 	id := c.Param("id")
 	userID := c.GetString("user_id")
 
@@ -22,7 +26,7 @@ func LockDocument(c *gin.Context) {
 	if lockedBy != "" && lockedBy != userID {
 		var name string
 		database.DB.QueryRowContext(c.Request.Context(),
-			"SELECT name FROM users WHERE id = ?", lockedBy).Scan(&name)
+			"SELECT display_name FROM users WHERE id COLLATE utf8mb4_unicode_ci = ?", lockedBy).Scan(&name)
 		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("文档已被 %s 锁定", name)})
 		return
 	}

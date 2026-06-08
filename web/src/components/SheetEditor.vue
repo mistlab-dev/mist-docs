@@ -8,28 +8,10 @@
         <div class="ribbon-formula-section" style="position:relative">
           <div class="ribbon-section-buttons ribbon-formula-row">
             <div class="cell-ref-sm">{{ currentCellRef }}</div>
-            <button class="formula-fx-btn-sm" @click="toggleFxPanel" :class="{active: showFxPanel}">fx</button>
+            <button class="formula-fx-btn-sm" @click="toggleFxPanel" :class="{active: showFxPanel}" ref="fxBtnRef">fx</button>
             <div class="formula-input-wrap-sm">
               <input class="formula-input-sm" v-model="formulaValue" @input="onFormulaInput" @keydown="onFormulaKeydown" @focus="onFormulaFocus" @blur="onFormulaBlur"
                 @keydown.enter="applyFormula" @keydown.escape="cancelFormula" placeholder="输入内容或公式..." />
-            </div>
-          </div>
-          <!-- 函数自动补全（放在 ribbon-formula-row 外面避免 overflow 影响） -->
-          <div v-if="showFxPanel" class="fx-panel">
-            <div class="fx-search">
-              <input v-model="fxSearch" placeholder="搜索函数..." @keydown="onFxSearchKey" ref="fxSearchRef" />
-            </div>
-            <div class="fx-list">
-              <div v-for="(fn, i) in filteredFunctions" :key="fn.name" class="fx-item" :class="{active: fxIndex === i}" @click="insertFunction(fn)" @mouseenter="fxIndex = i">
-                <span class="fx-name">{{ fn.name }}</span>
-                <span class="fx-desc">{{ fn.desc }}</span>
-              </div>
-              <div v-if="!filteredFunctions.length" class="fx-empty">没有匹配的函数</div>
-            </div>
-            <!-- 参数提示 -->
-            <div v-if="fxHint" class="fx-hint">
-              <strong>{{ fxHint.name }}</strong>({{ fxHint.args }})
-              <p>{{ fxHint.desc }}</p>
             </div>
           </div>
           <div class="ribbon-section-label">公式</div>
@@ -683,6 +665,24 @@
       </div>
       <div class="tabs-info">{{ currentSheetRows.length }}×{{ colCount }}</div>
     </div>
+    <!-- 函数选择面板（放在 sheet-container 顶层避免被 ribbon overflow 裁剪） -->
+    <div v-if="showFxPanel" class="fx-panel" :style="fxPanelStyle">
+      <div class="fx-search">
+        <input v-model="fxSearch" placeholder="搜索函数..." @keydown="onFxSearchKey" ref="fxSearchRef" />
+      </div>
+      <div class="fx-list">
+        <div v-for="(fn, i) in filteredFunctions" :key="fn.name" class="fx-item" :class="{active: fxIndex === i}" @click="insertFunction(fn)" @mouseenter="fxIndex = i">
+          <span class="fx-name">{{ fn.name }}</span>
+          <span class="fx-desc">{{ fn.desc }}</span>
+        </div>
+        <div v-if="!filteredFunctions.length" class="fx-empty">没有匹配的函数</div>
+      </div>
+      <!-- 参数提示 -->
+      <div v-if="fxHint" class="fx-hint">
+        <strong>{{ fxHint.name }}</strong>({{ fxHint.args }})
+        <p>{{ fxHint.desc }}</p>
+      </div>
+    </div>
   </div>
 </template>
 <script setup lang="ts">
@@ -1187,6 +1187,8 @@ const showFxPanel = ref(false)
 const fxSearch = ref('')
 const fxIndex = ref(0)
 const fxSearchRef = ref<HTMLInputElement | null>(null)
+const fxBtnRef = ref<HTMLElement | null>(null)
+const fxPanelStyle = ref<Record<string, string>>({})
 const acItems = ref<string[]>([])
 const acIndex = ref(0)
 const fxHint = ref<{name:string;args:string;desc:string}|null>(null)
@@ -1241,6 +1243,24 @@ const filteredFunctions = computed(() => {
   return FX_LIST.filter(f => f.name.includes(q) || f.desc.includes(fxSearch.value)).slice(0, 15)
 })
 
+function updateFxPanelPosition() {
+  const btn = fxBtnRef.value
+  if (!btn) return
+  const rect = btn.getBoundingClientRect()
+  // 找到 formula-row 的位置作为弹出框的锚点
+  const formulaRow = btn.closest('.ribbon-formula-section')
+  let anchorRect = rect
+  if (formulaRow) {
+    anchorRect = formulaRow.getBoundingClientRect()
+  }
+  fxPanelStyle.value = {
+    position: 'fixed',
+    top: (anchorRect.bottom + 2) + 'px',
+    left: anchorRect.left + 'px',
+    zIndex: '9999'
+  }
+}
+
 function toggleFxPanel() {
   showFxPanel.value = !showFxPanel.value
   if (showFxPanel.value) {
@@ -1249,7 +1269,10 @@ function toggleFxPanel() {
     if (!formulaValue.value.startsWith('=')) formulaValue.value = '='
     // 记住公式目标单元格
     formulaTargetCell = selection.value ? { r: selection.value.startRow, c: selection.value.startCol } : null
-    nextTick(() => fxSearchRef.value?.focus())
+    nextTick(() => {
+      updateFxPanelPosition()
+      fxSearchRef.value?.focus()
+    })
   }
 }
 
@@ -1263,6 +1286,7 @@ function onFormulaInput() {
       fxSearch.value = m[1]
       showFxPanel.value = true
       fxIndex.value = 0
+      nextTick(updateFxPanelPosition)
     } else {
       showFxPanel.value = false
     }
@@ -1298,6 +1322,7 @@ function onFormulaFocus() {
       fxSearch.value = m[1]
       showFxPanel.value = true
       fxIndex.value = 0
+      nextTick(updateFxPanelPosition)
     }
   }
 }
@@ -2043,7 +2068,7 @@ function strArray(arg: string, keepAll = false): string[] {
   return res
 }
 function splitArgs(s: string): string[] { const args: string[] = []; let depth = 0, cur = '', inStr = false; for (let i = 0; i < s.length; i++) { const ch = s[i]; if (ch === '"' && (i === 0 || s[i - 1] !== '\\')) inStr = !inStr; if (!inStr) { if (ch === '(') depth++; if (ch === ')') depth-- } if (ch === ',' && depth === 0 && !inStr) { args.push(cur); cur = '' } else cur += ch }; if (cur.trim()) args.push(cur); return args }
-function safeCalc(expr: string): number { let safe = expr.replace(/([A-Z]+)(\d+)/gi, (_, col, row) => { const v = getCellVal(col.toUpperCase(), parseInt(row)); return (typeof v === 'number') ? String(v) : (isNaN(Number(v)) ? '0' : String(v)) }); safe = safe.replace(/[^0-9+\-*/.() <>!=&]/g, ''); try { return Function('"use strict"; return (' + safe + ')')() } catch { return NaN } }
+function safeCalc(expr: string): number { let safe = expr.replace(/(\w+)\(([^()]*(?:\([^()]*\)[^()]*)*)\)/gi, (match) => { try { const r = computeFormula('=' + match); const n = parseFloat(r); return isNaN(n) ? '0' : String(n) } catch { return '0' } }); safe = safe.replace(/([A-Z]+)(\d+)/gi, (_, col, row) => { const v = getCellVal(col.toUpperCase(), parseInt(row)); return (typeof v === 'number') ? String(v) : (isNaN(Number(v)) ? '0' : String(v)) }); safe = safe.replace(/[^0-9+\-*/.() <>!=&]/g, ''); try { return Function('"use strict"; return (' + safe + ')')() } catch { return NaN } }
 
 // Chart
 function drawChart() { const canvas = chartCanvas.value; if (!canvas) return; const ctx = canvas.getContext('2d'); if (!ctx) return; ctx.clearRect(0, 0, canvas.width, canvas.height); const data = getChartData(); if (!data.length) return; const t = chartType.value; if (t === 'bar') drawBarChart(ctx, data, canvas); else if (t === 'line') drawLineChart(ctx, data, canvas); else if (t === 'pie') drawPieChart(ctx, data, canvas); else if (t === 'scatter') drawScatterChart(ctx, data, canvas); else if (t === 'area') drawAreaChart(ctx, data, canvas) }
@@ -2435,7 +2460,6 @@ defineExpose({ getData })
 
 /* 函数面板 */
 .fx-panel {
-  position: absolute; top: 100%; left: 0; z-index: 200;
   background: #fff; border: 1px solid #d6d6d6; border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12); width: 360px;
   display: flex; flex-direction: column; max-height: 320px;

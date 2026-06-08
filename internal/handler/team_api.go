@@ -4,11 +4,14 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
+	"github.com/c-wind/mist-docs/internal/service"
+	"github.com/c-wind/mist-docs/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -201,8 +204,8 @@ func TeamListDocuments(c *gin.Context) {
 		IFNULL(u1.display_name, '') as creator_name,
 		IFNULL(u2.display_name, '') as updater_name
 		FROM md_documents d
-		LEFT JOIN users u1 ON d.created_by = u1.id
-		LEFT JOIN users u2 ON d.updated_by = u2.id ` + where +
+		LEFT JOIN users u1 ON d.created_by COLLATE utf8mb4_unicode_ci = u1.id
+		LEFT JOIN users u2 ON d.updated_by COLLATE utf8mb4_unicode_ci = u2.id ` + where +
 		" ORDER BY d.updated_at DESC LIMIT ? OFFSET ?"
 	args = append(args, pageSize, offset)
 
@@ -274,7 +277,7 @@ func TeamSearchDocuments(c *gin.Context) {
 		d.locked_by, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at,
 		IFNULL(u1.display_name, '') as creator_name
 		FROM md_documents d
-		LEFT JOIN users u1 ON d.created_by = u1.id ` + where +
+		LEFT JOIN users u1 ON d.created_by COLLATE utf8mb4_unicode_ci = u1.id ` + where +
 		" ORDER BY d.updated_at DESC LIMIT ? OFFSET ?"
 	args = append(args, pageSize, offset)
 
@@ -355,6 +358,13 @@ func TeamCreateDocument(c *gin.Context) {
 	role := getTeamRole(c)
 	if role == "" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+
+	// Check document limit for this team
+	var docCount int
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents WHERE status = 1 AND team_id = ?", teamID).Scan(&docCount)
+	if !service.CheckDocumentLimit(c, docCount) {
 		return
 	}
 
@@ -736,7 +746,7 @@ func TeamListVersions(c *gin.Context) {
 	rows, err := database.DB.Query(
 		`SELECT v.id, v.version, v.file_size, v.created_by, v.created_at,
 		 IFNULL(u.display_name,'') as user_name
-		 FROM md_versions v LEFT JOIN users u ON v.created_by=u.id
+		 FROM md_versions v LEFT JOIN users u ON v.created_by COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE v.document_id=? ORDER BY v.version DESC`, docID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -884,7 +894,7 @@ func TeamListCollaborators(c *gin.Context) {
 		`SELECT p.id, p.target_id, p.permission, p.created_by,
 		 IFNULL(u.display_name, '') as user_name
 		 FROM md_permissions p
-		 LEFT JOIN users u ON p.target_type='user' AND p.target_id=u.id
+		 LEFT JOIN users u ON p.target_type='user' AND p.target_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE p.resource_type='document' AND p.resource_id=?`, docID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -934,7 +944,7 @@ func TeamListComments(c *gin.Context) {
 	rows, err := database.DB.Query(
 		`SELECT c.id, c.content, c.user_id, c.parent_id, c.created_at, c.updated_at,
 		 IFNULL(u.display_name,'') as user_name
-		 FROM md_comments c LEFT JOIN users u ON c.user_id=u.id
+		 FROM md_comments c LEFT JOIN users u ON c.user_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE c.document_id=? ORDER BY c.created_at`, docID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -995,6 +1005,9 @@ func TeamExportDocument(c *gin.Context) {
 // ==================== 审计 ====================
 
 func TeamListAudits(c *gin.Context) {
+	if !service.RequirePlanFeature(c, "audit") {
+		return
+	}
 	teamID := getTeamID(c)
 	role := getTeamRole(c)
 	if role != "admin" {
@@ -1013,7 +1026,7 @@ func TeamListAudits(c *gin.Context) {
 	rows, err := database.DB.Query(
 		`SELECT a.id, a.user_id, a.action, a.resource_type, a.resource_id, a.resource_name, a.detail, a.created_at,
 		 IFNULL(u.display_name,'') as user_name
-		 FROM md_audits a LEFT JOIN users u ON a.user_id=u.id
+		 FROM md_audits a LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE a.team_id=? ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
 		teamID, pageSize, offset)
 	if err != nil {
@@ -1038,6 +1051,9 @@ func TeamListAudits(c *gin.Context) {
 }
 
 func TeamExportAudits(c *gin.Context) {
+	if !service.RequirePlanFeature(c, "audit") {
+		return
+	}
 	teamID := getTeamID(c)
 	role := getTeamRole(c)
 	if role != "admin" {
@@ -1051,7 +1067,7 @@ func TeamExportAudits(c *gin.Context) {
 	rows, err := database.DB.Query(
 		`SELECT a.id, a.user_id, a.action, a.resource_type, a.resource_id, a.created_at,
 		 IFNULL(u.display_name,'')
-		 FROM md_audits a LEFT JOIN users u ON a.user_id=u.id
+		 FROM md_audits a LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE a.team_id=? ORDER BY a.created_at DESC LIMIT 10000`, teamID)
 	if err != nil {
 		return
@@ -1089,7 +1105,7 @@ func TeamListPermissions(c *gin.Context) {
 	rows, err := database.DB.Query(
 		`SELECT p.id, p.target_type, p.target_id, p.permission, p.inherit, p.created_by,
 		 IFNULL(u.display_name,'') as user_name
-		 FROM md_permissions p LEFT JOIN users u ON p.target_type='user' AND p.target_id=u.id
+		 FROM md_permissions p LEFT JOIN users u ON p.target_type='user' AND p.target_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE p.resource_type=? AND p.resource_id=?`, resType, resID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1319,13 +1335,23 @@ func TeamDocStats(c *gin.Context) {
 // ==================== Helpers ====================
 
 func writeDocContent(docID string, content []byte) {
-	// Delegate to existing store layer
-	_ = content // store.WriteDocContent(docID, content) — wired later
+	var deptID string
+	database.DB.QueryRow("SELECT department_id FROM md_documents WHERE id=?", docID).Scan(&deptID)
+	_, _, err := store.WriteVersion(deptID, docID, 1, content)
+	if err != nil {
+		log.Printf("writeDocContent error: %v", err)
+	}
 }
 
 func readDocContent(docID string) []byte {
-	// Delegate to existing store layer
-	return []byte{}
+	var deptID string
+	database.DB.QueryRow("SELECT department_id FROM md_documents WHERE id=?", docID).Scan(&deptID)
+	data, err := store.ReadCurrent(deptID, docID)
+	if err != nil {
+		log.Printf("readDocContent error: %v", err)
+		return []byte{}
+	}
+	return data
 }
 
 func readBody(c *gin.Context) ([]byte, error) {

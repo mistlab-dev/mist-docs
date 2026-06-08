@@ -19,12 +19,13 @@ const auth = useAuthStore()
 
 onMounted(async () => {
   const token = (route.query.token as string) || ''
+  const refreshToken = (route.query.refresh_token as string) || ''
   if (!token) {
     auth.redirectToPortalLogin()
     return
   }
 
-  const ok = await auth.handleSSOCallback(token)
+  const ok = await auth.handleSSOCallback(token, refreshToken || undefined)
   if (ok) {
     // Clean URL
     window.history.replaceState({}, '', '/')

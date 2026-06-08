@@ -296,6 +296,15 @@ func CreateDocument(c *gin.Context) {
 		req.DepartmentID = resolveDeptID(c, req.FolderID, userDeptID)
 	}
 
+	// Check document limit
+	if req.DepartmentID != "" {
+		var docCount int
+		database.DB.QueryRow("SELECT COUNT(*) FROM md_documents WHERE status = 1 AND department_id = ?", req.DepartmentID).Scan(&docCount)
+		if !service.CheckDocumentLimit(c, docCount) {
+			return
+		}
+	}
+
 	if role == "dept_admin" && req.DepartmentID != userDeptID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "只能在本部门创建"})
 		return
@@ -411,7 +420,7 @@ func SaveDocumentContent(c *gin.Context) {
 	database.DB.QueryRowContext(c.Request.Context(), "SELECT locked_by FROM md_documents WHERE id = ?", id).Scan(&lockedBy)
 	if lockedBy != "" && lockedBy != userID && role != "super_admin" {
 		var name string
-		database.DB.QueryRowContext(c.Request.Context(), "SELECT name FROM users WHERE id = ?", lockedBy).Scan(&name)
+		database.DB.QueryRowContext(c.Request.Context(), "SELECT display_name FROM users WHERE id COLLATE utf8mb4_unicode_ci = ?", lockedBy).Scan(&name)
 		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("文档已被 %s 锁定，无法编辑", name)})
 		return
 	}
@@ -441,6 +450,9 @@ func SaveDocumentContent(c *gin.Context) {
 }
 
 func ListVersions(c *gin.Context) {
+	if !service.RequirePlanFeature(c, "version_history") {
+		return
+	}
 	versions, err := service.ListVersions(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -450,6 +462,9 @@ func ListVersions(c *gin.Context) {
 }
 
 func RestoreVersion(c *gin.Context) {
+	if !service.RequirePlanFeature(c, "version_history") {
+		return
+	}
 	var req struct {
 		Version int `json:"version" binding:"required"`
 	}
@@ -718,6 +733,9 @@ func SearchTargets(c *gin.Context) {
 // ==================== 审计 ====================
 
 func ListAudits(c *gin.Context) {
+	if !service.RequirePlanFeature(c, "audit") {
+		return
+	}
 	role := c.GetString("role")
 	if role != "super_admin" && role != "dept_admin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
@@ -743,6 +761,9 @@ func ListAudits(c *gin.Context) {
 }
 
 func ExportAudits(c *gin.Context) {
+	if !service.RequirePlanFeature(c, "audit") {
+		return
+	}
 	if c.GetString("role") != "super_admin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "仅超级管理员可导出"})
 		return

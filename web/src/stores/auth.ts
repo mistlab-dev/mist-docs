@@ -19,6 +19,7 @@ interface User {
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('mist-docs-token') || '')
+  const refreshToken = ref(localStorage.getItem('mist-docs-refresh-token') || '')
   const user = ref<User | null>(null)
   const currentTeamId = ref<string>('')
   const currentTeamRole = ref<string>('')
@@ -53,10 +54,14 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // SSO: handle callback from Portal with token
-  async function handleSSOCallback(ssoToken: string) {
+  async function handleSSOCallback(ssoToken: string, ssoRefreshToken?: string) {
     if (!ssoToken) return false
     token.value = ssoToken
     localStorage.setItem('mist-docs-token', ssoToken)
+    if (ssoRefreshToken) {
+      refreshToken.value = ssoRefreshToken
+      localStorage.setItem('mist-docs-refresh-token', ssoRefreshToken)
+    }
     try {
       await fetchMe()
       return true
@@ -68,10 +73,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   function logout() {
     token.value = ''
+    refreshToken.value = ''
     user.value = null
     currentTeamId.value = ''
     currentTeamRole.value = ''
     localStorage.removeItem('mist-docs-token')
+    localStorage.removeItem('mist-docs-refresh-token')
     localStorage.removeItem('mist-docs-user')
   }
 
@@ -93,7 +100,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    token, user, currentTeamId, currentTeamRole,
+    token, refreshToken, user, currentTeamId, currentTeamRole,
     isLoggedIn, isAdmin, isTeamAdmin,
     login, redirectToPortalLogin, handleSSOCallback, logout, fetchMe, setTeam
   }

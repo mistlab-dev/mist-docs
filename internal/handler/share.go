@@ -17,6 +17,9 @@ import (
 // CreateShare creates a public share link for a document.
 // POST /docs/documents/:id/share
 func CreateShare(c *gin.Context) {
+	if !service.RequirePlanFeature(c, "external_share") {
+		return
+	}
 	docID := c.Param("id")
 	userID, _ := c.Get("user_id")
 	userName, _ := c.Get("username")

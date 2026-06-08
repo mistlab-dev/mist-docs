@@ -137,7 +137,7 @@ func ListTeamCollaborators(ctx context.Context, resourceType, resourceID string)
 		`SELECT p.id, p.target_type, p.target_id, p.permission,
 		        IFNULL(u.display_name, '') as target_name
 		 FROM md_permissions p
-		 LEFT JOIN users u ON p.target_type='user' AND p.target_id=u.id
+		 LEFT JOIN users u ON p.target_type='user' AND p.target_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE p.resource_type=? AND p.resource_id=?
 		 ORDER BY p.created_at`,
 		resourceType, resourceID,
@@ -191,7 +191,7 @@ func getInheritedPerms(ctx context.Context, resourceType, resourceID string) []*
 		`SELECT p.id, p.target_type, p.target_id, p.permission,
 		        IFNULL(u.display_name, '') as target_name
 		 FROM md_permissions p
-		 LEFT JOIN users u ON p.target_type='user' AND p.target_id=u.id
+		 LEFT JOIN users u ON p.target_type='user' AND p.target_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE p.resource_type=? AND p.resource_id=? AND p.inherit=1`,
 		resourceType, resourceID,
 	)
@@ -233,7 +233,7 @@ func AddTeamCollaborator(ctx context.Context, resourceType, resourceID, targetTy
 
 	if targetType == "user" {
 		var exists int
-		database.DB.QueryRowContext(ctx, `SELECT 1 FROM users WHERE id=?`, targetID).Scan(&exists)
+		database.DB.QueryRowContext(ctx, `SELECT 1 FROM users WHERE id COLLATE utf8mb4_unicode_ci=?`, targetID).Scan(&exists)
 		if exists == 0 {
 			return fmt.Errorf("用户不存在")
 		}
