@@ -48,7 +48,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // SSO: redirect to Portal login
   function redirectToPortalLogin() {
-    const current = window.location.origin + window.location.pathname
+    const current = window.location.origin
     const portalUrl = import.meta.env.VITE_PORTAL_URL || 'https://mistlab.dev'
     window.location.href = `${portalUrl}/login?redirect=${encodeURIComponent(current)}`
   }

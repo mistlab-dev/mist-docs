@@ -3,8 +3,11 @@ set -e
 PROD="root@85.137.247.166"
 REMOTE_DIR="/var/www/mistdocs"
 
+WEB_DIR="$REMOTE_DIR/web"
+
 echo "=== 1. 同步前端 ==="
-rsync -az --delete web/dist/ "$PROD:$REMOTE_DIR/"
+ssh "$PROD" "mkdir -p $WEB_DIR"
+rsync -az --delete web/dist/ "$PROD:$WEB_DIR/"
 
 echo "=== 2. 上传二进制 ==="
 scp mist-docs-linux "$PROD:/usr/local/bin/mist-docs"
