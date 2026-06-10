@@ -11,23 +11,23 @@
             <button class="formula-fx-btn-sm" @click="toggleFxPanel" :class="{active: showFxPanel}" ref="fxBtnRef">fx</button>
             <div class="formula-input-wrap-sm">
               <input class="formula-input-sm" v-model="formulaValue" @input="onFormulaInput" @keydown="onFormulaKeydown" @focus="onFormulaFocus" @blur="onFormulaBlur"
-                @keydown.enter="applyFormula" @keydown.escape="cancelFormula" placeholder="输入内容或公式..." />
+                @keydown.enter="applyFormula" @keydown.escape="cancelFormula" :placeholder="t('sheet.formulaPlaceholder')" />
             </div>
           </div>
-          <div class="ribbon-section-label">公式</div>
+          <div class="ribbon-section-label">{{ t('sheet.formulaLabel') }}</div>
         </div>
         <div class="rb-sep" />
 
         <div class="ribbon-section">
           <div class="ribbon-section-buttons">
-            <button class="rb-btn" :disabled="!canUndo" @click="undo" title="撤销 (Ctrl+Z)">
+            <button class="rb-btn" :disabled="!canUndo" @click="undo" :title="t('sheet.undoBtn')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10a3 3 0 010 6H8"/><path d="M6 5L3 8l3 3"/></svg>
             </button>
-            <button class="rb-btn" :disabled="!canRedo" @click="redo" title="重做 (Ctrl+Y)">
+            <button class="rb-btn" :disabled="!canRedo" @click="redo" :title="t('sheet.redoBtn')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M17 8H7a3 3 0 000 6h5"/><path d="M14 5l3 3-3 3"/></svg>
             </button>
           </div>
-          <div class="ribbon-section-label">撤销</div>
+          <div class="ribbon-section-label">{{ t('sheet.undoLabel') }}</div>
         </div>
         <div class="rb-sep" />
 
@@ -41,128 +41,128 @@
             </el-select>
           </div>
           <div class="ribbon-section-buttons">
-            <button class="rb-btn" :class="{active:getMetaProp('bold')}" @click="toggleFormat('bold')" title="加粗 (Ctrl+B)" style="font-weight:800;font-size:14px">B</button>
-            <button class="rb-btn" :class="{active:getMetaProp('italic')}" @click="toggleFormat('italic')" title="斜体 (Ctrl+I)" style="font-style:italic;font-family:serif;font-size:14px">I</button>
-            <button class="rb-btn" :class="{active:getMetaProp('underline')}" @click="toggleFormat('underline')" title="下划线 (Ctrl+U)" style="text-decoration:underline;font-size:13px">U</button>
-            <button class="rb-btn" :class="{active:getMetaProp('strike')}" @click="toggleFormat('strike')" title="删除线" style="text-decoration:line-through;font-size:12px">ab</button>
+            <button class="rb-btn" :class="{active:getMetaProp('bold')}" @click="toggleFormat('bold')" :title="t('sheet.bold')" style="font-weight:800;font-size:14px">B</button>
+            <button class="rb-btn" :class="{active:getMetaProp('italic')}" @click="toggleFormat('italic')" :title="t('sheet.italic')" style="font-style:italic;font-family:serif;font-size:14px">I</button>
+            <button class="rb-btn" :class="{active:getMetaProp('underline')}" @click="toggleFormat('underline')" :title="t('sheet.underline')" style="text-decoration:underline;font-size:13px">U</button>
+            <button class="rb-btn" :class="{active:getMetaProp('strike')}" @click="toggleFormat('strike')" :title="t('sheet.strikethrough')" style="text-decoration:line-through;font-size:12px">ab</button>
             <div class="rb-vsep" />
-            <div class="color-btn-wrap" title="字体颜色">
+            <div class="color-btn-wrap" :title="t('sheet.fontColor')">
               <button class="rb-btn" @click="($refs.textColorPicker as any)?.show()" style="font-weight:800;font-size:13px">A
                 <span class="color-indicator" :style="{background: cellTextColor || '#FF0000'}" />
               </button>
               <el-color-picker ref="textColorPicker" v-model="cellTextColor" @change="applyTextColor" size="small" :predefine="['#000000','#444444','#888888','#FF0000','#FF6600','#FFCC00','#33CC33','#00B0F0','#3366FF','#9933FF','#CC00CC','#C00000']" class="hidden-picker" />
             </div>
-            <div class="color-btn-wrap" title="填充颜色">
+            <div class="color-btn-wrap" :title="t('sheet.fillColor')">
               <button class="rb-btn" @click="($refs.bgColorPicker as any)?.show()" style="padding:0">
                 <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 14l4-10h1l4 10"/><path d="M4.5 11h5"/><rect x="13" y="4" width="4" height="6" rx="0.5" :fill="cellBgColor || '#FFFF00'" stroke="#888" stroke-width="0.8"/></svg>
               </button>
               <el-color-picker ref="bgColorPicker" v-model="cellBgColor" @change="applyBgColor" size="small" :predefine="['#FFFFFF','#FFFF00','#CCFFCC','#CCFFFF','#FFCCCC','#FFCCFF','#FFE0B2','#B3E5FC','#D1C4E9','#F8BBD0','#C8E6C9','#FFD700']" class="hidden-picker" />
             </div>
           </div>
-          <div class="ribbon-section-label">字体</div>
+          <div class="ribbon-section-label">{{ t('sheet.fontLabel') }}</div>
         </div>
         <div class="rb-sep" />
 
         <div class="ribbon-section">
           <div class="ribbon-section-buttons">
-            <el-dropdown trigger="click" @command="applyBorder" title="边框">
+            <el-dropdown trigger="click" @command="applyBorder" :title="t('sheet.borderLabel')">
               <button class="rb-btn">
                 <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="14" height="14" rx="0.5"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="10" y1="3" x2="10" y2="17"/></svg>
               </button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="all">全部边框</el-dropdown-item>
-                  <el-dropdown-item command="outer">外边框</el-dropdown-item>
-                  <el-dropdown-item command="none">无边框</el-dropdown-item>
-                  <el-dropdown-item command="top" divided>上边框</el-dropdown-item>
-                  <el-dropdown-item command="bottom">下边框</el-dropdown-item>
-                  <el-dropdown-item command="left">左边框</el-dropdown-item>
-                  <el-dropdown-item command="right">右边框</el-dropdown-item>
+                  <el-dropdown-item command="all">{{ t('sheet.borderAllBtn') }}</el-dropdown-item>
+                  <el-dropdown-item command="outer">{{ t('sheet.borderOuterBtn') }}</el-dropdown-item>
+                  <el-dropdown-item command="none">{{ t('sheet.borderNoneBtn') }}</el-dropdown-item>
+                  <el-dropdown-item command="top" divided>{{ t('sheet.borderTop') }}</el-dropdown-item>
+                  <el-dropdown-item command="bottom">{{ t('sheet.borderBottom') }}</el-dropdown-item>
+                  <el-dropdown-item command="left">{{ t('sheet.borderLeft') }}</el-dropdown-item>
+                  <el-dropdown-item command="right">{{ t('sheet.borderRight') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <button class="rb-btn" @click="increaseIndent" title="增加缩进">
+            <button class="rb-btn" @click="increaseIndent" :title="t('sheet.increaseIndent')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="7" y1="4" x2="17" y2="4"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/><path d="M2 4v12"/><path d="M2 10l3-3M2 10l3 3"/></svg>
             </button>
-            <button class="rb-btn" @click="decreaseIndent" title="减少缩进">
+            <button class="rb-btn" @click="decreaseIndent" :title="t('sheet.decreaseIndent')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="7" y1="4" x2="17" y2="4"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/><path d="M5 4v12"/><path d="M5 10l-3-3M5 10l-3 3"/></svg>
             </button>
           </div>
-          <div class="ribbon-section-label">边框</div>
+          <div class="ribbon-section-label">{{ t('sheet.borderLabel') }}</div>
         </div>
         <div class="rb-sep" />
 
         <div class="ribbon-section">
           <div class="ribbon-section-buttons">
-            <button class="rb-btn" :class="{active:getMetaProp('align')==='left'}" @click="setAlign('left')" title="左对齐">
+            <button class="rb-btn" :class="{active:getMetaProp('align')==='left'}" @click="setAlign('left')" :title="t('sheet.alignLeft')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="13" y2="10"/><line x1="3" y1="15" x2="15" y2="15"/></svg>
             </button>
-            <button class="rb-btn" :class="{active:getMetaProp('align')==='center'}" @click="setAlign('center')" title="居中对齐">
+            <button class="rb-btn" :class="{active:getMetaProp('align')==='center'}" @click="setAlign('center')" :title="t('sheet.alignCenter')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="3" y1="5" x2="17" y2="5"/><line x1="5" y1="10" x2="15" y2="10"/><line x1="4" y1="15" x2="16" y2="15"/></svg>
             </button>
-            <button class="rb-btn" :class="{active:getMetaProp('align')==='right'}" @click="setAlign('right')" title="右对齐">
+            <button class="rb-btn" :class="{active:getMetaProp('align')==='right'}" @click="setAlign('right')" :title="t('sheet.alignRight')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="3" y1="5" x2="17" y2="5"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="5" y1="15" x2="17" y2="15"/></svg>
             </button>
-            <button class="rb-btn" :class="{active:getMetaProp('wrap')}" @click="toggleWrap" title="自动换行">
+            <button class="rb-btn" :class="{active:getMetaProp('wrap')}" @click="toggleWrap" :title="t('sheet.wrap')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 5h12M4 10h8M4 15h10"/><path d="M16 10v0" stroke-width="2"/></svg>
             </button>
-            <button class="rb-btn" @click="toggleBorder('all')" title="所有边框">
+            <button class="rb-btn" @click="toggleBorder('all')" :title="t('sheet.borderAll')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="14" height="14"/><line x1="10" y1="3" x2="10" y2="17"/><line x1="3" y1="10" x2="17" y2="10"/></svg>
             </button>
-            <button class="rb-btn" @click="toggleBorder('outer')" title="外边框">
+            <button class="rb-btn" @click="toggleBorder('outer')" :title="t('sheet.borderOuter')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="14" height="14" stroke-width="2"/></svg>
             </button>
-            <button class="rb-btn" @click="toggleBorder('none')" title="清除边框">
+            <button class="rb-btn" @click="toggleBorder('none')" :title="t('sheet.borderNone')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="14" height="14" stroke-dasharray="2 2"/></svg>
             </button>
-            <button class="rb-btn" @click="setRotate(-90)" title="竖排文字">
+            <button class="rb-btn" @click="setRotate(-90)" :title="t('sheet.verticalText')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M10 17V3"/><path d="M7 6l3-3 3 3"/></svg>
             </button>
-            <button class="rb-btn" @click="setRotate(-45)" title="倾斜45°">
+            <button class="rb-btn" @click="setRotate(-45)" :title="t('sheet.tilt45')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 16L16 4"/></svg>
             </button>
-            <button class="rb-btn" @click="setRotate(0)" title="正常角度">
+            <button class="rb-btn" @click="setRotate(0)" :title="t('sheet.normalAngle')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 10h14"/><path d="M14 7l3 3-3 3"/></svg>
             </button>
             <div class="rb-vsep" />
-            <button class="rb-btn" :class="{active:getMetaProp('valign')==='top'}" @click="setVAlign('top')" title="顶端对齐" style="font-size:10px">
+            <button class="rb-btn" :class="{active:getMetaProp('valign')==='top'}" @click="setVAlign('top')" :title="t('sheet.valignTop')" style="font-size:10px">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="3" y1="3" x2="17" y2="3"/><rect x="5" y="5" width="10" height="4" rx="0.5"/></svg>
             </button>
-            <button class="rb-btn" :class="{active:getMetaProp('valign')==='middle'||!getMetaProp('valign')}" @click="setVAlign('middle')" title="垂直居中" style="font-size:10px">
+            <button class="rb-btn" :class="{active:getMetaProp('valign')==='middle'||!getMetaProp('valign')}" @click="setVAlign('middle')" :title="t('sheet.valignMiddle')" style="font-size:10px">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="3" y1="3" x2="17" y2="3"/><rect x="5" y="8" width="10" height="4" rx="0.5"/></svg>
             </button>
-            <button class="rb-btn" :class="{active:getMetaProp('valign')==='bottom'}" @click="setVAlign('bottom')" title="底端对齐" style="font-size:10px">
+            <button class="rb-btn" :class="{active:getMetaProp('valign')==='bottom'}" @click="setVAlign('bottom')" :title="t('sheet.valignBottom')" style="font-size:10px">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="3" y1="3" x2="17" y2="3"/><rect x="5" y="11" width="10" height="4" rx="0.5"/></svg>
             </button>
           </div>
-          <div class="ribbon-section-label">对齐方式</div>
+          <div class="ribbon-section-label">{{ t('sheet.alignLabel') }}</div>
         </div>
         <div class="rb-sep" />
 
         <div class="ribbon-section">
           <div class="ribbon-section-buttons">
             <el-select size="small" v-model="currentColType" @change="setColType" class="rb-select" style="width:72px">
-              <el-option label="常规" value="auto" />
-              <el-option label="文本" value="text" />
-              <el-option label="数字" value="number" />
-              <el-option label="百分比" value="percent" />
-              <el-option label="货币 ¥" value="currency" />
-              <el-option label="日期" value="date" />
-              <el-option label="科学" value="scientific" />
+              <el-option :label="t('sheet.formatGeneral')" value="auto" />
+              <el-option :label="t('sheet.formatText')" value="text" />
+              <el-option :label="t('sheet.formatNumber')" value="number" />
+              <el-option :label="t('sheet.formatPercent')" value="percent" />
+              <el-option :label="t('sheet.formatCurrency')" value="currency" />
+              <el-option :label="t('sheet.formatDate')" value="date" />
+              <el-option :label="t('sheet.formatScientific')" value="scientific" />
             </el-select>
           </div>
           <div class="ribbon-section-buttons">
-            <button class="rb-btn" @click="changePrecision(-1)" title="减少小数位" style="font-size:11px">.0→</button>
-            <button class="rb-btn" @click="changePrecision(1)" title="增加小数位" style="font-size:11px">.00→</button>
+            <button class="rb-btn" @click="changePrecision(-1)" :title="t('sheet.decreaseDecimal')" style="font-size:11px">.0→</button>
+            <button class="rb-btn" @click="changePrecision(1)" :title="t('sheet.increaseDecimal')" style="font-size:11px">.00→</button>
           </div>
-          <div class="ribbon-section-label">数字</div>
+          <div class="ribbon-section-label">{{ t('sheet.numberLabel') }}</div>
         </div>
         <div class="rb-sep" />
 
         <!-- 样式 -->
         <div class="ribbon-section">
           <div class="ribbon-section-buttons">
-            <el-dropdown trigger="click" @command="applyStylePreset" title="单元格样式">
+            <el-dropdown trigger="click" @command="applyStylePreset" :title="t('sheet.cellStyle')">
               <button class="rb-btn" style="flex-direction:column;gap:0;padding:1px 4px">
                 <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.2" style="width:18px;height:18px"><rect x="2" y="2" width="16" height="7" fill="currentColor" opacity="0.15"/><rect x="2" y="11" width="16" height="7"/></svg>
               </button>
@@ -172,109 +172,109 @@
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <button class="rb-btn" @click="showCondDialog = true" title="条件格式">
+            <button class="rb-btn" @click="showCondDialog = true" :title="t('sheet.condFormat')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="16" height="16" rx="1"/><line x1="2" y1="7.5" x2="18" y2="7.5"/><line x1="2" y1="13" x2="18" y2="13"/><rect x="2" y="2" width="10" height="5.5" fill="currentColor" opacity="0.15"/></svg>
             </button>
           </div>
-          <div class="ribbon-section-label">样式</div>
+          <div class="ribbon-section-label">{{ t('sheet.styleLabel') }}</div>
         </div>
         <div class="rb-sep" />
 
         <!-- 单元格 -->
         <div class="ribbon-section">
           <div class="ribbon-section-buttons">
-            <el-dropdown trigger="click" title="插入">
+            <el-dropdown trigger="click" :title="t('sheet.insertLabel')">
               <button class="rb-btn">
                 <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="16" height="16" rx="1"/><line x1="10" y1="6" x2="10" y2="14"/><line x1="6" y1="10" x2="14" y2="10"/></svg>
               </button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item @click="addRowAbove">上方插入行</el-dropdown-item>
-                  <el-dropdown-item @click="addRowBelow">下方插入行</el-dropdown-item>
-                  <el-dropdown-item @click="addColLeft" divided>左侧插入列</el-dropdown-item>
-                  <el-dropdown-item @click="addColRight">右侧插入列</el-dropdown-item>
+                  <el-dropdown-item @click="addRowAbove">{{ t('sheet.insertRowAbove') }}</el-dropdown-item>
+                  <el-dropdown-item @click="addRowBelow">{{ t('sheet.insertRowBelow') }}</el-dropdown-item>
+                  <el-dropdown-item @click="addColLeft" divided>{{ t('sheet.insertColLeft') }}</el-dropdown-item>
+                  <el-dropdown-item @click="addColRight">{{ t('sheet.insertColRight') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <button class="rb-btn" @click="deleteRow" title="删除行">
+            <button class="rb-btn" @click="deleteRow" :title="t('sheet.deleteRowBtn')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="16" height="16" rx="1"/><line x1="6" y1="10" x2="14" y2="10"/></svg>
             </button>
-            <button class="rb-btn" @click="toggleMerge" title="合并单元格">
+            <button class="rb-btn" @click="toggleMerge" :title="t('sheet.mergeCellsBtn')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="4" width="7" height="5" rx="0.5"/><rect x="11" y="4" width="7" height="5" rx="0.5"/><rect x="2" y="11" width="16" height="5" rx="0.5"/></svg>
             </button>
           </div>
-          <div class="ribbon-section-label">单元格</div>
+          <div class="ribbon-section-label">{{ t('sheet.cellLabel') }}</div>
         </div>
         <div class="rb-sep" />
 
         <!-- 编辑 -->
         <div class="ribbon-section">
           <div class="ribbon-section-buttons">
-            <button class="rb-btn" :class="{active:showSearchDialog}" @click="showSearchDialog = !showSearchDialog" title="查找替换 (Ctrl+F)">
+            <button class="rb-btn" :class="{active:showSearchDialog}" @click="showSearchDialog = !showSearchDialog" :title="t('sheet.findReplaceBtn')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="9" r="5.5"/><line x1="13" y1="13" x2="17" y2="17"/></svg>
             </button>
-            <el-dropdown trigger="click" @command="toggleFreeze" title="冻结窗格">
+            <el-dropdown trigger="click" @command="toggleFreeze" :title="t('sheet.freezePane')">
               <button class="rb-btn">
                 <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="16" height="16" rx="0.5"/><line x1="2" y1="7" x2="18" y2="7"/><line x1="7" y1="2" x2="7" y2="18"/></svg>
               </button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="row">{{ freezeRows > 0 && freezeCols === 0 ? '✓ ' : '' }}冻结首行</el-dropdown-item>
-                  <el-dropdown-item command="col">{{ freezeCols > 0 && freezeRows === 0 ? '✓ ' : '' }}冻结首列</el-dropdown-item>
-                  <el-dropdown-item command="here">冻结到当前位置</el-dropdown-item>
-                  <el-dropdown-item command="none" divided>取消冻结</el-dropdown-item>
+                  <el-dropdown-item command="row">{{ freezeRows > 0 && freezeCols === 0 ? '✓ ' : '' }}{{ t('sheet.freezeFirstRow') }}</el-dropdown-item>
+                  <el-dropdown-item command="col">{{ freezeCols > 0 && freezeRows === 0 ? '✓ ' : '' }}{{ t('sheet.freezeFirstCol') }}</el-dropdown-item>
+                  <el-dropdown-item command="here">{{ t('sheet.freezeToHere') }}</el-dropdown-item>
+                  <el-dropdown-item command="none" divided>{{ t('sheet.cancelFreeze') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
           </div>
-          <div class="ribbon-section-label">编辑</div>
+          <div class="ribbon-section-label">{{ t('sheet.editLabel') }}</div>
         </div>
         <div class="rb-sep" />
 
         <!-- 数据 -->
         <div class="ribbon-section">
           <div class="ribbon-section-buttons">
-            <button class="rb-btn" @click="openSplitColDialog" title="分列">
+            <button class="rb-btn" @click="openSplitColDialog" :title="t('sheet.splitCol')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="3" height="14" rx="0.3"/><line x1="8" y1="5" x2="8" y2="15" stroke-dasharray="2 1.5"/><rect x="11" y="3" width="3" height="14" rx="0.3"/><rect x="16" y="3" width="3" height="14" rx="0.3"/></svg>
             </button>
-            <button class="rb-btn" @click="removeDuplicates" title="删除重复项">
+            <button class="rb-btn" @click="removeDuplicates" :title="t('sheet.removeDuplicates')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="16" height="14" rx="1"/><line x1="2" y1="8" x2="18" y2="8"/><line x1="2" y1="13" x2="18" y2="13"/><line x1="8" y1="5" x2="12" y2="17" stroke="red" stroke-width="1"/></svg>
             </button>
-            <button class="rb-btn" @click="openPivotDialog" title="数据透视">
+            <button class="rb-btn" @click="openPivotDialog" :title="t('sheet.pivotTable')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="8" height="8" fill="currentColor" opacity="0.15"/><rect x="10" y="2" width="8" height="8"/><rect x="2" y="10" width="8" height="8"/><rect x="10" y="10" width="8" height="8" fill="currentColor" opacity="0.15"/></svg>
             </button>
           </div>
-          <div class="ribbon-section-label">数据</div>
+          <div class="ribbon-section-label">{{ t('sheet.dataLabel') }}</div>
         </div>
         <div class="rb-sep" />
 
         <!-- 图表/导出 -->
         <div class="ribbon-section">
           <div class="ribbon-section-buttons">
-            <button class="rb-btn" :class="{active:showChart}" @click="showChart = !showChart" title="插入图表">
+            <button class="rb-btn" :class="{active:showChart}" @click="showChart = !showChart" :title="t('sheet.insertChart')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="11" width="3.5" height="7"/><rect x="8" y="6" width="3.5" height="12"/><rect x="14" y="3" width="3.5" height="15"/></svg>
             </button>
-            <button class="rb-btn" @click="exportCSV" title="导出CSV">
+            <button class="rb-btn" @click="exportCSV" :title="t('sheet.exportCSV')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 3h8l4 4v10a2 2 0 01-2 2H6a2 2 0 01-2-2V3z"/><path d="M12 3v4h4"/><line x1="7" y1="11" x2="13" y2="11"/><line x1="7" y1="14" x2="11" y2="14"/></svg>
             </button>
-            <button class="rb-btn" @click="printSheet" title="打印">
+            <button class="rb-btn" @click="printSheet" :title="t('sheet.printBtn')">
               <svg class="rb-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="7" width="12" height="8" rx="1"/><path d="M6 7V3h8v4"/><path d="M6 11h8"/><path d="M6 15v2h8v-2"/></svg>
             </button>
           </div>
-          <div class="ribbon-section-label">图表</div>
+          <div class="ribbon-section-label">{{ t('sheet.chartLabel') }}</div>
         </div>
       </div>
     </div>
 
     <!-- Sheet Tab 右键菜单 -->
     <div v-if="tabMenu.show" class="ctx-menu" :style="{ left: tabMenu.x + 'px', top: tabMenu.y + 'px' }">
-      <div class="ctx-item" @click="renameSheet(tabMenu.idx); tabMenu.show = false">重命名</div>
-      <div class="ctx-item" @click="setTabColor('#1a73e8')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#1a73e8;vertical-align:middle;margin-right:4px"></span>蓝色</div>
-      <div class="ctx-item" @click="setTabColor('#34a853')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#34a853;vertical-align:middle;margin-right:4px"></span>绿色</div>
-      <div class="ctx-item" @click="setTabColor('#ea4335')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ea4335;vertical-align:middle;margin-right:4px"></span>红色</div>
-      <div class="ctx-item" @click="setTabColor('#fbbc04')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#fbbc04;vertical-align:middle;margin-right:4px"></span>黄色</div>
-      <div class="ctx-item" @click="setTabColor('#9334e6')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#9334e6;vertical-align:middle;margin-right:4px"></span>紫色</div>
-      <div class="ctx-item" @click="setTabColor('')">无颜色</div>
+      <div class="ctx-item" @click="renameSheet(tabMenu.idx); tabMenu.show = false">{{ t('sheet.tabRename') }}</div>
+      <div class="ctx-item" @click="setTabColor('#1a73e8')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#1a73e8;vertical-align:middle;margin-right:4px"></span>{{ t('sheet.tabColorBlue') }}</div>
+      <div class="ctx-item" @click="setTabColor('#34a853')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#34a853;vertical-align:middle;margin-right:4px"></span>{{ t('sheet.tabColorGreen') }}</div>
+      <div class="ctx-item" @click="setTabColor('#ea4335')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ea4335;vertical-align:middle;margin-right:4px"></span>{{ t('sheet.tabColorRed') }}</div>
+      <div class="ctx-item" @click="setTabColor('#fbbc04')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#fbbc04;vertical-align:middle;margin-right:4px"></span>{{ t('sheet.tabColorYellow') }}</div>
+      <div class="ctx-item" @click="setTabColor('#9334e6')"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#9334e6;vertical-align:middle;margin-right:4px"></span>{{ t('sheet.tabColorPurple') }}</div>
+      <div class="ctx-item" @click="setTabColor('')">{{ t('sheet.noColor') }}</div>
     </div>
 
     <!-- 表格区域 -->
@@ -303,11 +303,11 @@
                   <span class="hdr-menu" @click.stop>▾</span>
                   <template #dropdown>
                     <el-dropdown-menu>
-                      <el-dropdown-item command="sort-asc">↑ 升序排列</el-dropdown-item>
-                      <el-dropdown-item command="sort-desc">↓ 降序排列</el-dropdown-item>
-                      <el-dropdown-item command="sort-multi" divided>多列排序...</el-dropdown-item>
-                      <el-dropdown-item command="sort-clear">取消排序</el-dropdown-item>
-                      <el-dropdown-item command="filter" divided>{{ filterActiveCols.has(c - 1) ? '✓ ' : '' }}筛选此列</el-dropdown-item>
+                      <el-dropdown-item command="sort-asc">↑ {{ t('sheet.sortAsc') }}</el-dropdown-item>
+                      <el-dropdown-item command="sort-desc">↓ {{ t('sheet.sortDesc') }}</el-dropdown-item>
+                      <el-dropdown-item command="sort-multi" divided>{{ t('sheet.multiSort') }}</el-dropdown-item>
+                      <el-dropdown-item command="sort-clear">{{ t('sheet.cancelSort') }}</el-dropdown-item>
+                      <el-dropdown-item command="filter" divided>{{ filterActiveCols.has(c - 1) ? '✓ ' : '' }}{{ t('sheet.filterThisCol') }}</el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
@@ -379,51 +379,51 @@
 
     <!-- 右键菜单 -->
     <div v-if="contextMenu.show" class="ctx-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
-      <div class="ctx-item" @click="ctxCut"><span class="ctx-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><circle cx="6" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8.5" y1="7.5" x2="16" y2="14" stroke="currentColor" stroke-width="1.5"/><line x1="8.5" y1="12.5" x2="16" y2="6" stroke="currentColor" stroke-width="1.5"/></svg></span> 剪切<span class="ctx-key">Ctrl+X</span></div>
-      <div class="ctx-item" @click="ctxCopy"><span class="ctx-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><rect x="6" y="2" width="12" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 6v12h12" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span> 复制<span class="ctx-key">Ctrl+C</span></div>
-      <div class="ctx-item" @click="ctxPaste"><span class="ctx-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M14 2H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/></svg></span> 粘贴<span class="ctx-key">Ctrl+V</span></div>
-      <div class="ctx-item" @click="ctxPasteValues">只粘贴值</div>
-      <div class="ctx-item" @click="ctxPasteFormat">只粘贴格式</div>
-      <div class="ctx-item" @click="ctxPasteTranspose">转置粘贴</div>
+      <div class="ctx-item" @click="ctxCut"><span class="ctx-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><circle cx="6" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8.5" y1="7.5" x2="16" y2="14" stroke="currentColor" stroke-width="1.5"/><line x1="8.5" y1="12.5" x2="16" y2="6" stroke="currentColor" stroke-width="1.5"/></svg></span> {{ t('sheet.ctxCut') }}<span class="ctx-key">Ctrl+X</span></div>
+      <div class="ctx-item" @click="ctxCopy"><span class="ctx-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><rect x="6" y="2" width="12" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 6v12h12" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></span> {{ t('sheet.ctxCopy') }}<span class="ctx-key">Ctrl+C</span></div>
+      <div class="ctx-item" @click="ctxPaste"><span class="ctx-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M14 2H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/></svg></span> {{ t('sheet.ctxPaste') }}<span class="ctx-key">Ctrl+V</span></div>
+      <div class="ctx-item" @click="ctxPasteValues">{{ t('sheet.ctxPasteValues') }}</div>
+      <div class="ctx-item" @click="ctxPasteFormat">{{ t('sheet.ctxPasteFormat') }}</div>
+      <div class="ctx-item" @click="ctxPasteTranspose">{{ t('sheet.ctxPasteTranspose') }}</div>
       <div class="ctx-sep" />
-      <div class="ctx-item" @click="ctxInsertRowAbove">↑ 上方插入行</div>
-      <div class="ctx-item" @click="ctxInsertRowBelow">↓ 下方插入行</div>
-      <div class="ctx-item" @click="ctxInsertColLeft">← 左侧插入列</div>
-      <div class="ctx-item" @click="ctxInsertColRight">→ 右侧插入列</div>
+      <div class="ctx-item" @click="ctxInsertRowAbove">↑ {{ t('sheet.ctxInsertRowAbove') }}</div>
+      <div class="ctx-item" @click="ctxInsertRowBelow">↓ {{ t('sheet.ctxInsertRowBelow') }}</div>
+      <div class="ctx-item" @click="ctxInsertColLeft">← {{ t('sheet.ctxInsertColLeft') }}</div>
+      <div class="ctx-item" @click="ctxInsertColRight">→ {{ t('sheet.ctxInsertColRight') }}</div>
       <div class="ctx-sep" />
-      <div class="ctx-item" @click="ctxDeleteRow"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg>删除行</div>
-      <div class="ctx-item" @click="ctxDeleteCol"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg>删除列</div>
-      <div class="ctx-item" @click="ctxHideRows">隐藏行</div>
-      <div class="ctx-item" @click="ctxHideCols">隐藏列</div>
-      <div class="ctx-item" @click="ctxUnhideAll">显示所有隐藏</div>
+      <div class="ctx-item" @click="ctxDeleteRow"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg>{{ t('sheet.ctxDeleteRow') }}</div>
+      <div class="ctx-item" @click="ctxDeleteCol"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg>{{ t('sheet.ctxDeleteCol') }}</div>
+      <div class="ctx-item" @click="ctxHideRows">{{ t('sheet.ctxHideRows') }}</div>
+      <div class="ctx-item" @click="ctxHideCols">{{ t('sheet.ctxHideCols') }}</div>
+      <div class="ctx-item" @click="ctxUnhideAll">{{ t('sheet.ctxUnhideAll') }}</div>
       <div class="ctx-sep" />
-      <div class="ctx-item" @click="ctxClearCells">清空内容</div>
-      <div class="ctx-item" @click="ctxMergeToggle">{{ hasMerge ? '取消合并' : '合并单元格' }}</div>
+      <div class="ctx-item" @click="ctxClearCells">{{ t('sheet.ctxClearContent') }}</div>
+      <div class="ctx-item" @click="ctxMergeToggle">{{ hasMerge ? t('sheet.ctxUnmerge') : t('sheet.ctxMergeToggle') }}</div>
       <div class="ctx-sep" />
-      <div class="ctx-item" @click="ctxAddComment"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M18 10c0 3.866-3.582 7-8 7a8.8 8.8 0 01-2.808-.464l-3.508 1.168A1 1 0 012.28 16.28l.88-2.638C2.064 12.474 2 11.26 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z"/></svg>{{ getComment(ctxRow, ctxCol) ? '编辑批注' : '添加批注' }}</div>
-      <div class="ctx-item" @click="ctxSetLink"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M12.586 4.586a2 2 0 112.828 2.828l-3.879 3.879a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3.879-3.879a4 4 0 00-5.656-5.656L8.12 5.464a1 1 0 001.414 1.414l3.052-3.292z"/></svg> {{ getCellMeta(ctxRow, ctxCol).link ? '编辑链接' : '插入链接' }}</div>
-      <div v-if="getComment(ctxRow, ctxCol)" class="ctx-item" @click="ctxDeleteComment"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg>删除批注</div>
+      <div class="ctx-item" @click="ctxAddComment"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M18 10c0 3.866-3.582 7-8 7a8.8 8.8 0 01-2.808-.464l-3.508 1.168A1 1 0 012.28 16.28l.88-2.638C2.064 12.474 2 11.26 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z"/></svg>{{ getComment(ctxRow, ctxCol) ? t('sheet.ctxEditComment') : t('sheet.ctxAddComment') }}</div>
+      <div class="ctx-item" @click="ctxSetLink"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M12.586 4.586a2 2 0 112.828 2.828l-3.879 3.879a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3.879-3.879a4 4 0 00-5.656-5.656L8.12 5.464a1 1 0 001.414 1.414l3.052-3.292z"/></svg> {{ getCellMeta(ctxRow, ctxCol).link ? t('sheet.ctxEditLink') : t('sheet.ctxInsertLink') }}</div>
+      <div v-if="getComment(ctxRow, ctxCol)" class="ctx-item" @click="ctxDeleteComment"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg>{{ t('sheet.ctxDeleteComment') }}</div>
       <div class="ctx-sep" />
-      <div class="ctx-item" @click="ctxSetValidation"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg> 数据验证</div>
-      <div class="ctx-item" @click="ctxToggleLock"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg> {{ getCellMeta(ctxRow, ctxCol).locked ? '解锁单元格' : '锁定单元格' }}</div>
-      <div class="ctx-item" @click="ctxToggleProtect"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg> {{ sheet.protected ? '取消保护' : '保护工作表' }}</div>
-      <div class="ctx-item" @click="ctxGroupRows"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg> 分组折叠</div>
+      <div class="ctx-item" @click="ctxSetValidation"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg> {{ t('sheet.ctxDataValidation') }}</div>
+      <div class="ctx-item" @click="ctxToggleLock"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg> {{ getCellMeta(ctxRow, ctxCol).locked ? t('sheet.ctxUnlockCell') : t('sheet.ctxLockCell') }}</div>
+      <div class="ctx-item" @click="ctxToggleProtect"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg> {{ sheet.protected ? t('sheet.ctxUnprotectSheet') : t('sheet.ctxProtectSheet') }}</div>
+      <div class="ctx-item" @click="ctxGroupRows"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg> {{ t('sheet.ctxGroupRows') }}</div>
     </div>
 
     <!-- 图表面板 -->
     <div v-if="showChart" class="chart-panel">
       <div class="chart-bar">
         <el-select v-model="chartType" size="small" style="width:100px">
-          <el-option label="柱状图" value="bar" /><el-option label="折线图" value="line" />
-          <el-option label="饼图" value="pie" /><el-option label="散点图" value="scatter" />
-          <el-option label="面积图" value="area" />
+          <el-option :label="t('sheet.chartTypeBar')" value="bar" /><el-option :label="t('sheet.chartTypeLine')" value="line" />
+          <el-option :label="t('sheet.chartTypePie')" value="pie" /><el-option :label="t('sheet.chartTypeScatter')" value="scatter" />
+          <el-option :label="t('sheet.chartTypeArea')" value="area" />
         </el-select>
         <el-select v-model="chartDataRange" size="small" style="width:120px">
-          <el-option label="当前列" value="col" /><el-option label="选中区域" value="selection" />
-          <el-option label="全部" value="all" />
+          <el-option :label="t('sheet.chartDataCol')" value="col" /><el-option :label="t('sheet.chartDataSelection')" value="selection" />
+          <el-option :label="t('sheet.chartDataAll')" value="all" />
         </el-select>
-        <input v-model="chartTitle" placeholder="图表标题" class="chart-title" />
-        <button class="tb-btn" @click="exportChart">导出PNG</button>
+        <input v-model="chartTitle" :placeholder="t('sheet.chartTitlePlaceholder')" class="chart-title" />
+        <button class="tb-btn" @click="exportChart">{{ t('sheet.exportPng') }}</button>
         <button class="tb-btn" @click="showChart = false">✕</button>
       </div>
       <div class="chart-canvas-wrap">
@@ -433,206 +433,206 @@
     </div>
 
     <!-- 条件格式对话框 -->
-    <el-dialog v-model="showCondDialog" title="条件格式" width="480px">
+    <el-dialog v-model="showCondDialog" :title="t('sheet.condFormatTitle')" width="480px">
       <el-tabs>
-        <el-tab-pane label="规则">
+        <el-tab-pane :label="t('sheet.condRulesTab')">
           <div v-for="(rule, i) in condRules" :key="i" style="display:flex;align-items:center;gap:8px;padding:4px 0">
-            <span style="flex:1">当 {{ rule.condition }} {{ rule.value }} 时</span>
+            <span style="flex:1">{{ t('sheet.condWhen', [rule.condition, rule.value]) }}</span>
             <el-color-picker v-model="rule.bgColor" size="small" />
-            <el-button size="small" text @click="condRules.splice(i, 1)">删除</el-button>
+            <el-button size="small" text @click="condRules.splice(i, 1)">{{ t('common.delete') }}</el-button>
           </div>
           <el-divider />
           <div style="display:flex;align-items:center;gap:8px">
             <el-select v-model="newCond.condition" size="small" style="width:100px">
-              <el-option label="大于" value=">" /><el-option label="小于" value="<" />
-              <el-option label="等于" value="=" /><el-option label="不等于" value="!=" />
-              <el-option label="包含" value="contains" />
+              <el-option :label="t('sheet.condGreater')" value=">" /><el-option :label="t('sheet.condLess')" value="<" />
+              <el-option :label="t('sheet.condEqual')" value="=" /><el-option :label="t('sheet.condNotEqual')" value="!=" />
+              <el-option :label="t('sheet.condContains')" value="contains" />
             </el-select>
-            <el-input v-model="newCond.value" size="small" style="width:80px" placeholder="值" />
+            <el-input v-model="newCond.value" size="small" style="width:80px" :placeholder="t('sheet.condValuePlaceholder')" />
             <el-color-picker v-model="newCond.bgColor" size="small" />
-            <el-button size="small" type="primary" @click="addCondRule">添加</el-button>
+            <el-button size="small" type="primary" @click="addCondRule">{{ t('sheet.addRule') }}</el-button>
           </div>
         </el-tab-pane>
-        <el-tab-pane label="色阶">
+        <el-tab-pane :label="t('sheet.condScaleTab')">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-            <span>2色：</span><el-color-picker v-model="condScale2Min" size="small" /><span>→</span><el-color-picker v-model="condScale2Max" size="small" />
-            <el-button size="small" type="primary" @click="applyCondScale2">应用</el-button>
+            <span>{{ t('sheet.scale2Color') }}</span><el-color-picker v-model="condScale2Min" size="small" /><span>→</span><el-color-picker v-model="condScale2Max" size="small" />
+            <el-button size="small" type="primary" @click="applyCondScale2">{{ t('sheet.applyBtn') }}</el-button>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
-            <span>3色：</span><el-color-picker v-model="condScale3Min" size="small" /><span>→</span><el-color-picker v-model="condScale3Mid" size="small" /><span>→</span><el-color-picker v-model="condScale3Max" size="small" />
-            <el-button size="small" type="primary" @click="applyCondScale">应用</el-button>
+            <span>{{ t('sheet.scale3Color') }}</span><el-color-picker v-model="condScale3Min" size="small" /><span>→</span><el-color-picker v-model="condScale3Mid" size="small" /><span>→</span><el-color-picker v-model="condScale3Max" size="small" />
+            <el-button size="small" type="primary" @click="applyCondScale">{{ t('sheet.applyBtn') }}</el-button>
           </div>
         </el-tab-pane>
-        <el-tab-pane label="数据条">
+        <el-tab-pane :label="t('sheet.condDataBarTab')">
           <div style="display:flex;align-items:center;gap:8px">
-            <span>颜色：</span><el-color-picker v-model="condDataBarColor" size="small" />
-            <el-button size="small" type="primary" @click="applyDataBar">应用到选区</el-button>
+            <span>{{ t('sheet.dataBarColor') }}</span><el-color-picker v-model="condDataBarColor" size="small" />
+            <el-button size="small" type="primary" @click="applyDataBar">{{ t('sheet.applyToSelection') }}</el-button>
           </div>
         </el-tab-pane>
-        <el-tab-pane label="图标集">
+        <el-tab-pane :label="t('sheet.condIconSetTab')">
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <el-button size="small" @click="applyIconSet('arrows')">▲ → ▼ 箭头</el-button>
-            <el-button size="small" @click="applyIconSet('flags')">⚑ 旗帜</el-button>
-            <el-button size="small" @click="applyIconSet('traffic')">●●● 红绿灯</el-button>
+            <el-button size="small" @click="applyIconSet('arrows')">{{ t('sheet.iconArrows') }}</el-button>
+            <el-button size="small" @click="applyIconSet('flags')">{{ t('sheet.iconFlags') }}</el-button>
+            <el-button size="small" @click="applyIconSet('traffic')">{{ t('sheet.iconTraffic') }}</el-button>
           </div>
-          <div style="color:#999;font-size:12px;margin-top:8px">根据数值大小自动分配图标，应用到当前选区</div>
+          <div style="color:#999;font-size:12px;margin-top:8px">{{ t('sheet.iconSetHint') }}</div>
         </el-tab-pane>
       </el-tabs>
     </el-dialog>
 
     <!-- 查找替换 -->
-    <el-dialog v-model="showSearchDialog" title="查找和替换" width="400px" :close-on-click-modal="false">
-      <el-input v-model="searchText" placeholder="查找内容" size="small" style="margin-bottom:8px" @keydown.enter="findNext">
-        <template #append><el-button @click="findNext" size="small">查找下一个</el-button></template>
+    <el-dialog v-model="showSearchDialog" :title="t('sheet.findReplaceTitle')" width="400px" :close-on-click-modal="false">
+      <el-input v-model="searchText" :placeholder="t('sheet.findPlaceholder')" size="small" style="margin-bottom:8px" @keydown.enter="findNext">
+        <template #append><el-button @click="findNext" size="small">{{ t('sheet.findNext') }}</el-button></template>
       </el-input>
-      <el-input v-model="replaceText" placeholder="替换为" size="small">
+      <el-input v-model="replaceText" :placeholder="t('sheet.replacePlaceholder')" size="small">
         <template #append>
-          <el-button @click="replaceOne" size="small">替换</el-button>
-          <el-button @click="replaceAll" size="small">全部替换</el-button>
+          <el-button @click="replaceOne" size="small">{{ t('sheet.replaceBtn') }}</el-button>
+          <el-button @click="replaceAll" size="small">{{ t('sheet.replaceAllBtn') }}</el-button>
         </template>
       </el-input>
       <div v-if="searchResult" style="color:#999;font-size:12px;margin-top:4px">{{ searchResult }}</div>
     </el-dialog>
 
     <!-- 批注编辑 -->
-    <el-dialog v-model="showCommentDialog" title="批注" width="360px">
-      <el-input v-model="commentText" type="textarea" :rows="4" placeholder="批注内容..." />
+    <el-dialog v-model="showCommentDialog" :title="t('sheet.commentTitle')" width="360px">
+      <el-input v-model="commentText" type="textarea" :rows="4" :placeholder="t('sheet.commentPlaceholder')" />
       <template #footer>
-        <el-button size="small" @click="showCommentDialog = false">取消</el-button>
-        <el-button size="small" type="primary" @click="saveComment">保存</el-button>
+        <el-button size="small" @click="showCommentDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button size="small" type="primary" @click="saveComment">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 链接编辑 -->
-    <el-dialog v-model="showLinkDialog" title="插入链接" width="400px">
+    <el-dialog v-model="showLinkDialog" :title="t('sheet.insertLinkTitle')" width="400px">
       <el-input v-model="linkText" placeholder="https://..." />
       <template #footer>
-        <el-button size="small" @click="showLinkDialog = false">取消</el-button>
-        <el-button size="small" @click="removeLink" type="danger">删除链接</el-button>
-        <el-button size="small" type="primary" @click="saveLink">保存</el-button>
+        <el-button size="small" @click="showLinkDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button size="small" @click="removeLink" type="danger">{{ t('sheet.deleteLinkBtn') }}</el-button>
+        <el-button size="small" type="primary" @click="saveLink">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 数据验证 -->
-    <el-dialog v-model="showValidationDialog" title="数据验证" width="400px">
+    <el-dialog v-model="showValidationDialog" :title="t('sheet.dataValidationTitle')" width="400px">
       <el-select v-model="validationType" size="small" style="width:100%;margin-bottom:8px">
-        <el-option label="无" value="none" /><el-option label="下拉列表" value="list" /><el-option label="数字范围" value="number" />
+        <el-option :label="t('sheet.validationNone')" value="none" /><el-option :label="t('sheet.validationList')" value="list" /><el-option :label="t('sheet.validationNumber')" value="number" />
       </el-select>
-      <el-input v-if="validationType === 'list'" v-model="validationOptions" size="small" placeholder="选项,逗号分隔" />
+      <el-input v-if="validationType === 'list'" v-model="validationOptions" size="small" :placeholder="t('sheet.validationListPlaceholder')" />
       <div v-if="validationType === 'number'" style="display:flex;gap:8px">
-        <el-input-number v-model="validationMin" size="small" placeholder="最小" />
-        <el-input-number v-model="validationMax" size="small" placeholder="最大" />
+        <el-input-number v-model="validationMin" size="small" :placeholder="t('sheet.validationMinPlaceholder')" />
+        <el-input-number v-model="validationMax" size="small" :placeholder="t('sheet.validationMaxPlaceholder')" />
       </div>
       <template #footer>
-        <el-button size="small" @click="showValidationDialog = false">取消</el-button>
-        <el-button size="small" type="primary" @click="saveValidation">保存</el-button>
+        <el-button size="small" @click="showValidationDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button size="small" type="primary" @click="saveValidation">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 筛选面板 -->
     <div v-if="showFilterPanel" class="filter-panel" :style="{ left: '200px', top: '200px' }">
       <div style="padding:6px 10px;border-bottom:1px solid #e8e8e8">
-        <el-checkbox v-model="filterSelectAll" @change="toggleFilterAll">全选</el-checkbox>
+        <el-checkbox v-model="filterSelectAll" @change="toggleFilterAll">{{ t('sheet.filterPanelSelectAll') }}</el-checkbox>
       </div>
       <div style="max-height:180px;overflow-y:auto;padding:4px 10px">
         <div v-for="val in filterUniqueValues" :key="val" style="padding:1px 0">
-          <el-checkbox :model-value="filterSelectedValues.has(val)" @change="(v: boolean) => toggleFilterValue(val, v)">{{ val || '(空)' }}</el-checkbox>
+          <el-checkbox :model-value="filterSelectedValues.has(val)" @change="(v: boolean) => toggleFilterValue(val, v)">{{ val || t('common.emptyValue') }}</el-checkbox>
         </div>
       </div>
       <div style="padding:6px 10px;border-top:1px solid #e8e8e8;display:flex;gap:6px">
-        <el-button size="small" @click="applyFilter(true)">确定</el-button>
-        <el-button size="small" @click="applyFilter(false)">取消</el-button>
+        <el-button size="small" @click="applyFilter(true)">{{ t('sheet.filterApply') }}</el-button>
+        <el-button size="small" @click="applyFilter(false)">{{ t('sheet.filterCancel') }}</el-button>
       </div>
     </div>
 
     <!-- 分列对话框 -->
-    <el-dialog v-model="showSplitColDialog" title="分列" width="440px">
-      <div style="margin-bottom:12px;color:#666">将选定列的内容拆分为多列</div>
+    <el-dialog v-model="showSplitColDialog" :title="t('sheet.splitColTitle')" width="440px">
+      <div style="margin-bottom:12px;color:#666">{{ t('sheet.splitColDesc') }}</div>
       <div style="margin-bottom:12px">
         <el-radio-group v-model="splitMode" size="small">
-          <el-radio-button value="delimiter">分隔符号</el-radio-button>
-          <el-radio-button value="fixed">固定宽度</el-radio-button>
+          <el-radio-button value="delimiter">{{ t('sheet.splitDelimiterMode') }}</el-radio-button>
+          <el-radio-button value="fixed">{{ t('sheet.splitFixedMode') }}</el-radio-button>
         </el-radio-group>
       </div>
       <div v-if="splitMode === 'delimiter'" style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
-        <span>分隔符：</span>
+        <span>{{ t('sheet.splitDelimiterLabel') }}</span>
         <el-select v-model="splitDelimiter" size="small" style="width:120px">
           <el-option label="Tab" value="\t" />
-          <el-option label="分号 (;)" value=";" />
-          <el-option label="逗号 (,)" value="," />
-          <el-option label="空格" value=" " />
-          <el-option label="竖线 (|)" value="|" />
-          <el-option label="自定义" value="__custom__" />
+          <el-option :label="t('sheet.splitSemicolon')" value=";" />
+          <el-option :label="t('sheet.splitComma')" value="," />
+          <el-option :label="t('sheet.splitSpace')" value=" " />
+          <el-option :label="t('sheet.splitPipe')" value="|" />
+          <el-option :label="t('sheet.splitCustom')" value="__custom__" />
         </el-select>
-        <el-input v-if="splitDelimiter === '__custom__'" v-model="splitCustomDelim" size="small" style="width:80px" placeholder="输入分隔符" />
-        <el-checkbox v-model="splitConsecutive" size="small" style="margin-left:8px">连续分隔符视为单个</el-checkbox>
+        <el-input v-if="splitDelimiter === '__custom__'" v-model="splitCustomDelim" size="small" style="width:80px" :placeholder="t('sheet.splitCustomPlaceholder')" />
+        <el-checkbox v-model="splitConsecutive" size="small" style="margin-left:8px">{{ t('sheet.splitConsecutive') }}</el-checkbox>
       </div>
       <div v-if="splitMode === 'fixed'" style="margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span>位置列表（用逗号分隔）：</span>
+          <span>{{ t('sheet.splitFixedPositions') }}</span>
         </div>
-        <el-input v-model="splitFixedPositions" size="small" placeholder="例如: 3,8,15" />
-        <div style="color:#999;font-size:12px;margin-top:4px">从第几个字符处切分，多列用逗号隔开</div>
+        <el-input v-model="splitFixedPositions" size="small" :placeholder="t('sheet.splitFixedPlaceholder')" />
+        <div style="color:#999;font-size:12px;margin-top:4px">{{ t('sheet.splitFixedHint') }}</div>
       </div>
       <div v-if="splitPreview.length" style="margin-bottom:12px">
-        <div style="font-size:12px;color:#999;margin-bottom:4px">预览：</div>
+        <div style="font-size:12px;color:#999;margin-bottom:4px">{{ t('sheet.splitPreview') }}</div>
         <table style="border-collapse:collapse;font-size:12px;width:100%">
           <tr v-for="(row, i) in splitPreview" :key="i" style="border-bottom:1px solid #eee">
             <td v-for="(cell, j) in row" :key="j" style="padding:2px 8px;border:1px solid #ddd">{{ cell }}</td>
           </tr>
         </table>
-        <div style="font-size:11px;color:#999;margin-top:2px">（仅显示前 5 行）</div>
+        <div style="font-size:11px;color:#999;margin-top:2px">{{ t('sheet.splitPreviewLimit') }}</div>
       </div>
-      <div style="color:#999;font-size:12px">源列：{{ colName(splitCol) }}</div>
+      <div style="color:#999;font-size:12px">{{ t('sheet.splitSourceCol', [colName(splitCol)]) }}</div>
       <template #footer>
-        <el-button size="small" @click="showSplitColDialog = false">取消</el-button>
-        <el-button size="small" type="primary" @click="doSplitCol" :disabled="!splitPreview.length">确定</el-button>
+        <el-button size="small" @click="showSplitColDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button size="small" type="primary" @click="doSplitCol" :disabled="!splitPreview.length">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 多列排序对话框 -->
-    <el-dialog v-model="showMultiSortDialog" title="多列排序" width="460px">
+    <el-dialog v-model="showMultiSortDialog" :title="t('sheet.multiSortTitle')" width="460px">
       <div v-for="(rule, i) in multiSortRules" :key="i" style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
-        <el-select v-model="rule.col" size="small" placeholder="选择列" style="width:160px">
+        <el-select v-model="rule.col" size="small" :placeholder="t('sheet.selectColPlaceholder')" style="width:160px">
           <el-option v-for="c in colCount" :key="c" :label="colName(c - 1)" :value="c - 1" />
         </el-select>
         <el-select v-model="rule.dir" size="small" style="width:120px">
-          <el-option label="升序 ↑" value="asc" />
-          <el-option label="降序 ↓" value="desc" />
+          <el-option :label="t('sheet.sortAscLabel')" value="asc" />
+          <el-option :label="t('sheet.sortDescLabel')" value="desc" />
         </el-select>
         <el-button size="small" text type="danger" @click="multiSortRules.splice(i, 1)" :disabled="multiSortRules.length <= 1">✕</el-button>
       </div>
-      <el-button size="small" @click="multiSortRules.push({ col: 0, dir: 'asc' })">+ 添加级别</el-button>
+      <el-button size="small" @click="multiSortRules.push({ col: 0, dir: 'asc' })">{{ t('sheet.addSortLevel') }}</el-button>
       <template #footer>
-        <el-button size="small" @click="showMultiSortDialog = false">取消</el-button>
-        <el-button size="small" type="primary" @click="doMultiSort">排序</el-button>
+        <el-button size="small" @click="showMultiSortDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button size="small" type="primary" @click="doMultiSort">{{ t('sheet.sortBtn') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 数据透视对话框 -->
-    <el-dialog v-model="showPivotDialog" title="数据透视" width="500px">
+    <el-dialog v-model="showPivotDialog" :title="t('sheet.pivotTitle')" width="500px">
       <div style="display:flex;gap:12px;margin-bottom:12px">
         <div style="flex:1">
-          <div style="font-size:12px;color:#999;margin-bottom:4px">分组列</div>
+          <div style="font-size:12px;color:#999;margin-bottom:4px">{{ t('sheet.pivotGroupCol') }}</div>
           <el-select v-model="pivotGroupCol" size="small" style="width:100%">
             <el-option v-for="c in colCount" :key="c" :label="colName(c-1)" :value="c-1" />
           </el-select>
         </div>
         <div style="flex:1">
-          <div style="font-size:12px;color:#999;margin-bottom:4px">值列</div>
+          <div style="font-size:12px;color:#999;margin-bottom:4px">{{ t('sheet.pivotValueCol') }}</div>
           <el-select v-model="pivotValueCol" size="small" style="width:100%">
             <el-option v-for="c in colCount" :key="c" :label="colName(c-1)" :value="c-1" />
           </el-select>
         </div>
       </div>
-      <el-button size="small" type="primary" @click="doPivot" style="margin-bottom:12px">生成透视表</el-button>
+      <el-button size="small" type="primary" @click="doPivot" style="margin-bottom:12px">{{ t('sheet.pivotGenerate') }}</el-button>
       <div v-if="pivotResult.length" style="max-height:300px;overflow:auto">
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr style="background:#f0f0f0">
-            <th style="padding:6px;border:1px solid #ddd">分组</th>
-            <th style="padding:6px;border:1px solid #ddd">求和</th>
-            <th style="padding:6px;border:1px solid #ddd">计数</th>
-            <th style="padding:6px;border:1px solid #ddd">平均值</th>
+            <th style="padding:6px;border:1px solid #ddd">{{ t('sheet.pivotGroup') }}</th>
+            <th style="padding:6px;border:1px solid #ddd">{{ t('common.summation') }}</th>
+            <th style="padding:6px;border:1px solid #ddd">{{ t('common.count') }}</th>
+            <th style="padding:6px;border:1px solid #ddd">{{ t('common.average') }}</th>
           </tr></thead>
           <tbody>
             <tr v-for="row in pivotResult" :key="row.group">
@@ -645,8 +645,8 @@
         </table>
       </div>
       <template #footer>
-        <el-button size="small" @click="showPivotDialog = false">关闭</el-button>
-        <el-button v-if="pivotResult.length" size="small" type="primary" @click="insertPivotResult">插入到表格</el-button>
+        <el-button size="small" @click="showPivotDialog = false">{{ t('common.close') }}</el-button>
+        <el-button v-if="pivotResult.length" size="small" type="primary" @click="insertPivotResult">{{ t('sheet.pivotInsert') }}</el-button>
       </template>
     </el-dialog>
 
@@ -661,21 +661,21 @@
           {{ sh.name }}
           <span v-if="sheets.length > 1" class="tab-x" @click.stop="deleteSheet(si)">×</span>
         </div>
-        <button class="tab-add" @click="addSheet" title="新建工作表">+</button>
+        <button class="tab-add" @click="addSheet" :title="t('sheet.addTab')">+</button>
       </div>
       <div class="tabs-info">{{ currentSheetRows.length }}×{{ colCount }}</div>
     </div>
     <!-- 函数选择面板（放在 sheet-container 顶层避免被 ribbon overflow 裁剪） -->
     <div v-if="showFxPanel" class="fx-panel" :style="fxPanelStyle">
       <div class="fx-search">
-        <input v-model="fxSearch" placeholder="搜索函数..." @keydown="onFxSearchKey" ref="fxSearchRef" />
+        <input v-model="fxSearch" :placeholder="t('sheet.fxSearchPlaceholder')" @keydown="onFxSearchKey" ref="fxSearchRef" />
       </div>
       <div class="fx-list">
         <div v-for="(fn, i) in filteredFunctions" :key="fn.name" class="fx-item" :class="{active: fxIndex === i}" @click="insertFunction(fn)" @mouseenter="fxIndex = i">
           <span class="fx-name">{{ fn.name }}</span>
           <span class="fx-desc">{{ fn.desc }}</span>
         </div>
-        <div v-if="!filteredFunctions.length" class="fx-empty">没有匹配的函数</div>
+        <div v-if="!filteredFunctions.length" class="fx-empty">{{ t('sheet.fxNoMatch') }}</div>
       </div>
       <!-- 参数提示 -->
       <div v-if="fxHint" class="fx-hint">
@@ -687,6 +687,9 @@
 </template>
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 
 const props = defineProps<{ initialData?: string }>()
@@ -714,8 +717,8 @@ interface CondRule { condition: string; value: string; bgColor: string }
 
 const fontList = ['Arial','Courier New','Georgia','Times New Roman','Verdana','Microsoft YaHei','SimSun','SimHei','KaiTi','FangSong','monospace','serif','sans-serif']
 const fontSizes = [10,11,12,13,14,16,18,20,24,28,32,36,48,64,72]
-const weekDays = ['周一','周二','周三','周四','周五','周六','周日']
-const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
+const weekDays = t('sheet.weekDays')
+const months = t('sheet.months')
 
 const sheets = ref<SheetData[]>([])
 const activeSheet = ref(0)
@@ -1195,46 +1198,46 @@ const fxHint = ref<{name:string;args:string;desc:string}|null>(null)
 
 interface FxDef { name: string; args: string; desc: string; template: string }
 const FX_LIST: FxDef[] = [
-  { name: 'SUM', args: 'num1, num2, ...', desc: '求和', template: 'SUM()' },
-  { name: 'AVERAGE', args: 'num1, num2, ...', desc: '求平均值', template: 'AVERAGE()' },
-  { name: 'COUNT', args: 'value1, value2, ...', desc: '计数（数字）', template: 'COUNT()' },
-  { name: 'COUNTA', args: 'value1, value2, ...', desc: '计数（非空）', template: 'COUNTA()' },
-  { name: 'MAX', args: 'num1, num2, ...', desc: '最大值', template: 'MAX()' },
-  { name: 'MIN', args: 'num1, num2, ...', desc: '最小值', template: 'MIN()' },
-  { name: 'IF', args: '条件, 真值, 假值', desc: '条件判断', template: 'IF(, , )' },
-  { name: 'AND', args: '条件1, 条件2, ...', desc: '所有为真', template: 'AND(, )' },
-  { name: 'OR', args: '条件1, 条件2, ...', desc: '任一为真', template: 'OR(, )' },
-  { name: 'NOT', args: '条件', desc: '取反', template: 'NOT()' },
-  { name: 'ROUND', args: '数值, 小数位', desc: '四舍五入', template: 'ROUND(, 2)' },
-  { name: 'CEILING', args: '数值', desc: '向上取整', template: 'CEILING()' },
-  { name: 'FLOOR', args: '数值', desc: '向下取整', template: 'FLOOR()' },
-  { name: 'ABS', args: '数值', desc: '绝对值', template: 'ABS()' },
-  { name: 'MOD', args: '被除数, 除数', desc: '取余', template: 'MOD(, )' },
-  { name: 'POWER', args: '底数, 指数', desc: '幂运算', template: 'POWER(, 2)' },
-  { name: 'SQRT', args: '数值', desc: '平方根', template: 'SQRT()' },
-  { name: 'CONCATENATE', args: '文本1, 文本2, ...', desc: '拼接文本', template: 'CONCATENATE(, )' },
-  { name: 'LEFT', args: '文本, 字符数', desc: '取左侧字符', template: 'LEFT(, 1)' },
-  { name: 'RIGHT', args: '文本, 字符数', desc: '取右侧字符', template: 'RIGHT(, 1)' },
-  { name: 'MID', args: '文本, 起始位, 长度', desc: '截取文本', template: 'MID(, 1, 1)' },
-  { name: 'LEN', args: '文本', desc: '文本长度', template: 'LEN()' },
-  { name: 'UPPER', args: '文本', desc: '转大写', template: 'UPPER()' },
-  { name: 'LOWER', args: '文本', desc: '转小写', template: 'LOWER()' },
-  { name: 'TRIM', args: '文本', desc: '去除空格', template: 'TRIM()' },
-  { name: 'SUBSTITUTE', args: '文本, 旧文本, 新文本', desc: '替换文本', template: 'SUBSTITUTE(, , )' },
-  { name: 'VALUE', args: '文本', desc: '文本转数字', template: 'VALUE()' },
-  { name: 'NOW', args: '', desc: '当前日期时间', template: 'NOW()' },
-  { name: 'TODAY', args: '', desc: '当前日期', template: 'TODAY()' },
-  { name: 'YEAR', args: '日期', desc: '提取年份', template: 'YEAR()' },
-  { name: 'MONTH', args: '日期', desc: '提取月份', template: 'MONTH()' },
-  { name: 'DAY', args: '日期', desc: '提取日', template: 'DAY()' },
-  { name: 'DATEDIF', args: '日期1, 日期2, 单位', desc: '日期差', template: 'DATEDIF(, , "D")' },
-  { name: 'VLOOKUP', args: '查找值, 范围, 列号', desc: '纵向查找', template: 'VLOOKUP(, , 2)' },
-  { name: 'INDEX', args: '范围, 行号', desc: '按位置取值', template: 'INDEX(, 1)' },
-  { name: 'MATCH', args: '查找值, 范围', desc: '查找位置', template: 'MATCH(, )' },
-  { name: 'RAND', args: '', desc: '随机数 0~1', template: 'RAND()' },
-  { name: 'RANDBETWEEN', args: '最小值, 最大值', desc: '随机整数', template: 'RANDBETWEEN(1, 100)' },
-  { name: 'ISBLANK', args: '单元格', desc: '是否为空', template: 'ISBLANK()' },
-  { name: 'ISNUMBER', args: '值', desc: '是否为数字', template: 'ISNUMBER()' },
+  { name: 'SUM', args: t('sheet.formulaArgs.SUM'), desc: t('sheet.formulas.SUM'), template: 'SUM()' },
+  { name: 'AVERAGE', args: t('sheet.formulaArgs.AVERAGE'), desc: t('sheet.formulas.AVERAGE'), template: 'AVERAGE()' },
+  { name: 'COUNT', args: t('sheet.formulaArgs.COUNT'), desc: t('sheet.formulas.COUNT'), template: 'COUNT()' },
+  { name: 'COUNTA', args: t('sheet.formulaArgs.COUNTA'), desc: t('sheet.formulas.COUNTA'), template: 'COUNTA()' },
+  { name: 'MAX', args: t('sheet.formulaArgs.MAX'), desc: t('sheet.formulas.MAX'), template: 'MAX()' },
+  { name: 'MIN', args: t('sheet.formulaArgs.MIN'), desc: t('sheet.formulas.MIN'), template: 'MIN()' },
+  { name: 'IF', args: t('sheet.formulaArgs.IF'), desc: t('sheet.formulas.IF'), template: 'IF(, , )' },
+  { name: 'AND', args: t('sheet.formulaArgs.AND'), desc: t('sheet.formulas.AND'), template: 'AND(, )' },
+  { name: 'OR', args: t('sheet.formulaArgs.OR'), desc: t('sheet.formulas.OR'), template: 'OR(, )' },
+  { name: 'NOT', args: t('sheet.formulaArgs.NOT'), desc: t('sheet.formulas.NOT'), template: 'NOT()' },
+  { name: 'ROUND', args: t('sheet.formulaArgs.ROUND'), desc: t('sheet.formulas.ROUND'), template: 'ROUND(, 2)' },
+  { name: 'CEILING', args: t('sheet.formulaArgs.CEILING'), desc: t('sheet.formulas.CEILING'), template: 'CEILING()' },
+  { name: 'FLOOR', args: t('sheet.formulaArgs.FLOOR'), desc: t('sheet.formulas.FLOOR'), template: 'FLOOR()' },
+  { name: 'ABS', args: t('sheet.formulaArgs.ABS'), desc: t('sheet.formulas.ABS'), template: 'ABS()' },
+  { name: 'MOD', args: t('sheet.formulaArgs.MOD'), desc: t('sheet.formulas.MOD'), template: 'MOD(, )' },
+  { name: 'POWER', args: t('sheet.formulaArgs.POWER'), desc: t('sheet.formulas.POWER'), template: 'POWER(, 2)' },
+  { name: 'SQRT', args: t('sheet.formulaArgs.SQRT'), desc: t('sheet.formulas.SQRT'), template: 'SQRT()' },
+  { name: 'CONCATENATE', args: t('sheet.formulaArgs.CONCATENATE'), desc: t('sheet.formulas.CONCATENATE'), template: 'CONCATENATE(, )' },
+  { name: 'LEFT', args: t('sheet.formulaArgs.LEFT'), desc: t('sheet.formulas.LEFT'), template: 'LEFT(, 1)' },
+  { name: 'RIGHT', args: t('sheet.formulaArgs.RIGHT'), desc: t('sheet.formulas.RIGHT'), template: 'RIGHT(, 1)' },
+  { name: 'MID', args: t('sheet.formulaArgs.MID'), desc: t('sheet.formulas.MID'), template: 'MID(, 1, 1)' },
+  { name: 'LEN', args: t('sheet.formulaArgs.LEN'), desc: t('sheet.formulas.LEN'), template: 'LEN()' },
+  { name: 'UPPER', args: t('sheet.formulaArgs.UPPER'), desc: t('sheet.formulas.UPPER'), template: 'UPPER()' },
+  { name: 'LOWER', args: t('sheet.formulaArgs.LOWER'), desc: t('sheet.formulas.LOWER'), template: 'LOWER()' },
+  { name: 'TRIM', args: t('sheet.formulaArgs.TRIM'), desc: t('sheet.formulas.TRIM'), template: 'TRIM()' },
+  { name: 'SUBSTITUTE', args: t('sheet.formulaArgs.SUBSTITUTE'), desc: t('sheet.formulas.SUBSTITUTE'), template: 'SUBSTITUTE(, , )' },
+  { name: 'VALUE', args: t('sheet.formulaArgs.VALUE'), desc: t('sheet.formulas.VALUE'), template: 'VALUE()' },
+  { name: 'NOW', args: '', desc: t('sheet.formulas.NOW'), template: 'NOW()' },
+  { name: 'TODAY', args: '', desc: t('sheet.formulas.TODAY'), template: 'TODAY()' },
+  { name: 'YEAR', args: t('sheet.formulaArgs.YEAR'), desc: t('sheet.formulas.YEAR'), template: 'YEAR()' },
+  { name: 'MONTH', args: t('sheet.formulaArgs.MONTH_F'), desc: t('sheet.formulas.MONTH_F'), template: 'MONTH()' },
+  { name: 'DAY', args: t('sheet.formulaArgs.DAY'), desc: t('sheet.formulas.DAY'), template: 'DAY()' },
+  { name: 'DATEDIF', args: t('sheet.formulaArgs.DATEDIF'), desc: t('sheet.formulas.DATEDIF'), template: 'DATEDIF(, , "D")' },
+  { name: 'VLOOKUP', args: t('sheet.formulaArgs.VLOOKUP'), desc: t('sheet.formulas.VLOOKUP'), template: 'VLOOKUP(, , 2)' },
+  { name: 'INDEX', args: t('sheet.formulaArgs.INDEX'), desc: t('sheet.formulas.INDEX'), template: 'INDEX(, 1)' },
+  { name: 'MATCH', args: t('sheet.formulaArgs.MATCH'), desc: t('sheet.formulas.MATCH'), template: 'MATCH(, )' },
+  { name: 'RAND', args: '', desc: t('sheet.formulas.RAND'), template: 'RAND()' },
+  { name: 'RANDBETWEEN', args: t('sheet.formulaArgs.RANDBETWEEN'), desc: t('sheet.formulas.RANDBETWEEN'), template: 'RANDBETWEEN(1, 100)' },
+  { name: 'ISBLANK', args: t('sheet.formulaArgs.ISBLANK'), desc: t('sheet.formulas.ISBLANK'), template: 'ISBLANK()' },
+  { name: 'ISNUMBER', args: t('sheet.formulaArgs.ISNUMBER'), desc: t('sheet.formulas.ISNUMBER'), template: 'ISNUMBER()' },
 ]
 
 const filteredFunctions = computed(() => {
@@ -1725,7 +1728,7 @@ function clipPaste() {
   if (navigator.clipboard?.readText) {
     navigator.clipboard.readText().then(t => {
       const lines = t.split('\n'); for (let r = 0; r < lines.length; r++) { const cells = lines[r].split('\t'); for (let c = 0; c < cells.length; c++) { if (!rows.value[r0 + r]) rows.value[r0 + r] = makeRow(colCount.value); rows.value[r0 + r][c0 + c] = cells[c] } }; emitChange()
-    }).catch(() => { console.warn('剪贴板访问被拒绝，请使用 Ctrl+V 粘贴') })
+    }).catch(() => { console.warn(t('sheet.clipboardDenied')) })
   }
 }
 
@@ -1858,7 +1861,7 @@ function replaceAll() { if (!searchText.value) return; pushUndo(); let count = 0
 function switchSheet(idx: number) { activeSheet.value = idx; selection.value = null; editingCell.value = null; updateToolbarState() }
 function addSheet() { sheets.value.push(makeSheet('Sheet' + (sheets.value.length + 1))); activeSheet.value = sheets.value.length - 1 }
 function renameSheet(idx: number) {
-  const name = prompt('重命名Sheet:', sheets.value[idx]?.name || '')
+  const name = prompt(t('sheet.renameSheetPrompt'), sheets.value[idx]?.name || '')
   if (name) sheets.value[idx].name = name; emitChange()
 }
 function deleteSheet(idx: number) { if (sheets.value.length <= 1) return; sheets.value.splice(idx, 1); activeSheet.value = Math.min(activeSheet.value, sheets.value.length - 1) }
@@ -2239,7 +2242,7 @@ function removeDuplicates() {
 function printSheet() {
   const w = window.open('', '_blank')
   if (!w) return
-  let html = '<html><head><title>打印表格</title><style>'
+  let html = '<html><head><title>' + t('sheet.printTitle') + '</title><style>'
   html += 'body{font-family:Arial,sans-serif;font-size:12px}'
   html += 'table{border-collapse:collapse;width:100%}'
   html += 'th,td{border:1px solid #999;padding:4px 8px;text-align:left}'
@@ -2391,7 +2394,7 @@ function doPivot() {
   const r1 = Math.min(startRow, endRow), r2 = Math.max(startRow, endRow)
   const groups = new Map<string, { sum: number; count: number }>()
   for (let r = r1; r <= r2; r++) {
-    const g = rows.value[r]?.[gc] || '(空)'
+    const g = rows.value[r]?.[gc] || t('common.emptyValue')
     const v = parseFloat(rows.value[r]?.[vc] || '0') || 0
     const cur = groups.get(g) || { sum: 0, count: 0 }
     cur.sum += v; cur.count++; groups.set(g, cur)
@@ -2402,7 +2405,7 @@ function insertPivotResult() {
   pushUndo()
   const startR = rows.value.length
   // Header
-  rows.value.push(['分组', '求和', '计数', '平均值'])
+  rows.value.push([t('sheet.pivotGroup'), t('common.summation'), t('common.count'), t('common.average')])
   // Data
   for (const row of pivotResult.value) rows.value.push([row.group, String(row.sum), String(row.count), String(row.avg)])
   showPivotDialog.value = false; emitChange()
