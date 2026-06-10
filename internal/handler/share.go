@@ -137,13 +137,13 @@ func AccessShare(c *gin.Context) {
 
 	var id, docID, sharePassword string
 	var expiresAt sql.NullTime
-	var docTitle, docType, deptID string
+	var docTitle, docType, deptID, teamID string
 	var status int
 
 	err := database.DB.QueryRow(
-		"SELECT s.id, s.document_id, s.password, s.expires_at, s.status, d.title, d.type, d.department_id FROM md_shares s JOIN md_documents d ON s.document_id = d.id WHERE s.token = ?",
+		"SELECT s.id, s.document_id, s.password, s.expires_at, s.status, d.title, d.type, d.department_id, d.team_id FROM md_shares s JOIN md_documents d ON s.document_id = d.id WHERE s.token = ?",
 		token,
-	).Scan(&id, &docID, &sharePassword, &expiresAt, &status, &docTitle, &docType, &deptID)
+	).Scan(&id, &docID, &sharePassword, &expiresAt, &status, &docTitle, &docType, &deptID, &teamID)
 
 	if err != nil || status != 1 {
 		c.JSON(404, gin.H{"error": "分享链接不存在或已失效"})
@@ -168,7 +168,11 @@ func AccessShare(c *gin.Context) {
 
 	// Get document content
 	var content []byte
-	if data, err := store.ReadCurrent(deptID, docID); err == nil {
+	shareBucket := teamID
+	if shareBucket == "" {
+		shareBucket = deptID
+	}
+	if data, err := store.ReadCurrent(shareBucket, docID); err == nil {
 		content = data
 	}
 

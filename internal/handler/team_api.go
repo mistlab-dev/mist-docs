@@ -500,6 +500,14 @@ func TeamSaveDocumentContent(c *gin.Context) {
 	docID := c.Param("id")
 	userID := c.GetString("user_id")
 
+	// Resolve storage bucket
+	var teamID, deptID string
+	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
+	bucket := teamID
+	if bucket == "" {
+		bucket = deptID
+	}
+
 	// Check lock
 	var lockedBy string
 	database.DB.QueryRow("SELECT locked_by FROM md_documents WHERE id=?", docID).Scan(&lockedBy)
@@ -540,7 +548,7 @@ func TeamSaveDocumentContent(c *gin.Context) {
 	writeDocContent(docID, contentBody)
 
 	// Save version record
-	versionPath := store.VersionPath("", docID, version)
+	versionPath := store.VersionPath(bucket, docID, version)
 	database.DB.Exec(`INSERT INTO md_versions (id, document_id, version, file_path, file_size, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
 		uuid.New().String(), docID, version, versionPath, int64(len(contentBody)), userID)
 
@@ -811,7 +819,13 @@ func TeamRestoreVersion(c *gin.Context) {
 	userID := c.GetString("user_id")
 
 	// Read version from file store
-	content, err := store.ReadVersion("", docID, req.Version)
+	var teamID, deptID string
+	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
+	bucket := teamID
+	if bucket == "" {
+		bucket = deptID
+	}
+	content, err := store.ReadVersion(bucket, docID, req.Version)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "版本不存在"})
 		return

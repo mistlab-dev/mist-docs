@@ -28,18 +28,22 @@ func ExportDocument(c *gin.Context) {
 	docID := c.Param("id")
 
 	// Get document info
-	var title, docType, deptID string
+	var title, docType, deptID, teamID string
 	err := database.DB.QueryRow(
-		"SELECT title, type, department_id FROM md_documents WHERE id = ? AND status = 1",
+		"SELECT title, type, department_id, team_id FROM md_documents WHERE id = ? AND status = 1",
 		docID,
-	).Scan(&title, &docType, &deptID)
+	).Scan(&title, &docType, &deptID, &teamID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "文档不存在"})
 		return
 	}
+	bucket := teamID
+	if bucket == "" {
+		bucket = deptID
+	}
 
 	// Read content
-	content, err := store.ReadCurrent(deptID, docID)
+	content, err := store.ReadCurrent(bucket, docID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文档内容失败"})
 		return
