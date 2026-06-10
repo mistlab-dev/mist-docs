@@ -11,6 +11,7 @@ func audit(c *gin.Context, action, resourceType, resourceID, resourceName, detai
 		c.GetString("user_id"),
 		c.GetString("username"),
 		c.GetString("department_id"),
+		c.GetString("current_team_id"),
 		action,
 		resourceType,
 		resourceID,

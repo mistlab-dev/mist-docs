@@ -419,6 +419,7 @@ func (h *Hub) GetStats() (rooms int, clients int64) {
 // ==================== WebSocket Handler ====================
 
 func ServeWS(hub *Hub, c *gin.Context) {
+	teamID := c.Param("team_id")
 	docID := c.Param("doc_id")
 	token := c.Query("token")
 
@@ -428,15 +429,30 @@ func ServeWS(hub *Hub, c *gin.Context) {
 		return
 	}
 
+	// Team membership check
+	var role string
+	err = database.DB.QueryRow(
+		`SELECT role FROM team_members WHERE team_id = ? AND user_id = ?`,
+		teamID, userID).Scan(&role)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无团队访问权限"})
+		return
+	}
+
+	// Document ownership check
+	var docTeamID string
+	err = database.DB.QueryRow(`SELECT team_id FROM md_documents WHERE id = ? AND status = 1`, docID).Scan(&docTeamID)
+	if err != nil || docTeamID != teamID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "文档不存在或不属于该团队"})
+		return
+	}
+
 	// Look up user from shared users table
 	var username string
 	var isAdmin bool
 	database.DB.QueryRow(
 		`SELECT username, is_admin FROM users WHERE id = ?`, userID,
 	).Scan(&username, &isAdmin)
-
-	// TODO: team-scoped permission check
-	_ = docID
 
 	// Global connection limit check before upgrade
 	if atomic.LoadInt64(&globalConnCount) >= int64(maxConnsGlobal) {

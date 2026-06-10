@@ -2,11 +2,14 @@ package handler
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
@@ -356,7 +359,7 @@ func TeamRecentDocuments(c *gin.Context) {
 func TeamCreateDocument(c *gin.Context) {
 	teamID := getTeamID(c)
 	role := getTeamRole(c)
-	if role == "" {
+	if role == "viewer" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
 		return
 	}
@@ -512,6 +515,15 @@ func TeamSaveDocumentContent(c *gin.Context) {
 		return
 	}
 
+	// Try to parse JSON {"content":"..."} wrapper
+	var contentReq struct {
+		Content string `json:"content"`
+	}
+	contentBody := body
+	if json.Unmarshal(body, &contentReq) == nil && contentReq.Content != "" {
+		contentBody = []byte(contentReq.Content)
+	}
+
 	// Increment version
 	var version int
 	database.DB.QueryRow("SELECT version FROM md_documents WHERE id=?", docID).Scan(&version)
@@ -519,13 +531,19 @@ func TeamSaveDocumentContent(c *gin.Context) {
 
 	_, err = database.DB.Exec(
 		`UPDATE md_documents SET content_text=?, version=?, updated_by=?, updated_at=NOW() WHERE id=?`,
-		string(body), version, userID, docID)
+		string(contentBody), version, userID, docID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	writeDocContent(docID, body)
+	writeDocContent(docID, contentBody)
+
+	// Save version record
+	versionPath := store.VersionPath("", docID, version)
+	database.DB.Exec(`INSERT INTO md_versions (id, document_id, version, file_path, file_size, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
+		uuid.New().String(), docID, version, versionPath, int64(len(contentBody)), userID)
+
 	audit(c, "edit_doc", "document", docID, "", fmt.Sprintf(`{"version":%d}`, version))
 	c.JSON(http.StatusOK, gin.H{"message": "已保存", "version": version})
 }
@@ -791,12 +809,14 @@ func TeamRestoreVersion(c *gin.Context) {
 		return
 	}
 	userID := c.GetString("user_id")
-	var content []byte
-	err := database.DB.QueryRow(`SELECT content FROM md_versions WHERE document_id=? AND version=?`, docID, req.Version).Scan(&content)
+
+	// Read version from file store
+	content, err := store.ReadVersion("", docID, req.Version)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "版本不存在"})
 		return
 	}
+
 	writeDocContent(docID, content)
 	var version int
 	database.DB.QueryRow("SELECT version FROM md_documents WHERE id=?", docID).Scan(&version)
@@ -849,10 +869,18 @@ func TeamCreateShare(c *gin.Context) {
 
 	token := uuid.New().String()
 	id := uuid.New().String()
-	_, err := database.DB.Exec(
-		`INSERT INTO md_shares (id, document_id, team_id, token, permission, password, expires_at, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, docID, teamID, token, req.Permission, req.Password, req.Expires, userID)
+	var err error
+	if req.Expires == "" {
+		_, err = database.DB.Exec(
+			`INSERT INTO md_shares (id, document_id, team_id, token, permission, password, expires_at, created_by)
+			 VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
+			id, docID, teamID, token, req.Permission, req.Password, userID)
+	} else {
+		_, err = database.DB.Exec(
+			`INSERT INTO md_shares (id, document_id, team_id, token, permission, password, expires_at, created_by)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, docID, teamID, token, req.Permission, req.Password, req.Expires, userID)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1303,23 +1331,116 @@ func TeamStorageStatus(c *gin.Context) {
 // ==================== Webhooks ====================
 
 func TeamListWebhooks(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
+	teamID := getTeamID(c)
+	rows, err := database.DB.Query(
+		`SELECT id, name, url, events, enabled, created_at, updated_at
+		 FROM md_webhooks WHERE team_id=? ORDER BY created_at DESC`, teamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	var webhooks []map[string]interface{}
+	for rows.Next() {
+		var id, name, url, events, createdAt, updatedAt string
+		var enabled bool
+		rows.Scan(&id, &name, &url, &events, &enabled, &createdAt, &updatedAt)
+		webhooks = append(webhooks, map[string]interface{}{
+			"id": id, "name": name, "url": url, "events": events,
+			"enabled": enabled, "created_at": createdAt, "updated_at": updatedAt,
+		})
+	}
+	if webhooks == nil {
+		webhooks = []map[string]interface{}{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": webhooks})
 }
 
 func TeamCreateWebhook(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "TODO"})
+	teamID := getTeamID(c)
+	userID := c.GetString("user_id")
+	var req struct {
+		Name   string `json:"name" binding:"required"`
+		URL    string `json:"url" binding:"required"`
+		Events string `json:"events"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if req.Events == "" {
+		req.Events = `["document.created","document.updated"]`
+	}
+	id := uuid.New().String()
+	_, err := database.DB.Exec(
+		`INSERT INTO md_webhooks (id, team_id, name, url, events, enabled, created_by) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+		id, teamID, req.Name, req.URL, req.Events, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "name": req.Name, "url": req.URL}})
 }
 
 func TeamDeleteWebhook(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "TODO"})
+	id := c.Param("id")
+	_, err := database.DB.Exec(`DELETE FROM md_webhooks WHERE id=?`, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
 func TeamToggleWebhook(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "TODO"})
+	id := c.Param("id")
+	var enabled bool
+	database.DB.QueryRow("SELECT enabled FROM md_webhooks WHERE id=?", id).Scan(&enabled)
+	_, err := database.DB.Exec(`UPDATE md_webhooks SET enabled=? WHERE id=?`, !enabled, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已切换", "enabled": !enabled})
 }
 
 func TeamListWebhookLogs(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
+	webhookID := c.Param("id")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	var total int
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_webhook_logs WHERE webhook_id=?", webhookID).Scan(&total)
+
+	rows, err := database.DB.Query(
+		`SELECT id, status_code, response_body, error, created_at
+		 FROM md_webhook_logs WHERE webhook_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+		webhookID, pageSize, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"data": []interface{}{}, "total": 0})
+		return
+	}
+	defer rows.Close()
+	var logs []map[string]interface{}
+	for rows.Next() {
+		var id, statusCode, respBody, errMsg, createdAt string
+		rows.Scan(&id, &statusCode, &respBody, &errMsg, &createdAt)
+		logs = append(logs, map[string]interface{}{
+			"id": id, "status_code": statusCode, "response_body": respBody,
+			"error": errMsg, "created_at": createdAt,
+		})
+	}
+	if logs == nil {
+		logs = []map[string]interface{}{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": logs, "total": total})
 }
 
 // ==================== 文档统计 ====================
@@ -1360,3 +1481,427 @@ func readBody(c *gin.Context) ([]byte, error) {
 
 // Ensure model types are referenced (avoid unused import errors during dev)
 var _ = model.Document{}
+
+// ==================== Media Upload (Team-scoped) ====================
+
+func TeamUploadFile(c *gin.Context) {
+	teamID := getTeamID(c)
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择文件"})
+		return
+	}
+	defer file.Close()
+
+	// Generate unique filename
+	ext := ""
+	if idx := strings.LastIndex(header.Filename, "."); idx >= 0 {
+		ext = header.Filename[idx:]
+	}
+	filename := uuid.New().String() + ext
+
+	// Save to team storage
+	dir := fmt.Sprintf("%s/%s/media", store.RootPath(), teamID)
+	os.MkdirAll(dir, 0755)
+	path := dir + "/" + filename
+
+	f, err := os.Create(path)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer f.Close()
+	io.Copy(f, file)
+
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		"filename": filename,
+		"original": header.Filename,
+		"size":     header.Size,
+		"url":      "/api/teams/" + teamID + "/media/" + filename,
+	}})
+}
+
+func TeamListMedia(c *gin.Context) {
+	teamID := getTeamID(c)
+	dir := fmt.Sprintf("%s/%s/media", store.RootPath(), teamID)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
+		return
+	}
+	var files []map[string]interface{}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, _ := e.Info()
+		files = append(files, map[string]interface{}{
+			"filename": e.Name(),
+			"size":     info.Size(),
+			"modified": info.ModTime().Format("2006-01-02 15:04:05"),
+		})
+	}
+	if files == nil {
+		files = []map[string]interface{}{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": files})
+}
+
+func TeamDeleteMedia(c *gin.Context) {
+	teamID := getTeamID(c)
+	filename := c.Param("filename")
+	path := fmt.Sprintf("%s/%s/media/%s", store.RootPath(), teamID, filename)
+	os.Remove(path)
+	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+}
+
+func TeamGetMedia(c *gin.Context) {
+	teamID := getTeamID(c)
+	filename := c.Param("filename")
+	path := fmt.Sprintf("%s/%s/media/%s", store.RootPath(), teamID, filename)
+	c.File(path)
+}
+
+// ==================== Notifications (Team-scoped) ====================
+
+func TeamListNotifications(c *gin.Context) {
+	userID := c.GetString("user_id")
+	teamID := getTeamID(c)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	var total int
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_notifications WHERE user_id=? AND team_id=?", userID, teamID).Scan(&total)
+
+	rows, err := database.DB.Query(
+		`SELECT id, type, title, is_read, created_at
+		 FROM md_notifications WHERE user_id=? AND team_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+		userID, teamID, pageSize, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	var notifications []map[string]interface{}
+	for rows.Next() {
+		var id, nType, title, createdAt string
+		var isRead bool
+		rows.Scan(&id, &nType, &title, &isRead, &createdAt)
+		notifications = append(notifications, map[string]interface{}{
+			"id": id, "type": nType, "title": title,
+			"is_read": isRead, "created_at": createdAt,
+		})
+	}
+	if notifications == nil {
+		notifications = []map[string]interface{}{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": notifications, "total": total})
+}
+
+func TeamMarkNotificationRead(c *gin.Context) {
+	id := c.Param("id")
+	database.DB.Exec(`UPDATE md_notifications SET is_read=1 WHERE id=?`, id)
+	c.JSON(http.StatusOK, gin.H{"message": "已标记已读"})
+}
+
+func TeamMarkAllNotificationsRead(c *gin.Context) {
+	userID := c.GetString("user_id")
+	teamID := getTeamID(c)
+	database.DB.Exec(`UPDATE md_notifications SET is_read=1 WHERE user_id=? AND team_id=?`, userID, teamID)
+	c.JSON(http.StatusOK, gin.H{"message": "已全部标记已读"})
+}
+
+func TeamDeleteNotification(c *gin.Context) {
+	id := c.Param("id")
+	database.DB.Exec(`DELETE FROM md_notifications WHERE id=?`, id)
+	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+}
+
+func TeamUnreadCount(c *gin.Context) {
+	userID := c.GetString("user_id")
+	teamID := getTeamID(c)
+	var count int
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_notifications WHERE user_id=? AND team_id=? AND is_read=0", userID, teamID).Scan(&count)
+	c.JSON(http.StatusOK, gin.H{"count": count})
+}
+
+// ==================== Shares (delete) ====================
+
+func TeamDeleteShare(c *gin.Context) {
+	id := c.Param("id")
+	_, err := database.DB.Exec(`DELETE FROM md_shares WHERE id=?`, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+}
+
+// ==================== Collaborators (update/delete) ====================
+
+func TeamUpdateCollaborator(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		Permission string `json:"permission" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	_, err := database.DB.Exec(`UPDATE md_permissions SET permission=? WHERE id=?`, req.Permission, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已更新"})
+}
+
+func TeamRemoveCollaborator(c *gin.Context) {
+	id := c.Param("id")
+	_, err := database.DB.Exec(`DELETE FROM md_permissions WHERE id=?`, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已移除"})
+}
+
+// ==================== Comments (update/delete) ====================
+
+func TeamUpdateComment(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	_, err := database.DB.Exec(`UPDATE md_comments SET content=?, updated_at=NOW() WHERE id=?`, req.Content, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已更新"})
+}
+
+func TeamDeleteComment(c *gin.Context) {
+	id := c.Param("id")
+	_, err := database.DB.Exec(`DELETE FROM md_comments WHERE id=?`, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+}
+
+// ==================== Search Targets ====================
+
+func TeamSearchTargets(c *gin.Context) {
+	teamID := getTeamID(c)
+	q := c.Query("q")
+	if q == "" {
+		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
+		return
+	}
+	pattern := "%" + q + "%"
+	rows, err := database.DB.Query(
+		`SELECT id, display_name, email FROM users
+		 WHERE (display_name LIKE ? OR email LIKE ? OR username LIKE ?)
+		 AND id IN (SELECT user_id FROM team_members WHERE team_id=?)
+		 LIMIT 20`, pattern, pattern, pattern, teamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	var targets []map[string]interface{}
+	for rows.Next() {
+		var id, name, email string
+		rows.Scan(&id, &name, &email)
+		targets = append(targets, map[string]interface{}{
+			"id": id, "display_name": name, "email": email,
+		})
+	}
+	if targets == nil {
+		targets = []map[string]interface{}{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": targets})
+}
+
+// ==================== Tags (documents by tag) ====================
+
+func TeamGetDocsByTag(c *gin.Context) {
+	teamID := getTeamID(c)
+	tagID := c.Param("id")
+	rows, err := database.DB.Query(
+		`SELECT d.id, d.title, d.type, d.updated_at
+		 FROM md_doc_tags dt
+		 JOIN md_documents d ON dt.document_id = d.id
+		 WHERE dt.tag_id = ? AND d.team_id = ? AND d.status = 1
+		 ORDER BY d.updated_at DESC`, tagID, teamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	var docs []map[string]interface{}
+	for rows.Next() {
+		var id, title, docType, updatedAt string
+		rows.Scan(&id, &title, &docType, &updatedAt)
+		docs = append(docs, map[string]interface{}{
+			"id": id, "title": title, "type": docType, "updated_at": updatedAt,
+		})
+	}
+	if docs == nil {
+		docs = []map[string]interface{}{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": docs})
+}
+
+// ==================== Dashboard ====================
+
+func TeamDashboardStats(c *gin.Context) {
+	teamID := getTeamID(c)
+	var docCount, sheetCount, trashCount, userCount, shareCount, commentCount, weekNew, deptCount int
+
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents WHERE team_id=? AND status=1", teamID).Scan(&docCount)
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents WHERE team_id=? AND status=1 AND type='sheet'", teamID).Scan(&sheetCount)
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents WHERE team_id=? AND status=0", teamID).Scan(&trashCount)
+	database.DB.QueryRow("SELECT COUNT(*) FROM team_members WHERE team_id=?", teamID).Scan(&userCount)
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_shares s JOIN md_documents d ON s.document_id=d.id WHERE d.team_id=?", teamID).Scan(&shareCount)
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_comments c JOIN md_documents d ON c.document_id=d.id WHERE d.team_id=?", teamID).Scan(&commentCount)
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents WHERE team_id=? AND status=1 AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)", teamID).Scan(&weekNew)
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_team_folders WHERE team_id=?", teamID).Scan(&deptCount)
+
+	// Daily new docs (last 7 days)
+	rows, _ := database.DB.Query(
+		`SELECT DATE(created_at) as date, COUNT(*) as count FROM md_documents
+		 WHERE team_id=? AND status=1 AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)
+		 GROUP BY DATE(created_at) ORDER BY date`, teamID)
+	var dailyNew []map[string]interface{}
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var date string
+			var count int
+			rows.Scan(&date, &count)
+			dailyNew = append(dailyNew, map[string]interface{}{"date": date, "count": count})
+		}
+	}
+	if dailyNew == nil {
+		dailyNew = []map[string]interface{}{}
+	}
+
+	// Recent activities
+	auditRows, _ := database.DB.Query(
+		`SELECT a.action, a.resource_name, a.created_at, IFNULL(u.display_name, '未知') as user_name
+		 FROM md_audits a
+		 LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id
+		 WHERE a.team_id=? ORDER BY a.created_at DESC LIMIT 10`, teamID)
+	var recentActivities []map[string]interface{}
+	if auditRows != nil {
+		defer auditRows.Close()
+		for auditRows.Next() {
+			var action, resourceName, createdAt, userName string
+			auditRows.Scan(&action, &resourceName, &createdAt, &userName)
+			recentActivities = append(recentActivities, map[string]interface{}{
+				"action": action, "resource_name": resourceName,
+				"created_at": createdAt, "user_name": userName,
+			})
+		}
+	}
+	if recentActivities == nil {
+		recentActivities = []map[string]interface{}{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		"users":            gin.H{"total": userCount},
+		"documents":        gin.H{"total": docCount, "sheets": sheetCount},
+		"trash":            trashCount,
+		"departments":      deptCount,
+		"shares":           shareCount,
+		"comments":         gin.H{"total": commentCount},
+		"week_new":         weekNew,
+		"daily_new":        dailyNew,
+		"recent_activities": recentActivities,
+	}})
+}
+
+func TeamSystemInfo(c *gin.Context) {
+	role := getTeamRole(c)
+	if role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可查看"})
+		return
+	}
+	var dbSize int64
+	database.DB.QueryRow("SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = DATABASE()").Scan(&dbSize)
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		"version": "1.0.0",
+		"db_size": dbSize,
+	}})
+}
+
+// ==================== Import ====================
+
+func TeamImportDocument(c *gin.Context) {
+	teamID := getTeamID(c)
+	userID := c.GetString("user_id")
+
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择文件"})
+		return
+	}
+	defer file.Close()
+
+	var content []byte
+	var title string
+	var docType string = "doc"
+
+	// Determine type from extension
+	name := header.Filename
+	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		switch strings.ToLower(name[idx:]) {
+		case ".md", ".txt", ".html":
+			body, _ := io.ReadAll(file)
+			content = body
+			title = name[:idx]
+		case ".xlsx":
+			// For xlsx, store raw bytes
+			body, _ := io.ReadAll(file)
+			content = body
+			title = name[:idx]
+			docType = "sheet"
+		default:
+			body, _ := io.ReadAll(file)
+			content = body
+			title = name[:idx]
+		}
+	} else {
+		body, _ := io.ReadAll(file)
+		content = body
+		title = name
+	}
+
+	folderID := c.PostForm("folder_id")
+	docID := uuid.New().String()
+	_, err = database.DB.Exec(
+		`INSERT INTO md_documents (id, team_id, folder_id, department_id, title, type, content_text, status, created_by, updated_by)
+		 VALUES (?, ?, ?, '', ?, ?, ?, 1, ?, ?)`,
+		docID, teamID, folderID, title, docType, string(content), userID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	writeDocContent(docID, content)
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": docID, "title": title, "type": docType}})
+}

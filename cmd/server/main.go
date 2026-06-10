@@ -136,22 +136,7 @@ func main() {
 			auth.GET("/auth/me", handler.Me)
 			auth.PUT("/auth/password", handler.ChangePassword)
 
-			// 部门
-			auth.GET("/departments", handler.ListDepartments)
-			auth.POST("/departments", handler.CreateDepartment)
-			auth.PUT("/departments/:id", handler.UpdateDepartment)
-			auth.DELETE("/departments/:id", handler.DeleteDepartment)
-			auth.POST("/departments/import", handler.ImportDepartments)
-
-			// 用户
-			auth.GET("/users", handler.ListUsers)
-			auth.POST("/users", handler.CreateUser)
-			auth.PUT("/users/:id", handler.UpdateUser)
-			auth.DELETE("/users/:id", handler.DeleteUser)
-			auth.PUT("/users/:id/reset-password", handler.ResetPassword)
-			auth.POST("/users/import", handler.ImportUsers)
-
-			// 团队级 API（新）
+			// 团队级 API
 			teams := auth.Group("/teams/:team_id")
 			teams.Use(middleware.TeamAuth())
 			{
@@ -230,115 +215,51 @@ func main() {
 				teams.DELETE("/webhooks/:id", handler.TeamDeleteWebhook)
 				teams.PUT("/webhooks/:id/toggle", handler.TeamToggleWebhook)
 				teams.GET("/webhooks/:id/logs", handler.TeamListWebhookLogs)
+
+				// Media
+				teams.POST("/upload", handler.TeamUploadFile)
+				teams.GET("/media", handler.TeamListMedia)
+				teams.GET("/media/:filename", handler.TeamGetMedia)
+				teams.DELETE("/media/:filename", handler.TeamDeleteMedia)
+
+				// Shares
+				teams.DELETE("/shares/:id", handler.TeamDeleteShare)
+
+				// Collaborators
+				teams.PUT("/collaborators/:id", handler.TeamUpdateCollaborator)
+				teams.DELETE("/collaborators/:id", handler.TeamRemoveCollaborator)
+
+				// Comments
+				teams.PUT("/comments/:id", handler.TeamUpdateComment)
+				teams.DELETE("/comments/:id", handler.TeamDeleteComment)
+
+				// Search targets
+				teams.GET("/search-targets", handler.TeamSearchTargets)
+
+				// Tags (documents by tag)
+				teams.GET("/tags/:id/documents", handler.TeamGetDocsByTag)
+
+				// Import
+				teams.POST("/import", handler.TeamImportDocument)
+
+				// Dashboard
+				teams.GET("/dashboard", handler.TeamDashboardStats)
+				teams.GET("/system-info", handler.TeamSystemInfo)
+
+				// Notifications
+				teams.GET("/notifications", handler.TeamListNotifications)
+				teams.PUT("/notifications/:id/read", handler.TeamMarkNotificationRead)
+				teams.PUT("/notifications/read-all", handler.TeamMarkAllNotificationsRead)
+				teams.DELETE("/notifications/:id", handler.TeamDeleteNotification)
+				teams.GET("/notifications/unread-count", handler.TeamUnreadCount)
 			}
-
-			// 文档（兼容旧路由，deprecated）
-			auth.GET("/docs/tree", handler.DocTree)
-			auth.POST("/docs/folders", handler.CreateFolder)
-			auth.PUT("/docs/folders/:id", handler.UpdateFolder)
-			auth.DELETE("/docs/folders/:id", handler.DeleteFolder)
-			auth.POST("/docs/upload", handler.UploadFile)
-			auth.POST("/docs/import", handler.BatchImport)
-			auth.GET("/docs/documents", handler.ListDocuments)
-			auth.GET("/docs/documents/search", handler.SearchDocuments)
-			auth.GET("/docs/documents/recent", handler.RecentDocuments)
-			auth.GET("/docs/documents/:id", handler.GetDocument)
-			auth.GET("/docs/favorites", handler.ListFavorites)
-			auth.POST("/docs/favorites/:id", handler.AddFavorite)
-			auth.DELETE("/docs/favorites/:id", handler.RemoveFavorite)
-			// Tags
-			auth.GET("/docs/tags", handler.ListTags)
-			auth.POST("/docs/tags", handler.CreateTag)
-			auth.DELETE("/docs/tags/:id", handler.DeleteTag)
-			auth.GET("/docs/tags/:id/documents", handler.GetDocsByTag)
-			auth.GET("/docs/documents/:id/tags", handler.GetDocTags)
-			auth.PUT("/docs/documents/:id/tags", handler.SetDocTags)
-
-			// Templates
-			auth.GET("/docs/templates", handler.ListTemplates)
-			auth.GET("/docs/templates/:id", handler.GetTemplate)
-			auth.POST("/docs/templates", handler.CreateTemplate)
-			auth.PUT("/docs/templates/:id", handler.UpdateTemplate)
-			auth.DELETE("/docs/templates/:id", handler.DeleteTemplate)
-
-			// Media
-			auth.GET("/docs/media", handler.ListMedia)
-			auth.DELETE("/docs/media/:filename", handler.DeleteMedia)
-			auth.POST("/docs/documents", handler.CreateDocument)
-			auth.PUT("/docs/documents/:id", handler.UpdateDocument)
-			auth.DELETE("/docs/documents/:id", handler.DeleteDocument)
-			auth.GET("/docs/documents/:id/content", handler.GetDocumentContent)
-			auth.PUT("/docs/documents/:id/content", handler.SaveDocumentContent)
-			auth.GET("/docs/documents/:id/stats", handler.DocStats)
-			auth.GET("/docs/documents/:id/versions", handler.ListVersions)
-			auth.GET("/docs/documents/:id/versions/:ver/content", handler.GetVersionContent)
-			auth.POST("/docs/documents/:id/restore", handler.RestoreVersion)
-			auth.POST("/docs/documents/:id/lock", handler.LockDocument)
-			auth.POST("/docs/documents/:id/unlock", handler.UnlockDocument)
-			auth.GET("/docs/trash", handler.ListTrash)
-			auth.POST("/docs/trash/restore/:id", handler.RestoreFromTrash)
-			auth.DELETE("/docs/trash/purge/:id", handler.PurgeFromTrash)
-			auth.DELETE("/docs/trash/empty", handler.EmptyTrash)
-
-			// 权限
-			auth.GET("/permissions", handler.ListPermissions)
-			auth.POST("/permissions", handler.SetPermission)
-			auth.DELETE("/permissions/:id", handler.RemovePermission)
-			auth.GET("/permissions/check", handler.CheckPermission)
-
-			// 审计
-			auth.GET("/audits", handler.ListAudits)
-			auth.GET("/audits/export", handler.ExportAudits)
-			auth.GET("/audits/stats", handler.AuditStats)
-
-			// 存储监控
-			auth.GET("/storage/status", handler.StorageStatus)
-
-			// 管理后台
-			auth.GET("/admin/dashboard", handler.DashboardStats)
-			auth.GET("/admin/system-info", handler.SystemInfo)
-
-			// Webhooks
-			auth.GET("/admin/webhooks", handler.ListWebhooks)
-			auth.POST("/admin/webhooks", handler.CreateWebhook)
-			auth.DELETE("/admin/webhooks/:id", handler.DeleteWebhook)
-			auth.PUT("/admin/webhooks/:id/toggle", handler.ToggleWebhook)
-			auth.GET("/admin/webhooks/:id/logs", handler.ListWebhookLogs)
-
-			// 文档分享
-			auth.POST("/docs/documents/:id/share", handler.CreateShare)
-			auth.GET("/docs/documents/:id/shares", handler.ListShares)
-			auth.DELETE("/docs/shares/:id", handler.DeleteShare)
-
-			// Google Docs 风格协作者管理
-			auth.GET("/docs/documents/:id/collaborators", handler.ListCollaborators)
-			auth.POST("/docs/documents/:id/collaborators", handler.AddCollaborator)
-			auth.PUT("/docs/collaborators/:id", handler.UpdateCollaborator)
-			auth.DELETE("/docs/collaborators/:id", handler.RemoveCollaborator)
-			auth.GET("/docs/search-targets", handler.SearchTargets)
-
-			// 文档导出
-			auth.GET("/docs/documents/:id/export", handler.ExportDocument)
-
-			// 评论
-			auth.GET("/docs/documents/:id/comments", handler.ListComments)
-			auth.POST("/docs/documents/:id/comments", handler.CreateComment)
-			auth.PUT("/docs/comments/:id", handler.UpdateComment)
-			auth.DELETE("/docs/comments/:id", handler.DeleteComment)
-
-			// 通知
-			auth.GET("/notifications", handler.ListNotifications)
-			auth.PUT("/notifications/:id/read", handler.MarkNotificationRead)
-			auth.PUT("/notifications/read-all", handler.MarkAllNotificationsRead)
-			auth.DELETE("/notifications/:id", handler.DeleteNotification)
-			auth.GET("/notifications/unread-count", handler.UnreadCount)
 		}
 	}
 
 	// WebSocket
 	hub := ws.NewHub()
 	go hub.Run()
-	r.GET("/ws/docs/:doc_id", func(c *gin.Context) {
+	r.GET("/ws/teams/:team_id/docs/:doc_id", func(c *gin.Context) {
 		ws.ServeWS(hub, c)
 	})
 

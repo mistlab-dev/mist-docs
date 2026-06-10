@@ -14,11 +14,11 @@ import (
 
 // ==================== 审计日志 ====================
 
-func CreateAudit(ctx context.Context, userID, userName, deptID, action, resourceType, resourceID, resourceName, detail, ip string) error {
+func CreateAudit(ctx context.Context, userID, userName, deptID, teamID, action, resourceType, resourceID, resourceName, detail, ip string) error {
 	_, err := database.DB.ExecContext(ctx,
-		`INSERT INTO md_audits (id, user_id, user_name, department_id, action, resource_type, resource_id, resource_name, detail, ip)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		uuid.New().String(), userID, userName, deptID, action, resourceType, resourceID, resourceName, detail, ip,
+		`INSERT INTO md_audits (id, team_id, user_id, user_name, department_id, action, resource_type, resource_id, resource_name, detail, ip)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		uuid.New().String(), teamID, userID, userName, deptID, action, resourceType, resourceID, resourceName, detail, ip,
 	)
 	return err
 }
