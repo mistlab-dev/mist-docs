@@ -1158,8 +1158,10 @@ async function loadVersions() {
 function initEditor(initialContent: string) {
   // Try to use Yjs collaboration
   const token = localStorage.getItem('token')
+  const auth = useAuthStore()
+  const teamId = auth.currentTeamId
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const wsUrl = `${wsProtocol}//${window.location.host}/ws/docs/${docId}?token=${token}`
+  const wsUrl = `${wsProtocol}//${window.location.host}/ws/teams/${teamId}/docs/${docId}?token=${token}`
 
   // Use collab mode for doc type when authenticated
   const useCollab = !!token && doc.value?.type === 'doc'
@@ -1291,6 +1293,29 @@ function initEditor(initialContent: string) {
         wsProvider.onSynced = syncHandler
       }
 
+      // Fallback: if WS keeps disconnecting, switch to local mode after 5 attempts
+      let reconnectCount = 0
+      const origOnStatus = wsProvider.onStatus
+      wsProvider.onStatus = (status) => {
+        origOnStatus?.(status)
+        if (status === 'disconnected') {
+          reconnectCount++
+          if (reconnectCount >= 5 && editor.value) {
+            console.warn('[Collab] WS failed 5 times, switching to local mode')
+            // Destroy collab resources and recreate editor in local mode
+            const currentContent = editor.value.getHTML()
+            wsProvider!.destroy()
+            wsProvider = null
+            ydoc?.destroy()
+            ydoc = null
+            editor.value.destroy()
+            // Recreate in local mode
+            createLocalEditor(currentContent)
+          }
+        }
+        if (status === 'connected') reconnectCount = 0
+      }
+
       return
     } catch (e) {
       console.warn('Collab mode failed, falling back to local:', e)
@@ -1302,8 +1327,12 @@ function initEditor(initialContent: string) {
   }
 
   // Fallback: local mode (no collab)
+  createLocalEditor(initialContent)
+}
+
+function createLocalEditor(content: string) {
   editor.value = new Editor({
-    content: initialContent || '',
+    content: content || '',
     extensions: [
       StarterKit.configure({ codeBlock: false }),
       Underline,

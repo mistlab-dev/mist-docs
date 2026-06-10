@@ -1456,20 +1456,28 @@ func TeamDocStats(c *gin.Context) {
 // ==================== Helpers ====================
 
 func writeDocContent(docID string, content []byte) {
-	var deptID string
-	database.DB.QueryRow("SELECT department_id FROM md_documents WHERE id=?", docID).Scan(&deptID)
-	_, _, err := store.WriteVersion(deptID, docID, 1, content)
+	var teamID, deptID string
+	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
+	bucket := teamID
+	if bucket == "" {
+		bucket = deptID // fallback for legacy docs
+	}
+	_, _, err := store.WriteVersion(bucket, docID, 1, content)
 	if err != nil {
 		log.Printf("writeDocContent error: %v", err)
 	}
 }
 
 func readDocContent(docID string) []byte {
-	var deptID string
-	database.DB.QueryRow("SELECT department_id FROM md_documents WHERE id=?", docID).Scan(&deptID)
-	data, err := store.ReadCurrent(deptID, docID)
+	var teamID, deptID string
+	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
+	bucket := teamID
+	if bucket == "" {
+		bucket = deptID // fallback for legacy docs
+	}
+	data, err := store.ReadCurrent(bucket, docID)
 	if err != nil {
-		log.Printf("readDocContent error: %v", err)
+		log.Printf("readDocContent error (bucket=%s): %v", bucket, err)
 		return []byte{}
 	}
 	return data
