@@ -7,26 +7,26 @@
           <el-icon><Operation /></el-icon>
         </el-button>
         <el-button type="primary" @click="showNewDoc = true">
-          <el-icon><Plus /></el-icon> 新建文档
+          <el-icon><Plus /></el-icon> {{ t('docs.newDoc') }}
         </el-button>
         <el-button @click="showNewSheet = true">
-          <el-icon><Grid /></el-icon> 表格
+          <el-icon><Grid /></el-icon> {{ t('docs.newSheet') }}
         </el-button>
         <el-button @click="showImportDialog = true">
           <el-icon><Upload /></el-icon>
         </el-button>
       </div>
       <div class="toolbar-right">
-        <el-input v-model="search" placeholder="搜索文档..." class="search-box" clearable @input="debounceSearch" @clear="clearSearch" size="default">
+        <el-input v-model="search" :placeholder="t('mainLayout.searchPlaceholder')" class="search-box" clearable @input="debounceSearch" @clear="clearSearch" size="default">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-select v-model="searchTagId" placeholder="全部标签" clearable class="tag-filter" size="default" @change="doSearch">
+        <el-select v-model="searchTagId" :placeholder="t('docs.allTags')" clearable class="tag-filter" size="default" @change="doSearch">
           <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
         </el-select>
         <el-select v-model="sortBy" size="default" class="sort-select" @change="sortDocs">
-          <el-option label="更新时间" value="updated" />
-          <el-option label="创建时间" value="created" />
-          <el-option label="标题" value="title" />
+          <el-option :label="t('docs.sortByUpdated')" value="updated" />
+          <el-option :label="t('docs.sortByCreated')" value="created" />
+          <el-option :label="t('docs.sortByName')" value="title" />
         </el-select>
         <el-button-group>
           <el-button :type="layoutMode === 'grid' ? 'primary' : 'default'" @click="layoutMode = 'grid'" size="default">
@@ -44,12 +44,12 @@
       <div v-if="selectedDocs.length" class="batch-bar">
         <div class="batch-info">
           <div class="batch-dot" />
-          <span>已选 <strong>{{ selectedDocs.length }}</strong> 项</span>
+          <span v-html="t('docs.selectedCount', [selectedDocs.length])"></span>
         </div>
-        <el-button size="small" @click="showBatchMove = true">移动</el-button>
-        <el-button size="small" @click="batchExport">导出</el-button>
-        <el-button size="small" type="danger" @click="batchDelete">删除</el-button>
-        <el-button size="small" link @click="selectedDocs = []">取消</el-button>
+        <el-button size="small" @click="showBatchMove = true">{{ t('docs.batchMove') }}</el-button>
+        <el-button size="small" @click="batchExport">{{ t('docs.batchExport') }}</el-button>
+        <el-button size="small" type="danger" @click="batchDelete">{{ t('common.delete') }}</el-button>
+        <el-button size="small" link @click="selectedDocs = []">{{ t('common.cancel') }}</el-button>
       </div>
     </transition>
 
@@ -64,21 +64,21 @@
           <div class="sidebar-section">
             <div class="nav-item" :class="{ active: viewMode === 'all' }" @click="switchView('all')">
               <svg viewBox="0 0 20 20" fill="currentColor" class="nav-icon"><path d="M3 4a1 1 0 011-1h4a1 1 0 01.8.4L10.5 6H17a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>
-              全部文档
+              {{ t('docs.allDocs') }}
             </div>
             <div class="nav-item" :class="{ active: viewMode === 'recent' }" @click="switchView('recent')">
               <el-icon class="nav-icon"><Clock /></el-icon>
-              最近打开
+              {{ t('docs.recentOpen') }}
             </div>
             <div class="nav-item" :class="{ active: viewMode === 'favorites' }" @click="switchView('favorites')">
               <el-icon class="nav-icon"><Star /></el-icon>
-              我的收藏
+              {{ t('docs.myFavorites') }}
             </div>
           </div>
 
           <!-- 标签 -->
           <div v-if="sidebarTags.length" class="sidebar-section">
-            <div class="section-title">标签</div>
+            <div class="section-title">{{ t('docs.tagSection') }}</div>
             <div v-for="tag in sidebarTags" :key="tag.id" class="nav-item" @click="filterByTag(tag.id)">
               <span class="tag-dot" :style="{ background: tag.color }" />
               {{ tag.name }}
@@ -89,8 +89,8 @@
           <!-- 文件夹树 -->
           <div class="sidebar-section">
             <div class="section-title">
-              文件夹
-              <el-button size="small" text @click="newFolderParentId = null; showNewFolder = true" class="section-add">+ 新建</el-button>
+              {{ t('docs.folderSection') }}
+              <el-button size="small" text @click="newFolderParentId = null; showNewFolder = true" class="section-add">{{ t('docs.newFolderBtn') }}</el-button>
             </div>
             <el-tree
               :data="treeData"
@@ -117,7 +117,7 @@
       <div class="doc-area">
         <!-- 搜索结果头 -->
         <div v-if="searchMode" class="search-header">
-          搜索「{{ search }}」— 找到 {{ docs.length }} 个结果
+          {{ t('docs.searchResult', [search, docs.length]) }}
         </div>
 
         <!-- 加载 -->
@@ -128,9 +128,9 @@
         <!-- 空状态 -->
         <div v-else-if="!docs.length" class="empty-state">
           <div class="empty-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="48" height="48"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg></div>
-          <p v-if="viewMode === 'recent'">还没有打开过文档</p>
-          <p v-else-if="viewMode === 'favorites'">还没有收藏文档</p>
-          <p v-else>暂无文档，点击「新建文档」开始</p>
+          <p v-if="viewMode === 'recent'">{{ t('docs.noDocsYet') }}</p>
+          <p v-else-if="viewMode === 'favorites'">{{ t('docs.noFavDocs') }}</p>
+          <p v-else>{{ t('docs.noDocsYetDesc') }}</p>
         </div>
 
         <!-- 网格视图 -->
@@ -156,12 +156,12 @@
               <div v-if="doc.snippetHtml || doc.snippet" class="card-snippet" v-html="doc.snippetHtml || doc.snippet"></div>
               <div class="card-meta">
                 <el-tag :type="doc.type === 'doc' ? '' : 'success'" size="small" effect="light" round>
-                  {{ doc.type === 'doc' ? '文档' : '表格' }}
+                  {{ doc.type === 'doc' ? t('common.doc') : t('common.sheet') }}
                 </el-tag>
                 <span class="card-version">v{{ doc.version }}</span>
               </div>
               <div class="card-footer">
-                <span class="card-author">{{ doc.created_by_name || '未知' }}</span>
+                <span class="card-author">{{ doc.created_by_name || t('common.unknown') }}</span>
                 <span class="card-time">{{ formatTime(doc.updated_at) }}</span>
               </div>
             </div>
@@ -178,11 +178,11 @@
                 <el-icon :size="18" class="more-icon"><MoreFilled /></el-icon>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item @click="openDoc(doc)">打开</el-dropdown-item>
-                    <el-dropdown-item @click="showRename(doc)">重命名</el-dropdown-item>
-                    <el-dropdown-item @click="showMove(doc)">移动到...</el-dropdown-item>
+                    <el-dropdown-item @click="openDoc(doc)">{{ t('docs.open') }}</el-dropdown-item>
+                    <el-dropdown-item @click="showRename(doc)">{{ t('docs.contextRename') }}</el-dropdown-item>
+                    <el-dropdown-item @click="showMove(doc)">{{ t('docs.moveTo') }}</el-dropdown-item>
                     <el-dropdown-item @click="deleteDoc(doc)" divided>
-                      <span style="color:#f56c6c">删除</span>
+                      <span style="color:#f56c6c">{{ t('common.delete') }}</span>
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -201,7 +201,7 @@
             @selection-change="(rows: any[]) => selectedDocs = rows.map((r: any) => r.id)"
           >
             <el-table-column type="selection" width="40" />
-            <el-table-column label="标题" min-width="260">
+            <el-table-column :label="t('docs.docTitle')" min-width="260">
               <template #default="{ row }">
                 <div class="table-title">
                   <div class="type-dot" :class="row.type">
@@ -211,24 +211,24 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="类型" width="90" align="center">
+            <el-table-column :label="t('docs.docType')" width="90" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.type === 'doc' ? '' : 'success'" size="small" effect="light" round>
-                  {{ row.type === 'doc' ? '文档' : '表格' }}
+                  {{ row.type === 'doc' ? t('common.doc') : t('common.sheet') }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="创建者" width="100">
+            <el-table-column :label="t('docs.docOwner')" width="100">
               <template #default="{ row }">
                 <span class="author-text">{{ row.created_by_name || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="version" label="版本" width="70" align="center">
+            <el-table-column prop="version" :label="t('docs.docVersion')" width="70" align="center">
               <template #default="{ row }">
                 <span class="version-text">v{{ row.version }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="更新时间" width="140">
+            <el-table-column :label="t('docs.docUpdatedAt')" width="140">
               <template #default="{ row }">
                 <span class="time-text">{{ formatTime(row.updated_at) }}</span>
               </template>
@@ -243,9 +243,9 @@
                     <el-icon :size="16" style="cursor:pointer"><MoreFilled /></el-icon>
                     <template #dropdown>
                       <el-dropdown-menu>
-                        <el-dropdown-item @click="showRename(row)">重命名</el-dropdown-item>
-                        <el-dropdown-item @click="showMove(row)">移动</el-dropdown-item>
-                        <el-dropdown-item @click="deleteDoc(row)" divided><span style="color:#f56c6c">删除</span></el-dropdown-item>
+                        <el-dropdown-item @click="showRename(row)">{{ t('docs.contextRename') }}</el-dropdown-item>
+                        <el-dropdown-item @click="showMove(row)">{{ t('docs.batchMove') }}</el-dropdown-item>
+                        <el-dropdown-item @click="deleteDoc(row)" divided><span style="color:#f56c6c">{{ t('common.delete') }}</span></el-dropdown-item>
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
@@ -258,87 +258,87 @@
     </div>
 
     <!-- 新建文件夹 -->
-    <el-dialog v-model="showNewFolder" :title="newFolderParentId ? '新建子文件夹' : '新建文件夹'" width="400" destroy-on-close>
-      <el-input v-model="newFolderName" placeholder="文件夹名称" size="large" />
+    <el-dialog v-model="showNewFolder" :title="newFolderParentId ? t('docs.newSubfolderTitle') : t('docs.newFolderTitle')" width="400" destroy-on-close>
+      <el-input v-model="newFolderName" :placeholder="t('docs.folderNamePlaceholder')" size="large" />
       <template #footer>
-        <el-button @click="showNewFolder = false">取消</el-button>
-        <el-button type="primary" @click="createFolder">创建</el-button>
+        <el-button @click="showNewFolder = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="createFolder">{{ t('common.create') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 文件夹右键菜单 -->
     <div v-if="folderCtxMenu.show" :style="{ position: 'fixed', left: folderCtxMenu.x + 'px', top: folderCtxMenu.y + 'px', zIndex: 9999 }" class="folder-ctx-menu">
-      <div class="folder-ctx-item" @click="createSubFolder">新建子文件夹</div>
-      <div class="folder-ctx-item" @click="startRenameFolder">重命名</div>
-      <div class="folder-ctx-item danger" @click="deleteFolder">删除</div>
+      <div class="folder-ctx-item" @click="createSubFolder">{{ t('docs.contextNewSubfolder') }}</div>
+      <div class="folder-ctx-item" @click="startRenameFolder">{{ t('docs.contextRename') }}</div>
+      <div class="folder-ctx-item danger" @click="deleteFolder">{{ t('common.delete') }}</div>
     </div>
 
     <!-- 重命名文件夹 -->
-    <el-dialog v-model="showRenameFolder" title="重命名文件夹" width="400" destroy-on-close>
-      <el-input v-model="renameFolderName" placeholder="文件夹名称" size="large" />
+    <el-dialog v-model="showRenameFolder" :title="t('docs.renameFolderTitle')" width="400" destroy-on-close>
+      <el-input v-model="renameFolderName" :placeholder="t('docs.folderNamePlaceholder')" size="large" />
       <template #footer>
-        <el-button @click="showRenameFolder = false">取消</el-button>
-        <el-button type="primary" @click="doRenameFolder">确定</el-button>
+        <el-button @click="showRenameFolder = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="doRenameFolder">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 新建文档 -->
-    <el-dialog v-model="showNewDoc" title="新建文档" width="520" destroy-on-close>
+    <el-dialog v-model="showNewDoc" :title="t('docs.newDocDialogTitle')" width="520" destroy-on-close>
       <el-form label-position="top">
-        <el-form-item label="文档标题">
-          <el-input v-model="newDocTitle" placeholder="输入文档标题" size="large" />
+        <el-form-item :label="t('docs.newDocTitleLabel')">
+          <el-input v-model="newDocTitle" :placeholder="t('docs.newDocTitlePlaceholder')" size="large" />
         </el-form-item>
-        <el-form-item label="选择模板">
+        <el-form-item :label="t('docs.selectTemplate')">
           <div class="template-grid">
             <div v-for="t in templateList" :key="t.key" class="tpl-card" :class="{ active: newDocTemplate === t.key }" @click="newDocTemplate = t.key">
               <div class="tpl-icon" v-html="t.icon"></div>
               <div class="tpl-label">{{ t.name }}</div>
             </div>
           </div>
-          <div v-if="customTemplates.length" style="margin-top:8px;font-size:12px;color:#909399">自定义模板带 📄 标识</div>
+          <div v-if="customTemplates.length" style="margin-top:8px;font-size:12px;color:#909399">{{ t('docs.customTemplateHint') }}</div>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showNewDoc = false">取消</el-button>
-        <el-button type="primary" @click="createDoc('doc')">创建</el-button>
+        <el-button @click="showNewDoc = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="createDoc('doc')">{{ t('common.create') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 新建表格 -->
-    <el-dialog v-model="showNewSheet" title="新建表格" width="400" destroy-on-close>
-      <el-input v-model="newDocTitle" placeholder="表格标题" size="large" />
+    <el-dialog v-model="showNewSheet" :title="t('docs.newSheetDialogTitle')" width="400" destroy-on-close>
+      <el-input v-model="newDocTitle" :placeholder="t('docs.newSheetTitlePlaceholder')" size="large" />
       <template #footer>
-        <el-button @click="showNewSheet = false">取消</el-button>
-        <el-button type="primary" @click="createDoc('sheet')">创建</el-button>
+        <el-button @click="showNewSheet = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="createDoc('sheet')">{{ t('common.create') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 导入 -->
-    <el-dialog v-model="showImportDialog" title="批量导入" width="500">
-      <p class="import-hint">支持 .txt、.md、.html、.docx、.xlsx 文件，最多20个，每个不超过10MB</p>
+    <el-dialog v-model="showImportDialog" :title="t('docs.importDialogTitle')" width="500">
+      <p class="import-hint">{{ t('docs.importHint') }}</p>
       <el-upload ref="importUpload" :auto-upload="false" :limit="20" multiple accept=".txt,.md,.html,.htm,.docx,.xlsx" :on-change="onImportFileChange" drag>
         <el-icon :size="32" color="#c0c4cc"><Upload /></el-icon>
-        <div class="upload-text">拖拽文件到此处，或 <em>点击上传</em></div>
+        <div class="upload-text">{{ t('docs.importDragText') }} <em>{{ t('docs.importClickUpload') }}</em></div>
       </el-upload>
       <template #footer>
-        <el-button @click="showImportDialog = false">取消</el-button>
+        <el-button @click="showImportDialog = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" @click="doImport" :loading="importing" :disabled="!importFiles.length">
-          导入 {{ importFiles.length ? importFiles.length + ' 个文件' : '' }}
+          {{ t('docs.importButton', [importFiles.length ? importFiles.length : '']) }}
         </el-button>
       </template>
     </el-dialog>
 
     <!-- 重命名 -->
-    <el-dialog v-model="renameDialog" title="重命名" width="400" destroy-on-close>
-      <el-input v-model="renameTitle" placeholder="新标题" size="large" />
+    <el-dialog v-model="renameDialog" :title="t('docs.renameTitle')" width="400" destroy-on-close>
+      <el-input v-model="renameTitle" :placeholder="t('docs.renamePlaceholder')" size="large" />
       <template #footer>
-        <el-button @click="renameDialog = false">取消</el-button>
-        <el-button type="primary" @click="doRename">确定</el-button>
+        <el-button @click="renameDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="doRename">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 移动 -->
-    <el-dialog v-model="moveDialog" title="移动到文件夹" width="400">
+    <el-dialog v-model="moveDialog" :title="t('docs.moveDialogTitle')" width="400">
       <el-tree :data="treeData" :props="{ label: 'name', children: 'children' }" node-key="id" highlight-current default-expand-all @node-click="selectMoveTarget">
         <template #default="{ data }">
           <span class="tree-node">
@@ -348,14 +348,14 @@
         </template>
       </el-tree>
       <template #footer>
-        <el-button @click="moveDialog = false">取消</el-button>
-        <el-button type="primary" @click="doMove" :disabled="!moveTargetFolder">移动</el-button>
+        <el-button @click="moveDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="doMove" :disabled="!moveTargetFolder">{{ t('docs.batchMove') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 批量移动 -->
-    <el-dialog v-model="showBatchMove" title="批量移动" width="400">
-      <p style="color:#909399;margin-bottom:16px">将 {{ selectedDocs.length }} 个文档移动到：</p>
+    <el-dialog v-model="showBatchMove" :title="t('docs.batchMoveDialogTitle')" width="400">
+      <p style="color:#909399;margin-bottom:16px">{{ t('docs.batchMoveDesc', [selectedDocs.length]) }}</p>
       <el-tree :data="treeData" :props="{ label: 'name', children: 'children' }" node-key="id" highlight-current default-expand-all @node-click="batchMoveTarget = $event.id">
         <template #default="{ data }">
           <span class="tree-node">
@@ -365,8 +365,8 @@
         </template>
       </el-tree>
       <template #footer>
-        <el-button @click="showBatchMove = false">取消</el-button>
-        <el-button type="primary" @click="doBatchMove" :disabled="!batchMoveTarget">移动</el-button>
+        <el-button @click="showBatchMove = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="doBatchMove" :disabled="!batchMoveTarget">{{ t('docs.batchMove') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -375,10 +375,13 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Star, StarFilled, Clock, Files, MoreFilled, Operation, Monitor, List } from '@element-plus/icons-vue'
 import http from '@/utils/http'
+import teamApi from '@/utils/team-api'
 
+const { t } = useI18n()
 const router = useRouter()
 const treeData = ref<any[]>([])
 const docs = ref<any[]>([])
@@ -431,11 +434,11 @@ const sortBy = ref('updated')
 const customTemplates = ref<{id: string; name: string; type: string; content: string}[]>([])
 
 const builtinTemplateList = [
-  { key: '', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg>', name: '空白文档' },
-  { key: 'meeting', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h8a2 2 0 012 2v3H6a2 2 0 00-2 2v5H4a2 2 0 01-2-2V5zm4 6a2 2 0 012-2h8a2 2 0 012 2v5a2 2 0 01-2 2H8a2 2 0 01-2-2v-5zm2 0v5h8v-5H8z"/></svg>', name: '会议纪要' },
-  { key: 'weekly', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V3zm2 0v14h10V3H5zm1 3h8v2H6V6zm0 4h6v2H6v-2z"/></svg>', name: '周报' },
-  { key: 'requirement', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 2h6v1H7V6zm0 2h6v1H7V8zm0 2h4v1H7v-1z"/><path d="M8 12l2 2 4-4" stroke=\'currentColor\' fill=\'none\' stroke-width=\'1.5\'/></svg>', name: '需求文档' },
-  { key: 'api', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 00-.894.553L5.382 5H4a1 1 0 000 2h12a1 1 0 100-2h-1.382l-.724-1.447A1 1 0 0013 3H7zm0 2h6l.724 1.447A1 1 0 0014.618 7H5.382a1 1 0 00.894-.553L7 5zM5 9h10v6a2 2 0 01-2 2H7a2 2 0 01-2-2V9z"/></svg>', name: 'API 文档' },
+  { key: '', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg>', name: t('docs.blankDoc') },
+  { key: 'meeting', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h8a2 2 0 012 2v3H6a2 2 0 00-2 2v5H4a2 2 0 01-2-2V5zm4 6a2 2 0 012-2h8a2 2 0 012 2v5a2 2 0 01-2 2H8a2 2 0 01-2-2v-5zm2 0v5h8v-5H8z"/></svg>', name: t('docs.templateMeeting') },
+  { key: 'weekly', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V3zm2 0v14h10V3H5zm1 3h8v2H6V6zm0 4h6v2H6v-2z"/></svg>', name: t('docs.templateWeekly') },
+  { key: 'requirement', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 2h6v1H7V6zm0 2h6v1H7V8zm0 2h4v1H7v-1z"/><path d="M8 12l2 2 4-4" stroke=\'currentColor\' fill=\'none\' stroke-width=\'1.5\'/></svg>', name: t('docs.templateRequirement') },
+  { key: 'api', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 00-.894.553L5.382 5H4a1 1 0 000 2h12a1 1 0 100-2h-1.382l-.724-1.447A1 1 0 0013 3H7zm0 2h6l.724 1.447A1 1 0 0014.618 7H5.382a1 1 0 00.894-.553L7 5zM5 9h10v6a2 2 0 01-2 2H7a2 2 0 01-2-2V9z"/></svg>', name: t('docs.templateApi') },
   { key: 'readme', icon: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm0 2.5L17.5 8H14V4.5zM6 4h6v6h6v10H6V4z"/></svg>', name: 'README' },
 ]
 
@@ -480,20 +483,20 @@ function setDocs(list: any[]) {
   sortDocs()
 }
 
-function formatTime(t: string): string {
-  if (!t) return ''
-  const d = new Date(t)
+function formatTime(ts: string): string {
+  if (!ts) return ''
+  const d = new Date(ts)
   const now = new Date()
   const diff = now.getTime() - d.getTime()
-  if (diff < 60000) return '刚刚'
-  if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前'
-  if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前'
-  if (diff < 604800000) return Math.floor(diff / 86400000) + ' 天前'
+  if (diff < 60000) return t('common.justNow')
+  if (diff < 3600000) return t('common.minutesAgo', [Math.floor(diff / 60000)])
+  if (diff < 86400000) return t('common.hoursAgo', [Math.floor(diff / 3600000)])
+  if (diff < 604800000) return t('common.daysAgo', [Math.floor(diff / 86400000)])
   return d.toLocaleDateString('zh-CN')
 }
 
 async function loadTree() {
-  const { data } = await http.get('/docs/tree')
+  const { data } = await teamApi.get('/folders/tree')
   // 后端已返回树形结构，直接使用；兼容旧版扁平数据
   const raw = data.data || []
   treeData.value = raw.length > 0 && raw[0].children !== undefined ? raw : buildTree(raw)
@@ -504,7 +507,7 @@ async function loadDocs(folderId?: string) {
   try {
     const params: any = {}
     if (folderId) params.folder_id = folderId
-    const { data } = await http.get('/docs/documents', { params })
+    const { data } = await teamApi.get('/documents', { params })
     setDocs(data.data || [])
   } finally { loading.value = false }
 }
@@ -512,7 +515,7 @@ async function loadDocs(folderId?: string) {
 async function loadRecent() {
   loading.value = true
   try {
-    const { data } = await http.get('/docs/documents/recent')
+    const { data } = await teamApi.get('/documents/recent')
     setDocs(data.data || [])
   } finally { loading.value = false }
 }
@@ -520,13 +523,13 @@ async function loadRecent() {
 async function loadFavorites() {
   loading.value = true
   try {
-    const { data } = await http.get('/docs/favorites')
+    const { data } = await teamApi.get('/favorites')
     setDocs(data.data || [])
   } finally { loading.value = false }
 }
 
 async function loadFavoriteIds() {
-  const { data } = await http.get('/docs/favorites')
+  const { data } = await teamApi.get('/favorites')
   favoriteIds.value = new Set((data.data || []).map((d: any) => d.id))
 }
 
@@ -552,7 +555,7 @@ async function doSearch() {
   searchMode.value = true
   const params: any = { q: search.value || '' }
   if (searchTagId.value) params.tag_id = searchTagId.value
-  const { data } = await http.get('/docs/documents/search', { params })
+  const { data } = await teamApi.get('/documents/search', { params })
   setDocs(data.data || [])
 }
 
@@ -575,8 +578,8 @@ function buildTree(items: any[]): any[] {
 async function createFolder() {
   if (!newFolderName.value) return
   const parentId = newFolderParentId.value ?? currentFolder.value
-  await http.post('/docs/folders', { name: newFolderName.value, parent_id: parentId })
-  ElMessage.success('文件夹已创建')
+  await teamApi.post('/folders', { name: newFolderName.value, parent_id: parentId })
+  ElMessage.success(t('docs.createFolderSuccess'))
   showNewFolder.value = false
   newFolderName.value = ''
   newFolderParentId.value = null
@@ -608,8 +611,8 @@ function startRenameFolder() {
 
 async function doRenameFolder() {
   if (!renameFolderName.value) return
-  await http.put(`/docs/folders/${renameFolderId.value}`, { name: renameFolderName.value })
-  ElMessage.success('文件夹已重命名')
+  await teamApi.put(`/folders/${renameFolderId.value}`, { name: renameFolderName.value })
+  ElMessage.success(t('docs.renameFolderSuccess'))
   showRenameFolder.value = false
   loadTree()
 }
@@ -617,23 +620,23 @@ async function doRenameFolder() {
 async function deleteFolder() {
   folderCtxMenu.show = false
   try {
-    await ElMessageBox.confirm(`确定删除文件夹「${folderCtxMenu.nodeName}」吗？`, '删除文件夹', { type: 'warning' })
+    await ElMessageBox.confirm(t('docs.deleteFolderConfirm', [folderCtxMenu.nodeName]), t('docs.deleteFolderTitle'), { type: 'warning' })
     try {
-      await http.delete(`/docs/folders/${folderCtxMenu.nodeId}`)
-      ElMessage.success('文件夹已删除')
+      await teamApi.delete(`/folders/${folderCtxMenu.nodeId}`)
+      ElMessage.success(t('docs.deleteFolderSuccess'))
       if (currentFolder.value === folderCtxMenu.nodeId) {
         currentFolder.value = null
         loadDocs()
       }
       loadTree()
     } catch (e: any) {
-      ElMessage.error(e?.response?.data?.error || '删除文件夹失败')
+      ElMessage.error(e?.response?.data?.error || t('docs.deleteFolderFailed'))
     }
   } catch {}
 }
 
 async function createDoc(type: string) {
-  if (!newDocTitle.value.trim()) return ElMessage.warning('请输入文档标题')
+  if (!newDocTitle.value.trim()) return ElMessage.warning(t('docs.titleRequired'))
 
   let tplContent = ''
   if (type === 'doc') {
@@ -642,7 +645,7 @@ async function createDoc(type: string) {
       // Load custom template content
       const tplId = tplKey.slice(7)
       try {
-        const { data: tplResp } = await http.get(`/docs/templates/${tplId}`)
+        const { data: tplResp } = await teamApi.get(`/templates/${tplId}`)
         tplContent = tplResp.data?.content || ''
       } catch { tplContent = '' }
     } else {
@@ -650,11 +653,11 @@ async function createDoc(type: string) {
     }
   }
 
-  const { data } = await http.post('/docs/documents', {
+  const { data } = await teamApi.post('/documents', {
     title: newDocTitle.value, type, folder_id: currentFolder.value,
     ...(tplContent ? { content: tplContent } : {}),
   })
-  ElMessage.success('已创建')
+  ElMessage.success(t('docs.createSuccess'))
   showNewDoc.value = false
   showNewSheet.value = false
   newDocTitle.value = ''
@@ -664,9 +667,9 @@ async function createDoc(type: string) {
 }
 
 async function deleteDoc(row: any) {
-  await ElMessageBox.confirm(`确定删除「${row.title}」？`, '删除确认', { type: 'warning' })
-  await http.delete(`/docs/documents/${row.id}`)
-  ElMessage.success('已删除')
+  await ElMessageBox.confirm(t('docs.deleteConfirm', [row.title]), t('docs.deleteConfirmTitle'), { type: 'warning' })
+  await teamApi.delete(`/documents/${row.id}`)
+  ElMessage.success(t('docs.deleteSuccess'))
   switchView(viewMode.value)
 }
 
@@ -677,11 +680,11 @@ function showRename(doc: any) {
 }
 
 async function doRename() {
-  if (!renameTitle.value.trim()) return ElMessage.warning('标题不能为空')
-  await http.put(`/docs/documents/${renameDoc.value.id}`, { title: renameTitle.value })
+  if (!renameTitle.value.trim()) return ElMessage.warning(t('docs.titleCannotEmpty'))
+  await teamApi.put(`/documents/${renameDoc.value.id}`, { title: renameTitle.value })
   renameDoc.value.title = renameTitle.value
   renameDialog.value = false
-  ElMessage.success('已重命名')
+  ElMessage.success(t('docs.renameSuccess'))
 }
 
 function showMove(doc: any) {
@@ -696,9 +699,9 @@ function selectMoveTarget(data: any) {
 
 async function doMove() {
   if (!moveTargetFolder.value) return
-  await http.put(`/docs/documents/${moveDoc.value.id}`, { folder_id: moveTargetFolder.value })
+  await teamApi.put(`/documents/${moveDoc.value.id}`, { folder_id: moveTargetFolder.value })
   moveDialog.value = false
-  ElMessage.success('已移动')
+  ElMessage.success(t('docs.moveSuccess'))
   switchView(viewMode.value)
 }
 
@@ -709,15 +712,15 @@ function openDoc(row: any) {
 async function toggleFavorite(doc: any) {
   try {
     if (doc.is_favorite) {
-      await http.delete(`/docs/favorites/${doc.id}`)
+      await teamApi.delete(`/favorites/${doc.id}`)
       doc.is_favorite = false
       favoriteIds.value.delete(doc.id)
-      ElMessage.success('已取消收藏')
+      ElMessage.success(t('docs.removeFavSuccess'))
     } else {
-      await http.post(`/docs/favorites/${doc.id}`)
+      await teamApi.post(`/favorites/${doc.id}`)
       doc.is_favorite = true
       favoriteIds.value.add(doc.id)
-      ElMessage.success('已收藏')
+      ElMessage.success(t('docs.addFavSuccess'))
     }
     if (viewMode.value === 'favorites') loadFavorites()
   } catch { /* ignore */ }
@@ -731,24 +734,24 @@ function toggleSelect(id: string) {
 
 async function batchDelete() {
   try {
-    await ElMessageBox.confirm(`确定删除 ${selectedDocs.value.length} 个文档？`, '批量删除', { type: 'warning' })
+    await ElMessageBox.confirm(t('docs.batchDeleteConfirm', [selectedDocs.value.length]), t('docs.batchDeleteTitle'), { type: 'warning' })
   } catch { return }
   let ok = 0
   for (const id of selectedDocs.value) {
-    try { await http.delete(`/docs/documents/${id}`); ok++ } catch {}
+    try { await teamApi.delete(`/documents/${id}`); ok++ } catch {}
   }
-  ElMessage.success(`已删除 ${ok} 个文档`)
+  ElMessage.success(t('docs.batchDeleteSuccess', [ok]))
   selectedDocs.value = []
   loadDocs()
 }
 
 async function batchExport() {
   if (!selectedDocs.value.length) return
-  ElMessage.info('正在导出...')
+  ElMessage.info(t('docs.exporting'))
   let ok = 0
   for (const id of selectedDocs.value) {
     try {
-      const resp = await http.get(`/docs/documents/${id}/export`, { params: { format: 'markdown' }, responseType: 'blob' })
+      const resp = await teamApi.get(`/documents/${id}/export`, { params: { format: 'markdown' }, responseType: 'blob' })
       const url = URL.createObjectURL(resp.data)
       const a = document.createElement('a'); a.href = url
       a.download = resp.headers['content-disposition']?.match(/"([^"]+)"/)?.[1] || `${id}.md`
@@ -756,15 +759,15 @@ async function batchExport() {
       ok++
     } catch {}
   }
-  ElMessage.success(`已导出 ${ok} 个文档`)
+  ElMessage.success(t('docs.exportSuccess', [ok]))
 }
 
 async function doBatchMove() {
   let ok = 0
   for (const id of selectedDocs.value) {
-    try { await http.put(`/docs/documents/${id}`, { folder_id: batchMoveTarget.value }); ok++ } catch {}
+    try { await teamApi.put(`/documents/${id}`, { folder_id: batchMoveTarget.value }); ok++ } catch {}
   }
-  ElMessage.success(`已移动 ${ok} 个文档`)
+  ElMessage.success(t('docs.batchMoveSuccess', [ok]))
   selectedDocs.value = []
   showBatchMove.value = false
   loadDocs()
@@ -781,13 +784,13 @@ async function doImport() {
   for (const f of importFiles.value) fd.append('files', f.raw)
   if (currentFolder.value) fd.append('folder_id', currentFolder.value)
   try {
-    const { data } = await http.post('/docs/import', fd)
-    ElMessage.success(data.message || '导入完成')
+    const { data } = await teamApi.post('/import', fd)
+    ElMessage.success(data.message || t('docs.importSuccess'))
     showImportDialog.value = false
     importFiles.value = []
     loadDocs()
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error || '导入失败')
+    ElMessage.error(e?.response?.data?.error || t('docs.importFailed'))
   }
   importing.value = false
 }
@@ -808,7 +811,7 @@ function closeFolderCtxMenu() { folderCtxMenu.show = false }
 
 async function loadSidebarTags() {
   try {
-    const { data } = await http.get('/docs/tags')
+    const { data } = await teamApi.get('/tags')
     sidebarTags.value = data || []
     allTags.value = data?.data || data || []
   } catch {}
@@ -816,7 +819,7 @@ async function loadSidebarTags() {
 
 async function loadCustomTemplates() {
   try {
-    const { data } = await http.get('/docs/templates', { params: { type: 'doc' } })
+    const { data } = await teamApi.get('/templates', { params: { type: 'doc' } })
     customTemplates.value = (data.data || []).map((t: any) => ({ id: t.id, name: t.name, type: t.type, content: '' }))
   } catch {}
 }
@@ -824,7 +827,7 @@ async function loadCustomTemplates() {
 async function filterByTag(tagId: string) {
   try {
     searchMode.value = true
-    const { data } = await http.get(`/docs/tags/${tagId}/documents`)
+    const { data } = await teamApi.get(`/tags/${tagId}/documents`)
     setDocs(data || [])
   } catch {}
 }

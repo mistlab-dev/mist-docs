@@ -2,31 +2,31 @@
   <div class="admin-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">存储监控</h2>
+        <h2 class="page-title">{{ t('admin.storage.title') }}</h2>
         <el-tag :type="health === 'healthy' ? 'success' : health === 'warning' ? 'warning' : 'danger'" effect="light" round size="small">
-          {{ health === 'healthy' ? '健康' : health === 'warning' ? '注意' : '异常' }}
+          {{ health === 'healthy' ? t('admin.storage.healthy') : health === 'warning' ? t('admin.storage.warning') : t('admin.storage.error') }}
         </el-tag>
       </div>
       <el-button size="default" @click="load">
-        <el-icon><RefreshRight /></el-icon> 刷新
+        <el-icon><RefreshRight /></el-icon> {{ t('common.refresh') }}
       </el-button>
     </div>
 
     <!-- 磁盘 + 加密 -->
     <div class="top-grid">
       <div class="panel disk-panel">
-        <div class="panel-title">磁盘使用</div>
+        <div class="panel-title">{{ t('admin.storage.diskUsage') }}</div>
         <div class="disk-stats">
           <div class="disk-item">
-            <span class="disk-label">已用</span>
+            <span class="disk-label">{{ t('admin.storage.used') }}</span>
             <span class="disk-value">{{ disk.used_human }}</span>
           </div>
           <div class="disk-item">
-            <span class="disk-label">可用</span>
+            <span class="disk-label">{{ t('admin.storage.available') }}</span>
             <span class="disk-value">{{ disk.available_human }}</span>
           </div>
           <div class="disk-item">
-            <span class="disk-label">总计</span>
+            <span class="disk-label">{{ t('admin.storage.total') }}</span>
             <span class="disk-value">{{ disk.total_human }}</span>
           </div>
         </div>
@@ -39,18 +39,18 @@
       </div>
 
       <div class="panel encrypt-panel">
-        <div class="panel-title">加密状态</div>
+        <div class="panel-title">{{ t('admin.storage.encryptionStatus') }}</div>
         <div class="encrypt-badge">
           <el-tag :type="encryption.enabled ? 'success' : 'danger'" effect="dark" round size="large">
-            {{ encryption.enabled ? 'AES-256-GCM 已启用' : '未启用加密' }}
+            {{ encryption.enabled ? t('admin.storage.encryptionEnabled') : t('admin.storage.encryptionDisabled') }}
           </el-tag>
         </div>
         <div class="encrypt-detail">
-          <span class="disk-label">算法</span>
+          <span class="disk-label">{{ t('admin.storage.algorithm') }}</span>
           <span class="disk-value">{{ encryption.algorithm || '—' }}</span>
         </div>
         <div class="encrypt-detail">
-          <span class="disk-label">存储路径</span>
+          <span class="disk-label">{{ t('admin.storage.storagePath') }}</span>
           <code class="path-code">{{ storageRoot }}</code>
         </div>
       </div>
@@ -69,18 +69,18 @@
 
     <!-- 部门占用 -->
     <div class="panel" v-if="files.departments?.length">
-      <div class="panel-title">部门存储分布</div>
+      <div class="panel-title">{{ t('admin.storage.deptDistribution') }}</div>
       <el-table :data="files.departments" size="small"
         :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
       >
-        <el-table-column prop="department_id" label="部门 ID" min-width="240" show-overflow-tooltip>
+        <el-table-column prop="department_id" :label="t('admin.storage.deptId')" min-width="240" show-overflow-tooltip>
           <template #default="{ row }">
             <code class="mono-id">{{ row.department_id }}</code>
           </template>
         </el-table-column>
-        <el-table-column prop="file_count" label="文件数" width="100" align="center" />
-        <el-table-column prop="document_count" label="文档数" width="100" align="center" />
-        <el-table-column prop="total_size_human" label="占用" width="100" align="center">
+        <el-table-column prop="file_count" :label="t('admin.storage.fileCount')" width="100" align="center" />
+        <el-table-column prop="document_count" :label="t('admin.storage.docCount')" width="100" align="center" />
+        <el-table-column prop="total_size_human" :label="t('admin.storage.usage')" width="100" align="center">
           <template #default="{ row }">
             <span class="size-text">{{ row.total_size_human }}</span>
           </template>
@@ -90,7 +90,7 @@
 
     <!-- 健康检查 -->
     <div class="panel">
-      <div class="panel-title">健康检查</div>
+      <div class="panel-title">{{ t('admin.storage.healthCheck') }}</div>
       <div class="check-list">
         <div v-for="c in checks" :key="c.name" class="check-item">
           <div class="check-status" :class="c.status" />
@@ -107,12 +107,16 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { WarningFilled } from '@element-plus/icons-vue'
 import http from '@/utils/http'
+import teamApi from '@/utils/team-api'
+
+const { t } = useI18n()
 
 const checkNames: any = {
-  disk_usage: '磁盘用量', storage_root: '存储目录', write_permission: '写入权限',
-  encryption: '加密状态', trash: '回收站', versions: '版本数量', config: '配置完整性',
+  disk_usage: t('admin.storage.checks.disk_usage'), storage_root: t('admin.storage.checks.storage_root'), write_permission: t('admin.storage.checks.write_permission'),
+  encryption: t('admin.storage.checks.encryption'), trash: t('admin.storage.checks.trash'), versions: t('admin.storage.checks.versions'), config: t('admin.storage.checks.config'),
 }
 
 const storageRoot = ref('')
@@ -124,16 +128,16 @@ const warnings = ref<string[]>([])
 const health = ref('healthy')
 
 const fileStats = computed(() => [
-  { label: '文件总数', value: files.value.total_files, color: '#4f6ef7' },
-  { label: '占用空间', value: files.value.total_size_human, color: '#6554c0' },
-  { label: '当前版本', value: files.value.current_files, color: '#36b37e' },
-  { label: '历史版本', value: files.value.version_files, color: '#00b8d9' },
-  { label: '协同状态', value: files.value.yjs_state_files, color: '#ff991f' },
-  { label: '回收站', value: files.value.trash_files, color: '#ff5630' },
+  { label: t('admin.storage.totalFiles'), value: files.value.total_files, color: '#4f6ef7' },
+  { label: t('admin.storage.usedSpace'), value: files.value.total_size_human, color: '#6554c0' },
+  { label: t('admin.storage.currentVersion'), value: files.value.current_files, color: '#36b37e' },
+  { label: t('admin.storage.historyVersion'), value: files.value.version_files, color: '#00b8d9' },
+  { label: t('admin.storage.collabState'), value: files.value.yjs_state_files, color: '#ff991f' },
+  { label: t('admin.storage.trashFiles'), value: files.value.trash_files, color: '#ff5630' },
 ])
 
 async function load() {
-  const { data } = await http.get('/storage/status')
+  const { data } = await teamApi.get('/storage/status')
   storageRoot.value = data.storage_root || ''
   disk.value = data.disk || {}
   files.value = data.files || {}

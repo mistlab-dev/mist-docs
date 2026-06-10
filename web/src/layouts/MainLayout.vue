@@ -10,7 +10,7 @@
           <span v-if="!collapsed" class="logo-text">MistDocs</span>
           <svg v-else class="logo-svg" viewBox="0 0 24 24" fill="#4f6ef7" stroke="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8" fill="#fff" stroke="none"/></svg>
         </div>
-        <button class="sidebar-hide-btn" @click="sidebarHidden = true" title="隐藏侧边栏">«</button>
+        <button class="sidebar-hide-btn" @click="sidebarHidden = true" :title="t('mainLayout.hideSidebar')">«</button>
       </div>
       <el-menu
         :default-active="route.path"
@@ -23,15 +23,15 @@
       >
         <el-menu-item index="/docs">
           <el-icon><Folder /></el-icon>
-          <template #title>文档</template>
+          <template #title>{{ t('mainLayout.docs') }}</template>
         </el-menu-item>
         <el-menu-item index="/trash">
           <el-icon><Delete /></el-icon>
-          <template #title>回收站</template>
+          <template #title>{{ t('mainLayout.trash') }}</template>
         </el-menu-item>
         <el-menu-item index="/help">
           <el-icon><QuestionFilled /></el-icon>
-          <template #title>帮助</template>
+          <template #title>{{ t('mainLayout.help') }}</template>
         </el-menu-item>
 
         <el-divider v-if="auth.isAdmin" />
@@ -39,30 +39,22 @@
         <template v-if="auth.isAdmin">
           <el-menu-item index="/admin/dashboard">
             <el-icon><DataAnalysis /></el-icon>
-            <template #title>系统概览</template>
-          </el-menu-item>
-          <el-menu-item index="/admin/users">
-            <el-icon><User /></el-icon>
-            <template #title>用户管理</template>
-          </el-menu-item>
-          <el-menu-item index="/admin/departments">
-            <el-icon><OfficeBuilding /></el-icon>
-            <template #title>部门管理</template>
+            <template #title>{{ t('mainLayout.dashboard') }}</template>
           </el-menu-item>
           <el-menu-item index="/admin/audits">
             <el-icon><List /></el-icon>
-            <template #title>审计日志</template>
+            <template #title>{{ t('mainLayout.audits') }}</template>
           </el-menu-item>
           <el-menu-item index="/admin/storage">
             <el-icon><Monitor /></el-icon>
-            <template #title>存储监控</template>
+            <template #title>{{ t('mainLayout.storage') }}</template>
           </el-menu-item>
         </template>
       </el-menu>
       <div class="sidebar-bottom">
-        <div class="help-btn" @click="showHelp = true" :title="collapsed ? '帮助' : ''">
+        <div class="help-btn" @click="showHelp = true" :title="collapsed ? t('mainLayout.help') : ''">
           <el-icon><QuestionFilled /></el-icon>
-          <span v-if="!collapsed">帮助</span>
+          <span v-if="!collapsed">{{ t('mainLayout.help') }}</span>
         </div>
       </div>
     </el-aside>
@@ -70,7 +62,7 @@
     <!-- 主内容 -->
     <el-container>
       <el-header class="topbar">
-        <el-button v-if="sidebarHidden" class="menu-btn" @click="sidebarHidden = false" text title="显示侧边栏">
+        <el-button v-if="sidebarHidden" class="menu-btn" @click="sidebarHidden = false" text :title="t('mainLayout.showSidebar')">
           <el-icon :size="20"><Operation /></el-icon>
         </el-button>
         <el-button v-else class="menu-btn" @click="mobileMenu = !mobileMenu" text>
@@ -78,13 +70,16 @@
         </el-button>
         <div class="breadcrumb">
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item :to="{ path: '/docs' }">文档</el-breadcrumb-item>
+            <el-breadcrumb-item :to="{ path: '/docs' }">{{ t('mainLayout.docs') }}</el-breadcrumb-item>
             <el-breadcrumb-item v-if="route.name === 'DocEditor'">
-              编辑
+              {{ t('mainLayout.breadcrumbEdit') }}
             </el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <div class="user-area">
+          <!-- 语言切换 -->
+          <LangSwitch />
+
           <!-- 通知铃铛 -->
           <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99" class="notif-badge">
             <el-button :icon="Bell" circle size="small" @click="showNotifications = true" />
@@ -100,10 +95,10 @@
               <el-dropdown-menu>
                 <el-dropdown-item command="theme">
                   <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
-                  {{ isDark ? '浅色模式' : '深色模式' }}
+                  {{ isDark ? t('mainLayout.lightMode') : t('mainLayout.darkMode') }}
                 </el-dropdown-item>
-                <el-dropdown-item command="password">修改密码</el-dropdown-item>
-                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+                <el-dropdown-item command="password">{{ t('mainLayout.changePassword') }}</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>{{ t('mainLayout.logout') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -115,25 +110,25 @@
     </el-container>
 
     <!-- 修改密码对话框 -->
-    <el-dialog v-model="showPasswordDialog" title="修改密码" width="400">
+    <el-dialog v-model="showPasswordDialog" :title="t('mainLayout.changePassword')" width="400">
       <el-form :model="passwordForm" label-width="80px">
-        <el-form-item label="旧密码">
+        <el-form-item :label="t('mainLayout.oldPassword')">
           <el-input v-model="passwordForm.old" type="password" show-password />
         </el-form-item>
-        <el-form-item label="新密码">
+        <el-form-item :label="t('mainLayout.newPassword')">
           <el-input v-model="passwordForm.new_" type="password" show-password />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showPasswordDialog = false">取消</el-button>
-        <el-button type="primary" @click="changePassword">确定</el-button>
+        <el-button @click="showPasswordDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="changePassword">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 通知面板 -->
-    <el-drawer v-model="showNotifications" title="通知" size="360px">
+    <el-drawer v-model="showNotifications" :title="t('mainLayout.notifications')" size="360px">
       <div class="notif-header">
-        <el-button link size="small" @click="markAllRead">全部已读</el-button>
+        <el-button link size="small" @click="markAllRead">{{ t('mainLayout.markAllRead') }}</el-button>
       </div>
       <div class="notif-list">
         <div v-for="n in notifications" :key="n.id" class="notif-item" :class="{ unread: !n.is_read }">
@@ -141,41 +136,41 @@
           <div class="notif-title">{{ n.title }}</div>
           <div class="notif-time">{{ formatTime(n.created_at) }}</div>
           <div class="notif-actions">
-            <el-button v-if="!n.is_read" link size="small" @click="markRead(n.id)">已读</el-button>
-            <el-button v-if="n.document_id" link size="small" type="primary" @click="goDoc(n.document_id)">查看</el-button>
+            <el-button v-if="!n.is_read" link size="small" @click="markRead(n.id)">{{ t('mainLayout.markRead') }}</el-button>
+            <el-button v-if="n.document_id" link size="small" type="primary" @click="goDoc(n.document_id)">{{ t('mainLayout.viewDoc') }}</el-button>
           </div>
         </div>
-        <div v-if="!notifications.length" class="no-data">暂无通知</div>
+        <div v-if="!notifications.length" class="no-data">{{ t('mainLayout.noNotifications') }}</div>
       </div>
     </el-drawer>
 
     <!-- 帮助 -->
-    <el-dialog v-model="showHelp" title="使用帮助" width="520">
+    <el-dialog v-model="showHelp" :title="t('mainLayout.helpDialogTitle')" width="520">
       <div class="help-content">
-        <h4>文档管理</h4>
+        <h4>{{ t('mainLayout.helpSectionDocMgmt') }}</h4>
         <ul>
-          <li>点击左侧「文档」进入文档列表</li>
-          <li>点击「新建文档」创建空白文档，支持富文本编辑</li>
-          <li>点击「表格」创建智能表格</li>
-          <li>右键文件夹可以新建子文件夹、重命名</li>
-          <li>拖拽文档可以移动到不同文件夹</li>
+          <li>{{ t('mainLayout.helpDocList') }}</li>
+          <li>{{ t('mainLayout.helpNewDoc') }}</li>
+          <li>{{ t('mainLayout.helpNewSheet') }}</li>
+          <li>{{ t('mainLayout.helpFolderContext') }}</li>
+          <li>{{ t('mainLayout.helpDragDoc') }}</li>
         </ul>
-        <h4>分享与协作</h4>
+        <h4>{{ t('mainLayout.helpSectionCollab') }}</h4>
         <ul>
-          <li>打开文档后，点击右上角「分享」按钮</li>
-          <li>搜索用户或部门，设置权限（查看/评论/编辑）</li>
-          <li>开启「链接分享」可生成分享链接，支持设置密码和有效期</li>
+          <li>{{ t('mainLayout.helpShareBtn') }}</li>
+          <li>{{ t('mainLayout.helpSetPerm') }}</li>
+          <li>{{ t('mainLayout.helpLinkShare') }}</li>
         </ul>
-        <h4>快捷键</h4>
+        <h4>{{ t('mainLayout.helpSectionShortcuts') }}</h4>
         <ul>
-          <li><kbd>Ctrl</kbd>+<kbd>S</kbd> 手动保存</li>
-          <li><kbd>Ctrl</kbd>+<kbd>/</kbd> 查看编辑器快捷键</li>
+          <li><kbd>Ctrl</kbd>+<kbd>S</kbd> {{ t('mainLayout.helpCtrlS') }}</li>
+          <li><kbd>Ctrl</kbd>+<kbd>/</kbd> {{ t('mainLayout.helpCtrlSlash') }}</li>
         </ul>
-        <h4>文件夹</h4>
+        <h4>{{ t('mainLayout.helpSectionFolders') }}</h4>
         <ul>
-          <li>文件夹名称旁的数字显示该文件夹内的文档数量</li>
-          <li>支持多级文件夹嵌套</li>
-          <li>文件夹权限会自动继承给子文件夹和文档</li>
+          <li>{{ t('mainLayout.helpFolderCount') }}</li>
+          <li>{{ t('mainLayout.helpNestedFolder') }}</li>
+          <li>{{ t('mainLayout.helpFolderInherit') }}</li>
         </ul>
       </div>
     </el-dialog>
@@ -186,11 +181,15 @@
 import { ref, onMounted } from 'vue'
 import { Sunny, Moon, Folder, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
 import http from '@/utils/http'
+import teamApi from '@/utils/team-api'
+import LangSwitch from '@/components/LangSwitch.vue'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -201,7 +200,6 @@ const sidebarHidden = ref(false)
 const showHelp = ref(false)
 
 function onMenuSelect() {
-  // 移动端点击菜单后自动关闭
   if (window.innerWidth <= 768) mobileMenu.value = false
 }
 
@@ -215,19 +213,19 @@ const unreadCount = ref(0)
 
 async function loadNotifications() {
   try {
-    const { data } = await http.get('/notifications')
+    const { data } = await teamApi.get('/notifications')
     notifications.value = data.data || []
     unreadCount.value = data.unread_count || 0
   } catch {}
 }
 
 async function markRead(id: string) {
-  await http.put(`/notifications/${id}/read`)
+  await teamApi.put(`/notifications/${id}/read`)
   loadNotifications()
 }
 
 async function markAllRead() {
-  await http.put('/notifications/read-all')
+  await teamApi.put('/notifications/read-all')
   loadNotifications()
 }
 
@@ -244,25 +242,29 @@ function notifType(type: string) {
 }
 
 function notifLabel(type: string) {
-  const map: any = { comment: '评论', reply: '回复', share: '分享' }
+  const map: any = {
+    comment: t('mainLayout.notifComment'),
+    reply: t('mainLayout.notifReply'),
+    share: t('mainLayout.notifShare'),
+  }
   return map[type] || type
 }
 
-function formatTime(t: string) {
-  if (!t) return ''
-  const d = new Date(t)
+function formatTime(time: string) {
+  if (!time) return ''
+  const d = new Date(time)
   const now = new Date()
   const diff = now.getTime() - d.getTime()
-  if (diff < 60000) return '刚刚'
-  if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
-  if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前'
+  if (diff < 60000) return t('common.justNow')
+  if (diff < 3600000) return t('common.minutesAgo', [Math.floor(diff / 60000)])
+  if (diff < 86400000) return t('common.hoursAgo', [Math.floor(diff / 3600000)])
   return d.toLocaleDateString()
 }
 
 function handleCommand(cmd: string) {
   if (cmd === 'logout') {
     auth.logout()
-    router.push('/login')
+    auth.redirectToPortalLogin()
   } else if (cmd === 'password') {
     showPasswordDialog.value = true
   } else if (cmd === 'theme') {
@@ -282,21 +284,19 @@ async function changePassword() {
       old_password: passwordForm.value.old,
       new_password: passwordForm.value.new_,
     })
-    ElMessage.success('密码已修改')
+    ElMessage.success(t('mainLayout.passwordChanged'))
     showPasswordDialog.value = false
     passwordForm.value = { old: '', new_: '' }
   } catch {
-    ElMessage.error('修改失败')
+    ElMessage.error(t('mainLayout.passwordChangeFailed'))
   }
 }
 
 onMounted(() => {
-  // iOS Safari 100vh fix
   const setVh = () => document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`)
   setVh()
   window.addEventListener('resize', setVh)
 
-  // Restore theme preference
   const saved = localStorage.getItem('mistdocs-theme')
   if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
     isDark.value = true
@@ -307,7 +307,6 @@ onMounted(() => {
     auth.fetchMe()
   }
   loadNotifications()
-  // Poll notifications every 60s
   setInterval(loadNotifications, 60000)
 })
 </script>

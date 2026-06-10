@@ -2,19 +2,19 @@
   <div class="admin-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">权限管理</h2>
-        <span class="header-count">共 {{ perms.length }} 条规则</span>
+        <h2 class="page-title">{{ t('admin.permissions.title') }}</h2>
+        <span class="header-count">{{ t('admin.permissions.rulesCount', [perms.length]) }}</span>
       </div>
       <el-button type="primary" size="default" @click="showForm = true">
-        <el-icon><Plus /></el-icon> 设置权限
+        <el-icon><Plus /></el-icon> {{ t('admin.permissions.setPermission') }}
       </el-button>
     </div>
 
     <!-- 筛选 -->
     <div class="filter-bar">
       <el-radio-group v-model="filter.resource_type" size="default" @change="load">
-        <el-radio-button value="document">文档</el-radio-button>
-        <el-radio-button value="folder">文件夹</el-radio-button>
+        <el-radio-button value="document">{{ t('common.doc') }}</el-radio-button>
+        <el-radio-button value="folder">{{ t('common.folder') }}</el-radio-button>
       </el-radio-group>
     </div>
 
@@ -24,7 +24,7 @@
         :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
         :cell-style="{ fontSize: '14px' }"
       >
-        <el-table-column label="资源" min-width="240">
+        <el-table-column :label="t('admin.permissions.resource')" min-width="240">
           <template #default="{ row }">
             <div class="type-cell">
               <div class="type-icon" :style="{ background: row.resource_type === 'document' ? '#e6f7ff' : '#fff7e6' }">
@@ -35,24 +35,24 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="对象" width="160">
+        <el-table-column :label="t('admin.permissions.target')" width="160">
           <template #default="{ row }">
             <div class="target-cell">
               <el-tag size="small" :type="row.target_type === 'user' ? '' : 'warning'" effect="light" round>
-                {{ row.target_type === 'user' ? '用户' : '部门' }}
+                {{ row.target_type === 'user' ? t('common.user') : t('common.department') }}
               </el-tag>
               <code class="mono-id sm">{{ row.target_id?.slice(0, 8) }}...</code>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="权限" width="100" align="center">
+        <el-table-column :label="t('admin.permissions.permission')" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="permColor[row.permission]" size="small" effect="light" round disable-transitions>
               {{ permMap[row.permission] }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="继承" width="70" align="center">
+        <el-table-column :label="t('admin.permissions.inherit')" width="70" align="center">
           <template #default="{ row }">
             <span v-if="row.inherit" class="inherit-badge">✓</span>
             <span v-else class="no-inherit">—</span>
@@ -60,58 +60,58 @@
         </el-table-column>
         <el-table-column label="" width="60" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button link type="danger" size="small" @click="del(row)" class="del-btn">移除</el-button>
+            <el-button link type="danger" size="small" @click="del(row)" class="del-btn">{{ t('common.remove') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <el-dialog v-model="showForm" title="设置权限" width="480" destroy-on-close>
+    <el-dialog v-model="showForm" :title="t('admin.permissions.setPermission')" width="480" destroy-on-close>
       <el-form :model="form" label-position="top" class="perm-form">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="资源类型">
+            <el-form-item :label="t('admin.permissions.resourceType')">
               <el-select v-model="form.resource_type" class="full-width">
-                <el-option label="文档" value="document" />
-                <el-option label="文件夹" value="folder" />
+                <el-option :label="t('common.doc')" value="document" />
+                <el-option :label="t('common.folder')" value="folder" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="对象类型">
+            <el-form-item :label="t('admin.permissions.targetType')">
               <el-select v-model="form.target_type" class="full-width">
-                <el-option label="用户" value="user" />
-                <el-option label="部门" value="department" />
+                <el-option :label="t('common.user')" value="user" />
+                <el-option :label="t('common.department')" value="department" />
               </el-select>
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="资源 ID">
-          <el-input v-model="form.resource_id" placeholder="输入资源 ID" />
+        <el-form-item :label="t('admin.permissions.resourceId')">
+          <el-input v-model="form.resource_id" :placeholder="t('admin.permissions.resourceIdPlaceholder')" />
         </el-form-item>
-        <el-form-item label="对象 ID">
-          <el-input v-model="form.target_id" placeholder="输入用户或部门 ID" />
+        <el-form-item :label="t('admin.permissions.targetId')">
+          <el-input v-model="form.target_id" :placeholder="t('admin.permissions.targetIdPlaceholder')" />
         </el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="权限级别">
+            <el-form-item :label="t('admin.permissions.permissionLevel')">
               <el-select v-model="form.permission" class="full-width">
-                <el-option label="只读" value="read" />
-                <el-option label="读写" value="write" />
-                <el-option label="管理" value="admin" />
+                <el-option :label="t('admin.permissions.read')" value="read" />
+                <el-option :label="t('admin.permissions.write')" value="write" />
+                <el-option :label="t('admin.permissions.adminPerm')" value="admin" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="子资源继承">
-              <el-switch v-model="form.inherit" active-text="继承" inactive-text="不继承" />
+            <el-form-item :label="t('admin.permissions.childInherit')">
+              <el-switch v-model="form.inherit" :active-text="t('admin.permissions.inheritYes')" :inactive-text="t('admin.permissions.inheritNo')" />
             </el-form-item>
           </el-col>
         </el-row>
       </el-form>
       <template #footer>
-        <el-button @click="showForm = false">取消</el-button>
-        <el-button type="primary" @click="submit">确定</el-button>
+        <el-button @click="showForm = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="submit">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -119,10 +119,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '@/utils/http'
+import teamApi from '@/utils/team-api'
 
-const permMap: any = { read: '只读', write: '读写', admin: '管理' }
+const { t } = useI18n()
+
+const permMap: any = { read: t('admin.permissions.read'), write: t('admin.permissions.write'), admin: t('admin.permissions.adminPerm') }
 const permColor: any = { read: 'info', write: 'warning', admin: 'danger' }
 const perms = ref<any[]>([])
 const filter = ref({ resource_type: 'document' })
@@ -134,21 +138,21 @@ const form = ref({
 })
 
 async function load() {
-  const { data } = await http.get('/permissions', { params: filter.value })
+  const { data } = await teamApi.get('/permissions', { params: filter.value })
   perms.value = data.data || []
 }
 
 async function submit() {
-  await http.post('/permissions', form.value)
-  ElMessage.success('已设置')
+  await teamApi.post('/permissions', form.value)
+  ElMessage.success(t('admin.permissions.setSuccess'))
   showForm.value = false
   load()
 }
 
 async function del(row: any) {
-  await ElMessageBox.confirm('移除此权限？', '确认')
-  await http.delete(`/permissions/${row.id}`)
-  ElMessage.success('已移除')
+  await ElMessageBox.confirm(t('admin.permissions.removeConfirmMsg'), t('admin.permissions.removeConfirmTitle'))
+  await teamApi.delete(`/permissions/${row.id}`)
+  ElMessage.success(t('admin.permissions.removeSuccess'))
   load()
 }
 

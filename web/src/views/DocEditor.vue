@@ -4,15 +4,15 @@
     <div class="editor-header">
       <div class="header-left">
         <el-button @click="router.push('/docs')" text size="small">
-          <el-icon><ArrowLeft /></el-icon> 返回
+          <el-icon><ArrowLeft /></el-icon> {{ t("docEditor.back") }}
         </el-button>
         <el-input v-model="title" class="title-input" @blur="saveTitle" />
         <div class="doc-badges">
-          <el-tag size="small" effect="plain" round>{{ doc?.type === 'sheet' ? '表格' : '文档' }}</el-tag>
+          <el-tag size="small" effect="plain" round>{{ doc?.type === 'sheet' ? t('common.sheet') : t('common.doc') }}</el-tag>
           <el-tag size="small" effect="plain" round type="info">v{{ doc?.version || 1 }}</el-tag>
           <el-tag v-if="collabUsers.length" size="small" effect="plain" round type="success">
             <svg class="tag-icon" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="8" r="3"/><circle cx="12" cy="8" r="3" opacity="0.5"/></svg>
-            {{ collabUsers.length + 1 }} 人在线
+            {{ t("docEditor.collabUsers", [collabUsers.length + 1]) }}
           </el-tag>
           <div v-if="collabUsers.length" class="collab-avatars">
             <el-tooltip v-for="u in collabUsers" :key="u.id" :content="u.name" placement="bottom">
@@ -22,26 +22,26 @@
         </div>
       </div>
       <div class="header-right">
-        <span v-if="saveStatus === 'saving'" class="save-indicator saving">保存中...</span>
-        <span v-else-if="saveStatus === 'saved'" class="save-indicator saved">已保存</span>
-        <span v-else-if="saveStatus === 'error'" class="save-indicator error">保存失败</span>
+        <span v-if="saveStatus === 'saving'" class="save-indicator saving">{{ t('docEditor.saving') }}</span>
+        <span v-else-if="saveStatus === 'saved'" class="save-indicator saved">{{ t('docEditor.saved') }}</span>
+        <span v-else-if="saveStatus === 'error'" class="save-indicator error">{{ t('docEditor.saveFailed') }}</span>
 
         <el-button v-if="doc?.locked_by && doc?.locked_by !== currentUserId" size="small" type="warning" disabled>
           <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg>
-          已锁定
+          {{ t("docEditor.locked") }}
         </el-button>
         <el-button v-else-if="doc?.locked_by === currentUserId" size="small" type="warning" @click="unlockDoc">
           <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2zm-2 4a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1z"/></svg>
-          解锁
+          {{ t("docEditor.unlockBtn") }}
         </el-button>
         <el-button v-else size="small" @click="lockDoc">
           <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M5 8V6a5 5 0 0110 0v2h1a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1h1zm2-2a3 3 0 016 0v2H7V6z"/></svg>
-          <span class="btn-label">锁定</span>
+          <span class="btn-label">{{ t('docEditor.lockBtn') }}</span>
         </el-button>
 
         <el-button type="primary" size="small" @click="manualSave" :loading="saving">
           <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 00-1 1v2H4a1 1 0 000 2h5a1 1 0 000-2H8V4h8v3a1 1 0 102 0V4a1 1 0 00-1-1H7zM5 10a1 1 0 00-1 1v5a1 1 0 001 1h10a1 1 0 001-1v-5a1 1 0 10-2 0v4H6v-4a1 1 0 00-1-1z"/></svg>
-          保存
+          {{ t("common.save") }}
         </el-button>
 
         <el-dropdown @command="handleMore">
@@ -52,35 +52,35 @@
             <el-dropdown-menu>
               <el-dropdown-item command="share">
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.247l4.959 2.479A3 3 0 1015 12a3 3 0 00-2.965 2.574l-4.96-2.48a3.013 3.013 0 000-2.188l4.96-2.48A3 3 0 1015 8z"/></svg>
-                分享
+                {{ t("docEditor.share") }}
               </el-dropdown-item>
               <el-dropdown-item command="move">
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
-                移动
+                {{ t("docEditor.moveMenu") }}
               </el-dropdown-item>
               <el-dropdown-item v-if="isAdmin" command="watermark">
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 2a6 6 0 016 6h-2a4 4 0 00-4-4V4z"/></svg>
-                {{ watermarkOn ? '关闭水印' : '水印' }}
+                {{ watermarkOn ? t('docEditor.watermarkOn') : t('docEditor.watermarkOff') }}
               </el-dropdown-item>
               <el-dropdown-item command="comments">
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H6l-3 3V5z"/></svg>
-                评论
+                {{ t("docEditor.commentsMenu") }}
               </el-dropdown-item>
               <el-dropdown-item command="stats">
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
-                统计
+                {{ t("docEditor.statsMenu") }}
               </el-dropdown-item>
               <el-dropdown-item command="versions" divided>
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z"/></svg>
-                版本历史
+                {{ t("docEditor.versionHistory") }}
               </el-dropdown-item>
               <el-dropdown-item command="export" divided>
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
-                导出...
+                {{ t("docEditor.exportMenu") }}
               </el-dropdown-item>
               <el-dropdown-item v-if="doc?.type === 'doc'" command="save-template">
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg>
-                保存为模板
+                {{ t("docEditor.saveAsTemplate") }}
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -91,16 +91,16 @@
         <!-- TipTap 工具栏 -->
     <div v-if="editor" class="toolbar">
       <div class="tb-group">
-        <button class="tb-btn" :class="{active: editor.isActive('bold')}" @click="editor.chain().focus().toggleBold().run()" title="粗体">
+        <button class="tb-btn" :class="{active: editor.isActive('bold')}" @click="editor.chain().focus().toggleBold().run()" :title="t('docEditor.toolbar.bold')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M6 4h5.5a3.5 3.5 0 012.5 6 3.5 3.5 0 01-2.5 6H6V4zm2 2v3h3.5a1.5 1.5 0 000-3H8zm0 5v3h3.5a1.5 1.5 0 000-3H8z"/></svg>
         </button>
-        <button class="tb-btn" :class="{active: editor.isActive('italic')}" @click="editor.chain().focus().toggleItalic().run()" title="斜体">
+        <button class="tb-btn" :class="{active: editor.isActive('italic')}" @click="editor.chain().focus().toggleItalic().run()" :title="t('docEditor.toolbar.italic')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 4h7v2h-2.5l-2 8H13v2H6v-2h2.5l2-8H8V4z"/></svg>
         </button>
-        <button class="tb-btn" :class="{active: editor.isActive('strike')}" @click="editor.chain().focus().toggleStrike().run()" title="删除线">
+        <button class="tb-btn" :class="{active: editor.isActive('strike')}" @click="editor.chain().focus().toggleStrike().run()" :title="t('docEditor.toolbar.strikethrough')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 9h12v2H4V9zm4-3a2 2 0 114 0h2a4 4 0 10-8 0h2zm4 8a2 2 0 11-4 0H4a4 4 0 108 0h-2z"/></svg>
         </button>
-        <button class="tb-btn" :class="{active: editor.isActive('underline')}" @click="editor.chain().focus().toggleUnderline().run()" title="下划线">
+        <button class="tb-btn" :class="{active: editor.isActive('underline')}" @click="editor.chain().focus().toggleUnderline().run()" :title="t('docEditor.toolbar.underline')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M6 4v5a4 4 0 008 0V4h2v5a6 6 0 01-12 0V4h2zm-2 13h12v2H4v-2z"/></svg>
         </button>
       </div>
@@ -108,24 +108,24 @@
       <div class="tb-sep"></div>
 
       <div class="tb-group">
-        <button class="tb-btn" :class="{active: editor.isActive('heading', {level:1})}" @click="editor.chain().focus().toggleHeading({level:1}).run()" title="标题 1">H1</button>
-        <button class="tb-btn" :class="{active: editor.isActive('heading', {level:2})}" @click="editor.chain().focus().toggleHeading({level:2}).run()" title="标题 2">H2</button>
-        <button class="tb-btn" :class="{active: editor.isActive('heading', {level:3})}" @click="editor.chain().focus().toggleHeading({level:3}).run()" title="标题 3">H3</button>
+        <button class="tb-btn" :class="{active: editor.isActive('heading', {level:1})}" @click="editor.chain().focus().toggleHeading({level:1}).run()" :title="t('docEditor.toolbar.heading1')">H1</button>
+        <button class="tb-btn" :class="{active: editor.isActive('heading', {level:2})}" @click="editor.chain().focus().toggleHeading({level:2}).run()" :title="t('docEditor.toolbar.heading2')">H2</button>
+        <button class="tb-btn" :class="{active: editor.isActive('heading', {level:3})}" @click="editor.chain().focus().toggleHeading({level:3}).run()" :title="t('docEditor.toolbar.heading3')">H3</button>
       </div>
 
       <div class="tb-sep"></div>
 
       <div class="tb-group">
-        <button class="tb-btn" :class="{active: editor.isActive('bulletList')}" @click="editor.chain().focus().toggleBulletList().run()" title="无序列表">
+        <button class="tb-btn" :class="{active: editor.isActive('bulletList')}" @click="editor.chain().focus().toggleBulletList().run()" :title="t('docEditor.toolbar.bulletList')">
           <svg viewBox="0 0 20 20" fill="currentColor"><circle cx="4" cy="5" r="1.5"/><circle cx="4" cy="10" r="1.5"/><circle cx="4" cy="15" r="1.5"/><rect x="8" y="4" width="10" height="2" rx="1"/><rect x="8" y="9" width="10" height="2" rx="1"/><rect x="8" y="14" width="10" height="2" rx="1"/></svg>
         </button>
-        <button class="tb-btn" :class="{active: editor.isActive('orderedList')}" @click="editor.chain().focus().toggleOrderedList().run()" title="有序列表">
+        <button class="tb-btn" :class="{active: editor.isActive('orderedList')}" @click="editor.chain().focus().toggleOrderedList().run()" :title="t('docEditor.toolbar.orderedList')">
           <svg viewBox="0 0 20 20" fill="currentColor"><text x="2" y="7" font-size="6" font-weight="bold">1</text><text x="2" y="12" font-size="6" font-weight="bold">2</text><text x="2" y="17" font-size="6" font-weight="bold">3</text><rect x="8" y="4" width="10" height="2" rx="1"/><rect x="8" y="9" width="10" height="2" rx="1"/><rect x="8" y="14" width="10" height="2" rx="1"/></svg>
         </button>
-        <button class="tb-btn" :class="{active: editor.isActive('taskList')}" @click="editor.chain().focus().toggleTaskList().run()" title="任务列表">
+        <button class="tb-btn" :class="{active: editor.isActive('taskList')}" @click="editor.chain().focus().toggleTaskList().run()" :title="t('docEditor.toolbar.taskList')">
           <svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="4" width="5" height="5" rx="1" stroke="currentColor" fill="none" stroke-width="1.5"/><path d="M3.5 6.5L5 8l3-3.5" stroke="currentColor" fill="none" stroke-width="1.5"/><rect x="10" y="5" width="8" height="2" rx="1"/><rect x="2" y="11" width="5" height="5" rx="1" stroke="currentColor" fill="none" stroke-width="1.5"/><rect x="10" y="12.5" width="8" height="2" rx="1"/></svg>
         </button>
-        <button class="tb-btn" :class="{active: editor.isActive('blockquote')}" @click="editor.chain().focus().toggleBlockquote().run()" title="引用">
+        <button class="tb-btn" :class="{active: editor.isActive('blockquote')}" @click="editor.chain().focus().toggleBlockquote().run()" :title="t('docEditor.toolbar.blockquote')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4h4v4H6l-1 3H3l1-3V4zm8 0h4v4h-2l-1 3h-2l1-3V4z"/></svg>
         </button>
       </div>
@@ -133,10 +133,10 @@
       <div class="tb-sep"></div>
 
       <div class="tb-group">
-        <button class="tb-btn" :class="{active: editor.isActive('codeBlock')}" @click="toggleCodeBlock" title="代码块">
+        <button class="tb-btn" :class="{active: editor.isActive('codeBlock')}" @click="toggleCodeBlock" :title="t('docEditor.toolbar.codeBlock')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M6.707 4.293a1 1 0 010 1.414L3.414 9l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0zm6.586 0a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L16.586 9l-3.293-3.293a1 1 0 010-1.414z"/></svg>
         </button>
-        <button class="tb-btn" :class="{active: editor.isActive('code')}" @click="editor.chain().focus().toggleCode().run()" title="行内代码">
+        <button class="tb-btn" :class="{active: editor.isActive('code')}" @click="editor.chain().focus().toggleCode().run()" :title="t('docEditor.toolbar.inlineCode')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M7.4 4.3L2.7 9l4.7 4.7-1.4 1.4L0 9l6-6 1.4 1.3zm5.2 0L17.3 9l-4.7 4.7 1.4 1.4L20 9l-6-6-1.4 1.3z"/></svg>
         </button>
       </div>
@@ -144,19 +144,19 @@
       <div class="tb-sep"></div>
 
       <div class="tb-group">
-        <button class="tb-btn" :class="{active: editor.isActive('link')}" @click="insertLink" title="链接">
+        <button class="tb-btn" :class="{active: editor.isActive('link')}" @click="insertLink" :title="t('docEditor.toolbar.link')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M12.586 4.586a2 2 0 112.828 2.828l-3.879 3.879a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3.879-3.879a4 4 0 00-5.656-5.656L8.12 5.464a1 1 0 001.414 1.414l3.052-3.292z"/><path d="M7.414 15.414a2 2 0 11-2.828-2.828l3.879-3.879a2 2 0 012.828 0 1 1 0 001.414-1.414 4 4 0 00-5.656 0L3.172 11.17a4 4 0 005.656 5.656l2.828-2.828a1 1 0 10-1.414-1.414l-2.828 2.83z"/></svg>
         </button>
-        <button class="tb-btn" @click="triggerImageUpload" title="图片">
+        <button class="tb-btn" @click="triggerImageUpload" :title="t('docEditor.toolbar.image')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-6 3 4 2-3 3 5z"/><circle cx="13" cy="7" r="2"/></svg>
         </button>
-        <button class="tb-btn" @click="showMediaLib = true" title="媒体库">
+        <button class="tb-btn" @click="showMediaLib = true" :title="t('docEditor.mediaLibTitle')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a1 1 0 011-1h12a1 1 0 011 1v2.586l2.707-2.707a1 1 0 011.414 1.414L16.414 7H19a1 1 0 010 2h-4a1 1 0 01-1-1V5H5v10h4a1 1 0 010 2H5a1 1 0 01-1-1V3z"/></svg>
         </button>
-        <button class="tb-btn" @click="insertTable" title="表格">
+        <button class="tb-btn" @click="insertTable" :title="t('docEditor.toolbar.insertTable')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4h14a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V5a1 1 0 011-1zm1 2v3h5V6H4zm0 5v3h5v-3H4zm7-5v3h5V6h-5zm0 5v3h5v-3h-5z"/></svg>
         </button>
-        <button class="tb-btn" @click="editor.chain().focus().setHorizontalRule().run()" title="分割线">
+        <button class="tb-btn" @click="editor.chain().focus().setHorizontalRule().run()" :title="t('docEditor.toolbar.hr')">
           <svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="9" width="16" height="2" rx="1"/></svg>
         </button>
       </div>
@@ -165,18 +165,18 @@
       <template v-if="editor.isActive('table')">
         <div class="tb-sep"></div>
         <div class="tb-group">
-          <button class="tb-btn" @click="editor.chain().focus().addRowBefore().run()" title="上方插入行">
+          <button class="tb-btn" @click="editor.chain().focus().addRowBefore().run()" :title="t('docEditor.toolbar.addRowBefore')">
             <svg viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="3" width="14" height="14" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="5" x2="10" y2="15" stroke="currentColor" stroke-width="1.5"/><path d="M7 8h6M10 5v6" stroke="currentColor" stroke-width="1.5"/></svg>
           </button>
-          <button class="tb-btn" @click="editor.chain().focus().addRowAfter().run()" title="下方插入行">
+          <button class="tb-btn" @click="editor.chain().focus().addRowAfter().run()" :title="t('docEditor.toolbar.addRowAfter')">
             <svg viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="3" width="14" height="14" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="5" x2="10" y2="15" stroke="currentColor" stroke-width="1.5"/><path d="M7 12h6M10 9v6" stroke="currentColor" stroke-width="1.5"/></svg>
           </button>
-          <button class="tb-btn" @click="editor.chain().focus().deleteRow().run()" title="删除行" class-name="danger">
+          <button class="tb-btn" @click="editor.chain().focus().deleteRow().run()" :title="t('docEditor.toolbar.deleteRow')" class-name="danger">
             <svg viewBox="0 0 20 20" fill="#f56c6c"><rect x="3" y="3" width="14" height="14" rx="1" fill="none" stroke="#f56c6c" stroke-width="1.5"/><line x1="10" y1="3" x2="10" y2="17" stroke="#f56c6c" stroke-width="1.5"/><line x1="6" y1="10" x2="14" y2="10" stroke="#f56c6c" stroke-width="2"/></svg>
           </button>
-          <button class="tb-btn" @click="editor.chain().focus().mergeCells().run()" title="合并单元格">合</button>
-          <button class="tb-btn" @click="editor.chain().focus().splitCell().run()" title="拆分单元格">拆</button>
-          <button class="tb-btn" @click="editor.chain().focus().deleteTable().run()" title="删除表格" style="color:#f56c6c">
+          <button class="tb-btn" @click="editor.chain().focus().mergeCells().run()" :title="t('docEditor.toolbar.mergeCells')">{{ t('docEditor.toolbar.merge') }}</button>
+          <button class="tb-btn" @click="editor.chain().focus().splitCell().run()" :title="t('docEditor.toolbar.splitCell')">{{ t('docEditor.toolbar.split') }}</button>
+          <button class="tb-btn" @click="editor.chain().focus().deleteTable().run()" :title="t('docEditor.toolbar.deleteTable')" style="color:#f56c6c">
             <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4.707 3.293a1 1 0 00-1.414 1.414L8.586 10l-5.293 5.293a1 1 0 001.414 1.414L10 11.414l5.293 5.293a1 1 0 001.414-1.414L11.414 10l5.293-5.293a1 1 0 00-1.414-1.414L10 8.586 4.707 3.293z"/></svg>
           </button>
         </div>
@@ -185,10 +185,10 @@
       <div style="flex:1"></div>
 
       <div class="tb-group">
-        <button class="tb-btn" @click="editor.chain().focus().undo().run()" title="撤销">
+        <button class="tb-btn" @click="editor.chain().focus().undo().run()" :title="t('docEditor.toolbar.undo')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 8l4-4v3h6a3 3 0 010 6H9v-2h4a1 1 0 000-2H7v3L3 8z"/></svg>
         </button>
-        <button class="tb-btn" @click="editor.chain().focus().redo().run()" title="重做">
+        <button class="tb-btn" @click="editor.chain().focus().redo().run()" :title="t('docEditor.toolbar.redo')">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M17 8l-4-4v3H7a3 3 0 000 6h4v-2H7a1 1 0 010-2h6v3l4-4z"/></svg>
         </button>
       </div>
@@ -202,10 +202,10 @@
       <!-- 大纲导航 -->
       <div class="outline-panel" :class="{ collapsed: outlineCollapsed }">
         <div class="outline-header" @click="outlineCollapsed = !outlineCollapsed">
-          <span class="outline-title">大纲</span>
+          <span class="outline-title">{{ t('docEditor.outline') }}</span>
           <el-icon :size="14" class="outline-toggle"><ArrowRight v-if="outlineCollapsed" /><ArrowLeft v-else /></el-icon>
         </div>
-        <div v-if="!outlineCollapsed && !outlineItems.length" class="outline-empty">暂无标题</div>
+        <div v-if="!outlineCollapsed && !outlineItems.length" class="outline-empty">{{ t('docEditor.noOutline') }}</div>
         <div v-if="!outlineCollapsed" class="outline-list">
           <div
             v-for="(item, i) in outlineItems" :key="i"
@@ -228,88 +228,88 @@
     </div>
 
     <!-- 版本回退确认 -->
-    <el-dialog v-model="versionDialog.show" title="版本历史" width="560px" :fullscreen="windowWidth < 768">
+    <el-dialog v-model="versionDialog.show" :title="t('docEditor.versionHistory')" width="560px" :fullscreen="windowWidth < 768">
       <el-timeline style="max-height:400px;overflow-y:auto">
         <el-timeline-item
           v-for="v in versions" :key="v.version"
-          :timestamp="formatTime(v.created_at) + ' · ' + (v.created_by_name || '未知')"
+          :timestamp="formatTime(v.created_at) + ' · ' + (v.created_by_name || t('common.unknown'))"
           :type="v.version === versionDialog.version ? 'primary' : ''"
           placement="top"
         >
           <div style="display:flex;align-items:center;gap:8px">
-            <span>版本 v{{ v.version }}</span>
-            <span v-if="v.version === doc?.version" style="color:#409eff;font-size:12px">（当前）</span>
-            <el-button v-if="v.version !== doc?.version" size="small" text type="primary" @click="previewVersion(v.version)">预览</el-button>
-            <el-button v-if="v.version !== doc?.version" size="small" text type="primary" @click="openDiff(v.version)">对比</el-button>
-            <el-button v-if="v.version !== doc?.version" size="small" text type="warning" @click="selectRestoreVersion(v.version)">恢复</el-button>
+            <span> {{ t('docEditor.versionLabel', [v.version]) }} v.version }}</span>
+            <span v-if="v.version === doc?.version" style="color:#409eff;font-size:12px">{{ t('common.current') }}</span>
+            <el-button v-if="v.version !== doc?.version" size="small" text type="primary" @click="previewVersion(v.version)">{{ t('docEditor.previewBtn') }}</el-button>
+            <el-button v-if="v.version !== doc?.version" size="small" text type="primary" @click="openDiff(v.version)">{{ t('docEditor.diffBtn') }}</el-button>
+            <el-button v-if="v.version !== doc?.version" size="small" text type="warning" @click="selectRestoreVersion(v.version)">{{ t('docEditor.restoreBtn') }}</el-button>
           </div>
         </el-timeline-item>
       </el-timeline>
       <template #footer>
-        <el-button @click="versionDialog.show = false">关闭</el-button>
+        <el-button @click="versionDialog.show = false">{{ t('common.close') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 版本预览弹窗 -->
-    <el-dialog v-model="previewDialog.show" :title="'预览 v' + previewDialog.version" width="700px" :fullscreen="windowWidth < 768">
+    <el-dialog v-model="previewDialog.show" :title="t('docEditor.previewVersion', [previewDialog.version])" width="700px" :fullscreen="windowWidth < 768">
       <div v-if="previewDialog.loading" style="text-align:center;padding:40px">
         <el-icon class="is-loading" :size="24"><Loading /></el-icon>
-        <p style="margin-top:12px;color:#909399">加载中...</p>
+        <p style="margin-top:12px;color:#909399">{{ t('common.loading') }}</p>
       </div>
       <div v-else class="preview-content" v-html="previewDialog.html"></div>
       <template #footer>
-        <el-button @click="previewDialog.show = false">关闭</el-button>
-        <el-button type="primary" @click="selectRestoreVersion(previewDialog.version); previewDialog.show = false">恢复此版本</el-button>
+        <el-button @click="previewDialog.show = false">{{ t('common.close') }}</el-button>
+        <el-button type="primary" @click="selectRestoreVersion(previewDialog.version); previewDialog.show = false">{{ t('docEditor.restoreVersion') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 统计弹窗 -->
-    <el-dialog v-model="showStats" title="文档统计" width="580px" :fullscreen="windowWidth < 768">
+    <el-dialog v-model="showStats" :title="t('docEditor.docStats')" width="580px" :fullscreen="windowWidth < 768">
       <div v-if="stats" class="stats-section">
         <!-- 核心指标 -->
         <div class="stats-grid">
           <div class="stat-item">
             <div class="stat-value">{{ stats.word_count?.toLocaleString() }}</div>
-            <div class="stat-label">字数</div>
+            <div class="stat-label">{{ t('docEditor.statWordCount') }}</div>
           </div>
           <div class="stat-item">
             <div class="stat-value">{{ stats.char_count?.toLocaleString() }}</div>
-            <div class="stat-label">字符数</div>
+            <div class="stat-label">{{ t('docEditor.statCharCount') }}</div>
           </div>
           <div class="stat-item">
-            <div class="stat-value">{{ stats.reading_time }} 分钟</div>
-            <div class="stat-label">预计阅读</div>
+            <div class="stat-value">{{ t("docEditor.statReadTime", [stats.reading_time]) }}</div>
+            <div class="stat-label">{{ t("docEditor.statReadTimeLabel") }}</div>
           </div>
           <div class="stat-item">
             <div class="stat-value">{{ stats.edit_count }}</div>
-            <div class="stat-label">编辑次数</div>
+            <div class="stat-label">{{ t('docEditor.statEditCount') }}</div>
           </div>
           <div class="stat-item">
             <div class="stat-value">{{ stats.contributors }}</div>
-            <div class="stat-label">贡献者</div>
+            <div class="stat-label">{{ t('docEditor.statContributors') }}</div>
           </div>
           <div class="stat-item">
             <div class="stat-value">{{ stats.comment_count }}</div>
-            <div class="stat-label">评论数</div>
+            <div class="stat-label">{{ t('docEditor.statCommentCount') }}</div>
           </div>
         </div>
 
         <!-- 文档结构 -->
         <div class="stats-subsection">
-          <div class="stats-subtitle">文档结构</div>
+          <div class="stats-subtitle">{{ t('docEditor.docStructure') }}</div>
           <div class="stats-structure">
-            <span v-if="stats.headings" title="标题">📑 {{ stats.headings }} 标题</span>
-            <span v-if="stats.paragraphs" title="段落">¶ {{ stats.paragraphs }} 段落</span>
-            <span v-if="stats.images" title="图片">🖼 {{ stats.images }} 图片</span>
-            <span v-if="stats.links" title="链接">🔗 {{ stats.links }} 链接</span>
-            <span v-if="stats.tables" title="表格">📊 {{ stats.tables }} 表格</span>
-            <span v-if="stats.code_blocks" title="代码块">💻 {{ stats.code_blocks }} 代码块</span>
+            <span v-if="stats.headings" :title="t('common.title')">📑 {{ t("docEditor.statHeadings", [stats.headings]) }}</span>
+            <span v-if="stats.paragraphs" :title="t('docEditor.statParagraphs')">¶ {{ t("docEditor.statParagraphs", [stats.paragraphs]) }}</span>
+            <span v-if="stats.images" :title="t('docEditor.toolbar.image')">🖼 {{ t("docEditor.statImages", [stats.images]) }}</span>
+            <span v-if="stats.links" :title="t('docEditor.toolbar.link')">🔗 {{ t("docEditor.statLinks", [stats.links]) }}</span>
+            <span v-if="stats.tables" :title="t('docEditor.toolbar.insertTable')">📊 {{ t("docEditor.statTables", [stats.tables]) }}</span>
+            <span v-if="stats.code_blocks" :title="t('docEditor.toolbar.codeBlock')">💻 {{ t("docEditor.statCodeBlocks", [stats.code_blocks]) }}</span>
           </div>
         </div>
 
         <!-- 贡献者列表 -->
         <div v-if="stats.contributor_list?.length" class="stats-subsection">
-          <div class="stats-subtitle">贡献者</div>
+          <div class="stats-subtitle">{{ t("docEditor.contributorsTitle") }}</div>
           <div class="stats-contributors">
             <el-tag v-for="u in stats.contributor_list" :key="u.id" size="small" type="info" style="margin:2px 4px">{{ u.name }}</el-tag>
           </div>
@@ -317,45 +317,45 @@
 
         <!-- 时间信息 -->
         <div v-if="stats.first_edit || stats.file_size" class="stats-subsection">
-          <div class="stats-subtitle">时间信息</div>
+          <div class="stats-subtitle">{{ t("docEditor.timeInfoTitle") }}</div>
           <div class="stats-meta">
-            <span v-if="stats.first_edit">📅 创建于 {{ stats.first_edit }}</span>
-            <span v-if="stats.last_edit">✏️ 最后编辑 {{ stats.last_edit }}</span>
+            <span v-if="stats.first_edit">📅 {{ t("docEditor.createdAt", [stats.first_edit]) }}</span>
+            <span v-if="stats.last_edit">✏️ {{ t("docEditor.lastEditAt", [stats.last_edit]) }}</span>
             <span v-if="stats.file_size">💾 {{ formatFileSize(stats.file_size) }}</span>
           </div>
         </div>
 
         <!-- 编辑活动图 -->
         <div v-if="stats.daily_edits?.length" class="stats-subsection">
-          <div class="stats-subtitle">编辑活动（近30天）</div>
+          <div class="stats-subtitle">{{ t("docEditor.editActivity") }}</div>
           <div class="activity-chart">
             <div v-for="(d, i) in stats.daily_edits" :key="i" class="activity-bar"
                  :style="{ height: Math.min(d.count * 20, 60) + 'px' }"
-                 :title="d.date + ': ' + d.count + ' 次'">
+                 :title="d.date + ': ' + d.count + ' ' + t('common.count')">
             </div>
           </div>
         </div>
 
         <!-- 活跃时段 -->
         <div v-if="stats.hourly_edits" class="stats-subsection">
-          <div class="stats-subtitle">活跃时段</div>
+          <div class="stats-subtitle">{{ t("docEditor.activePeriod") }}</div>
           <div class="hourly-chart">
             <div v-for="(count, h) in stats.hourly_edits" :key="h" class="hourly-cell"
                  :class="{ active: count > 0 }"
                  :style="{ opacity: count > 0 ? Math.min(count / Math.max(...stats.hourly_edits.filter((v: number) => v > 0) || [1]), 1) * 0.8 + 0.2 : 0.1 }"
-                 :title="h + ':00 — ' + count + ' 次编辑'">
+                 :title="h + ':00 — ' + count + ' ' + t('common.count')">
               {{ h }}
             </div>
           </div>
-          <div class="hourly-labels"><span>0时</span><span>6时</span><span>12时</span><span>18时</span><span>23时</span></div>
+          <div class="hourly-labels"><span v-for="h in t('docEditor.hourLabels')" :key="h">{{ h }}</span></div>
         </div>
       </div>
     </el-dialog>
 
     <!-- 版本对比弹窗 -->
-    <el-dialog v-model="showDiff" title="版本对比" width="700px" :fullscreen="windowWidth < 768">
+    <el-dialog v-model="showDiff" :title="t('docEditor.versionDiff')" width="700px" :fullscreen="windowWidth < 768">
       <div class="diff-toolbar">
-        <span>版本 </span>
+        <span>{{ t("docEditor.diffVersion") }} </span>
         <el-select v-model="diffOld" size="small" style="width:120px">
           <el-option v-for="v in versions" :key="v.version" :label="'v' + v.version" :value="v.version" />
         </el-select>
@@ -363,57 +363,57 @@
         <el-select v-model="diffNew" size="small" style="width:120px">
           <el-option v-for="v in versions" :key="v.version" :label="'v' + v.version" :value="v.version" />
         </el-select>
-        <el-button size="small" type="primary" @click="loadDiff" :loading="diffLoading">对比</el-button>
+        <el-button size="small" type="primary" @click="loadDiff" :loading="diffLoading">{{ t("docEditor.diffBtn") }}</el-button>
       </div>
       <div v-if="diffHtml" class="diff-content" v-html="diffHtml" />
     </el-dialog>
 
     <!-- 链接弹窗 -->
-    <el-dialog v-model="linkDialog.show" title="插入链接" width="480px">
+    <el-dialog v-model="linkDialog.show" :title="t('docEditor.insertLinkTitle')" width="480px">
       <el-form label-width="60px">
-        <el-form-item label="文本"><el-input v-model="linkDialog.text" placeholder="显示文字" /></el-form-item>
-        <el-form-item label="链接"><el-input v-model="linkDialog.url" placeholder="https:// 或搜索文档..." @input="searchDocsForLink" /></el-form-item>
+        <el-form-item :label="t('docEditor.linkTextLabel')"><el-input v-model="linkDialog.text" :placeholder="t('docEditor.linkTextPlaceholder')" /></el-form-item>
+        <el-form-item :label="t('docEditor.linkUrlLabel')"><el-input v-model="linkDialog.url" :placeholder="t('docEditor.linkUrlPlaceholder')" @input="searchDocsForLink" /></el-form-item>
         <div v-if="linkDialog.results.length" class="link-search-results">
           <div v-for="d in linkDialog.results" :key="d.id" class="link-search-item" @click="selectDocLink(d)">
             <span class="link-doc-title">{{ d.title }}</span>
-            <span class="link-doc-type">{{ d.type === 'doc' ? '文档' : '表格' }}</span>
+            <span class="link-doc-type">{{ d.type === 'doc' ? t('common.doc') : t('common.sheet') }}</span>
           </div>
         </div>
       </el-form>
       <template #footer>
-        <el-button @click="linkDialog.show = false">取消</el-button>
-        <el-button v-if="editor?.isActive('link')" type="danger" @click="removeLink">移除链接</el-button>
-        <el-button type="primary" @click="confirmLink">确定</el-button>
+        <el-button @click="linkDialog.show = false">{{ t('common.cancel') }}</el-button>
+        <el-button v-if="editor?.isActive('link')" type="danger" @click="removeLink">{{ t('docEditor.removeLinkBtn') }}</el-button>
+        <el-button type="primary" @click="confirmLink">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 代码语言弹窗 -->
-    <el-dialog v-model="codeLangDialog.show" title="代码块语言" width="320px">
-      <el-select v-model="codeLangDialog.lang" placeholder="选择语言" style="width:100%">
-        <el-option-group label="常用">
+    <el-dialog v-model="codeLangDialog.show" :title="t('docEditor.codeLangTitle')" width="320px">
+      <el-select v-model="codeLangDialog.lang" :placeholder="t('docEditor.selectLangPlaceholder')" style="width:100%">
+        <el-option-group :label="t('docEditor.popularLangs')">
           <el-option v-for="l in popularLangs" :key="l" :label="l" :value="l" />
         </el-option-group>
-        <el-option-group label="其他">
+        <el-option-group :label="t('docEditor.otherLangs')">
           <el-option v-for="l in otherLangs" :key="l" :label="l" :value="l" />
         </el-option-group>
       </el-select>
       <template #footer>
-        <el-button @click="codeLangDialog.show = false">取消</el-button>
-        <el-button type="primary" @click="confirmCodeLang">确定</el-button>
+        <el-button @click="codeLangDialog.show = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="confirmCodeLang">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 媒体库弹窗 -->
-    <el-dialog v-model="showMediaLib" title="媒体库" width="700px" :fullscreen="windowWidth < 768">
+    <el-dialog v-model="showMediaLib" :title="t('docEditor.mediaLibTitle')" width="700px" :fullscreen="windowWidth < 768">
       <div class="media-toolbar">
         <el-radio-group v-model="mediaFilter" size="small" @change="loadMedia">
-          <el-radio-button value="">全部</el-radio-button>
-          <el-radio-button value="image">图片</el-radio-button>
-          <el-radio-button value="document">文档</el-radio-button>
+          <el-radio-button value="">{{ t('docEditor.mediaAll') }}</el-radio-button>
+          <el-radio-button value="image">{{ t('docEditor.mediaImages') }}</el-radio-button>
+          <el-radio-button value="document">{{ t('docEditor.mediaFiles') }}</el-radio-button>
         </el-radio-group>
       </div>
       <div v-if="mediaLoading" style="text-align:center;padding:40px"><el-skeleton :rows="4" animated /></div>
-      <div v-else-if="!mediaItems.length" style="text-align:center;padding:40px;color:#c0c4cc">暂无文件</div>
+      <div v-else-if="!mediaItems.length" style="text-align:center;padding:40px;color:#c0c4cc">{{ t('docEditor.mediaEmpty') }}</div>
       <div v-else class="media-grid">
         <div v-for="item in mediaItems" :key="item.name" class="media-item" @click="insertMedia(item)">
           <div class="media-preview">
@@ -434,13 +434,13 @@
         closable @close="removeTag(tag.id)"
         style="margin-right:6px"
       >{{ tag.name }}</el-tag>
-      <el-button size="small" text @click="showTagDialog = true">+ 标签</el-button>
+      <el-button size="small" text @click="showTagDialog = true">{{ t("docEditor.addTagBtn") }}</el-button>
     </div>
 
     <!-- 标签管理弹窗 -->
-    <el-dialog v-model="showTagDialog" title="管理标签" width="400px">
+    <el-dialog v-model="showTagDialog" :title="t('docEditor.manageTagsTitle')" width="400px">
       <div v-if="allTags.length" style="margin-bottom:12px">
-        <p style="color:#999;font-size:13px;margin-bottom:8px">点击添加已有标签：</p>
+        <p style="color:#999;font-size:13px;margin-bottom:8px">{{ t("docEditor.clickToAddTag") }}</p>
         <el-tag
           v-for="tag in allTags" :key="tag.id"
           :color="tag.color" effect="dark" size="small"
@@ -450,18 +450,18 @@
         >{{ tag.name }}</el-tag>
       </div>
       <div style="display:flex;gap:8px">
-        <el-input v-model="newTagName" placeholder="新标签名" size="small" style="flex:1" />
+        <el-input v-model="newTagName" :placeholder="t('docEditor.newTagNamePlaceholder')" size="small" style="flex:1" />
         <el-color-picker v-model="newTagColor" size="small" />
-        <el-button size="small" type="primary" @click="createAndAddTag">创建</el-button>
+        <el-button size="small" type="primary" @click="createAndAddTag">{{ t('common.create') }}</el-button>
       </div>
       <template #footer>
-        <el-button @click="showTagDialog = false">完成</el-button>
+        <el-button @click="showTagDialog = false">{{ t('common.finish') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 移动文档弹窗 -->
-    <el-dialog v-model="showMoveDialog" title="移动文档" width="400px">
-      <p style="color:#999;margin-bottom:12px">选择目标文件夹：</p>
+    <el-dialog v-model="showMoveDialog" :title="t('docEditor.moveDocTitle')" width="400px">
+      <p style="color:#999;margin-bottom:12px">{{ t("docEditor.moveDocDesc") }}</p>
       <el-tree
         :data="folderTree"
         :props="{ label: 'name', children: 'children', value: 'id' }"
@@ -477,60 +477,60 @@
         </template>
       </el-tree>
       <template #footer>
-        <el-button @click="showMoveDialog = false">取消</el-button>
-        <el-button type="primary" @click="moveDoc" :disabled="!moveTarget">移动</el-button>
+        <el-button @click="showMoveDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="moveDoc" :disabled="!moveTarget">{{ t('docEditor.moveMenu') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 导出弹窗 -->
-    <el-dialog v-model="showExportDialog" title="导出文档" width="420">
+    <el-dialog v-model="showExportDialog" :title="t('docEditor.exportTitle')" width="420">
       <div class="export-options">
         <div class="export-option" @click="handleExport('pdf'); showExportDialog = false">
           <div class="export-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="24" height="24"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg></div>
           <div class="export-info">
             <div class="export-name">PDF</div>
-            <div class="export-desc">适合打印和分享，保留格式</div>
+            <div class="export-desc">{{ t("docEditor.exportPdfDesc") }}</div>
           </div>
         </div>
         <div class="export-option" @click="handleExport('html'); showExportDialog = false">
           <div class="export-icon">🌐</div>
           <div class="export-info">
             <div class="export-name">HTML</div>
-            <div class="export-desc">网页格式，可在浏览器中查看</div>
+            <div class="export-desc">{{ t("docEditor.exportHtmlDesc") }}</div>
           </div>
         </div>
         <div class="export-option" @click="handleExport('markdown'); showExportDialog = false">
           <div class="export-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="24" height="24"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 2h6v1H7V6zm0 2h6v1H7V8zm0 2h4v1H7v-1z"/></svg></div>
           <div class="export-info">
             <div class="export-name">Markdown</div>
-            <div class="export-desc">纯文本格式，适合再编辑</div>
+            <div class="export-desc">{{ t("docEditor.exportTxtDesc") }}</div>
           </div>
         </div>
         <div class="export-option" @click="handleExport('docx'); showExportDialog = false">
           <div class="export-icon">📘</div>
           <div class="export-info">
             <div class="export-name">Word</div>
-            <div class="export-desc">兼容 Word / WPS，可继续编辑</div>
+            <div class="export-desc">{{ t("docEditor.exportDocxDesc") }}</div>
           </div>
         </div>
         <div class="export-option" @click="handleExport('txt'); showExportDialog = false">
           <div class="export-icon">📃</div>
           <div class="export-info">
-            <div class="export-name">纯文本</div>
-            <div class="export-desc">去除所有格式</div>
+            <div class="export-name">{{ t("docEditor.exportPlainName") }}</div>
+            <div class="export-desc">{{ t("docEditor.exportPlainDesc") }}</div>
           </div>
         </div>
       </div>
     </el-dialog>
 
     <!-- 分享/权限弹窗 (Google Docs 风格) -->
-    <el-dialog v-model="showShareDialog" title="共享文档" width="560" destroy-on-close @opened="loadCollaborators">
+    <el-dialog v-model="showShareDialog" :title="t('docEditor.shareDialogTitle')" width="560" destroy-on-close @opened="loadCollaborators">
       <!-- 添加人员 -->
       <div class="share-add-row">
         <el-autocomplete
           v-model="targetSearch"
           :fetch-suggestions="searchTargets"
-          placeholder="添加人员或部门..."
+          :placeholder="t('docEditor.addPeoplePlaceholder')"
           style="flex:1"
           @select="onTargetSelect"
           clearable
@@ -543,21 +543,21 @@
               </div>
               <div class="target-info">
                 <div class="target-name">{{ item.name }}</div>
-                <div class="target-sub">{{ item.type === 'department' ? '部门' : item.username }}</div>
+                <div class="target-sub">{{ item.type === 'department' ? t('common.department') : item.username }}</div>
               </div>
             </div>
           </template>
         </el-autocomplete>
         <el-select v-model="newRole" style="width:120px">
-          <el-option label="查看者" value="viewer" />
-          <el-option label="编辑者" value="editor" />
+          <el-option :label="t('docEditor.sharePermViewer')" value="viewer" />
+          <el-option :label="t('docEditor.sharePermEditor')" value="editor" />
         </el-select>
-        <el-button type="primary" @click="addCollaborator" :disabled="!selectedTarget">添加</el-button>
+        <el-button type="primary" @click="addCollaborator" :disabled="!selectedTarget">{{ t('docEditor.addPeopleBtn') }}</el-button>
       </div>
 
       <!-- 协作者列表 -->
       <div class="collaborators-list">
-        <div v-if="collaboratorsLoading" style="text-align:center;padding:20px;color:#909399">加载中...</div>
+        <div v-if="collaboratorsLoading" style="text-align:center;padding:20px;color:#909399">{{ t('common.loading') }}</div>
         <div v-for="c in collaborators" :key="c.id" class="collaborator-item">
           <div class="collab-left">
             <div class="collab-avatar" :style="{ background: c.target_type === 'department' ? '#e6f7ff' : '#f0f0f0' }">
@@ -568,10 +568,10 @@
             <div class="collab-info">
               <div class="collab-name">
                 {{ c.target_name }}
-                <el-tag v-if="c.role === 'owner'" size="small" type="" effect="plain" style="margin-left:6px">所有者</el-tag>
-                <el-tag v-if="c.inherited" size="small" type="info" effect="plain" style="margin-left:6px">继承</el-tag>
+                <el-tag v-if="c.role === 'owner'" size="small" type="" effect="plain" style="margin-left:6px">{{ t('docEditor.ownerTag') }}</el-tag>
+                <el-tag v-if="c.inherited" size="small" type="info" effect="plain" style="margin-left:6px">{{ t('docEditor.inheritedTag') }}</el-tag>
               </div>
-              <div v-if="c.target_type === 'department'" class="collab-sub">部门</div>
+              <div v-if="c.target_type === 'department'" class="collab-sub">{{ t('common.department') }}</div>
             </div>
           </div>
           <div v-if="c.role !== 'owner'" class="collab-right">
@@ -582,10 +582,10 @@
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="viewer" :class="{ active: c.role === 'viewer' }">查看者</el-dropdown-item>
-                  <el-dropdown-item command="editor" :class="{ active: c.role === 'editor' }">编辑者</el-dropdown-item>
-                  <el-dropdown-item command="admin" :class="{ active: c.role === 'admin' }">管理员</el-dropdown-item>
-                  <el-dropdown-item divided command="remove" style="color:#f56c6c">移除</el-dropdown-item>
+                  <el-dropdown-item command="viewer" :class="{ active: c.role === 'viewer' }">{{ t('docEditor.sharePermViewer') }}</el-dropdown-item>
+                  <el-dropdown-item command="editor" :class="{ active: c.role === 'editor' }">{{ t('docEditor.sharePermEditor') }}</el-dropdown-item>
+                  <el-dropdown-item command="admin" :class="{ active: c.role === 'admin' }">{{ t('docEditor.sharePermAdmin') }}</el-dropdown-item>
+                  <el-dropdown-item divided command="remove" style="color:#f56c6c">{{ t('common.remove') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -598,23 +598,23 @@
       <!-- 链接分享 -->
       <div class="link-share-section">
         <div class="link-share-header">
-          <span style="font-weight:500">链接分享</span>
+          <span style="font-weight:500">{{ t('docEditor.linkShareLabel') }}</span>
           <el-switch v-model="linkShareEnabled" @change="toggleLinkShare" />
         </div>
         <div v-if="linkShareEnabled" class="link-share-body">
           <el-select v-model="shareForm.expiresIn" size="small" style="width:120px;margin-right:8px">
-            <el-option label="永久" :value="0" />
-            <el-option label="24 小时" :value="24" />
-            <el-option label="7 天" :value="168" />
-            <el-option label="30 天" :value="720" />
+            <el-option :label="t('docEditor.expireNever')" :value="0" />
+            <el-option :label="t('docEditor.expire24h')" :value="24" />
+            <el-option :label="t('docEditor.expire7d')" :value="168" />
+            <el-option :label="t('docEditor.expire30d')" :value="720" />
           </el-select>
-          <el-input v-model="shareForm.password" placeholder="密码（可选）" size="small" style="width:140px;margin-right:8px" />
-          <el-button size="small" type="primary" @click="createShare">生成链接</el-button>
+          <el-input v-model="shareForm.password" :placeholder="t('docEditor.sharePasswordPlaceholder')" size="small" style="width:140px;margin-right:8px" />
+          <el-button size="small" type="primary" @click="createShare">{{ t('docEditor.generateLink') }}</el-button>
         </div>
         <div v-if="shareResult" class="share-link-result">
           <el-input :model-value="shareResult.share_url" readonly size="small">
             <template #append>
-              <el-button @click="copyShareUrl" size="small">复制</el-button>
+              <el-button @click="copyShareUrl" size="small">{{ t('docEditor.copyBtn') }}</el-button>
             </template>
           </el-input>
         </div>
@@ -623,30 +623,30 @@
           <div v-for="s in existingShares" :key="s.id" class="share-link-item">
             <span class="share-link-token"><svg style="width:14px;height:14px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M12.586 4.586a2 2 0 112.828 2.828l-3.879 3.879a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3.879-3.879a4 4 0 00-5.656-5.656L8.12 5.464a1 1 0 001.414 1.414l3.052-3.292z"/></svg> {{ s.token }}</span>
             <span v-if="s.has_password" class="share-link-badge"><svg style="width:14px;height:14px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg></span>
-            <span v-if="s.expired" class="share-link-badge expired">已过期</span>
-            <span class="share-link-count">{{ s.access_count }} 次访问</span>
-            <el-button link type="danger" size="small" @click="deleteShare(s.id)">删除</el-button>
+            <span v-if="s.expired" class="share-link-badge expired">{{ t('docEditor.shareExpired') }}</span>
+            <span class="share-link-count">{{ s.access_count }}  {{ t('docEditor.shareAccessCount', [s.access_count]) }}</span>
+            <el-button link type="danger" size="small" @click="deleteShare(s.id)">{{ t('common.delete') }}</el-button>
           </div>
         </div>
       </div>
 
       <template #footer>
-        <el-button @click="showShareDialog = false; shareResult = null">完成</el-button>
+        <el-button @click="showShareDialog = false; shareResult = null">{{ t('common.finish') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 评论面板 -->
-    <el-drawer v-model="showComments" title="评论" size="400px">
+    <el-drawer v-model="showComments" :title="t('docEditor.commentsTitle')" size="400px">
       <div class="comment-input">
         <div style="position:relative">
-          <el-input v-model="newComment" type="textarea" :rows="3" placeholder="写评论... @提及用户" @input="onCommentInput" />
+          <el-input v-model="newComment" type="textarea" :rows="3" :placeholder="t('docEditor.commentPlaceholder')" @input="onCommentInput" />
           <div v-if="mentionList.length" class="mention-dropdown">
             <div v-for="u in mentionList" :key="u.id" class="mention-item" @click="selectMention(u)">
               {{ u.name }} ({{ u.username }})
             </div>
           </div>
         </div>
-        <el-button type="primary" size="small" @click="submitComment" :disabled="!newComment.trim()" style="margin-top:8px">发送</el-button>
+        <el-button type="primary" size="small" @click="submitComment" :disabled="!newComment.trim()" style="margin-top:8px">{{ t('docEditor.sendBtn') }}</el-button>
       </div>
       <div class="comment-list">
         <div v-for="c in comments" :key="c.id" class="comment-item">
@@ -656,8 +656,8 @@
           </div>
           <div class="comment-content">{{ c.content }}</div>
           <div class="comment-actions">
-            <el-button link size="small" @click="replyTo(c)">回复</el-button>
-            <el-button v-if="c.user_id === currentUserId" link type="danger" size="small" @click="deleteComment(c.id)">删除</el-button>
+            <el-button link size="small" @click="replyTo(c)">{{ t('docEditor.replyBtn') }}</el-button>
+            <el-button v-if="c.user_id === currentUserId" link type="danger" size="small" @click="deleteComment(c.id)">{{ t('common.delete') }}</el-button>
           </div>
           <!-- 回复 -->
           <div v-for="r in getReplies(c.id)" :key="r.id" class="comment-reply">
@@ -667,11 +667,11 @@
             </div>
             <div class="comment-content">{{ r.content }}</div>
             <div class="comment-actions">
-              <el-button v-if="r.user_id === currentUserId" link type="danger" size="small" @click="deleteComment(r.id)">删除</el-button>
+              <el-button v-if="r.user_id === currentUserId" link type="danger" size="small" @click="deleteComment(r.id)">{{ t('common.delete') }}</el-button>
             </div>
           </div>
         </div>
-        <div v-if="!comments.length" class="no-data">暂无评论</div>
+        <div v-if="!comments.length" class="no-data">{{ t('docEditor.noComments') }}</div>
       </div>
     </el-drawer>
   </div>
@@ -681,6 +681,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
@@ -702,6 +703,7 @@ import 'highlight.js/styles/github-dark.min.css'
 import * as Y from 'yjs'
 import { MistWSProvider, type CollabUser } from '@/utils/collab'
 import http from '@/utils/http'
+import teamApi from '@/utils/team-api'
 const SheetEditor = defineAsyncComponent(() => import('@/components/SheetEditor.vue'))
 
 const lowlight = createLowlight(common)
@@ -709,6 +711,7 @@ const lowlight = createLowlight(common)
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 const docId = route.params.id as string
 
 const doc = ref<any>(null)
@@ -754,7 +757,7 @@ const allUsers = ref<any[]>([])
 async function loadMentionUsers() {
   if (allUsers.value.length) return
   try {
-    const { data } = await http.get('/users')
+    const { data } = await teamApi.get('/search-targets', { params: { q: '' } })
     allUsers.value = data.data || []
   } catch {}
 }
@@ -845,7 +848,7 @@ const newTagColor = ref('#409eff')
 
 async function loadDocTags() {
   try {
-    const { data } = await http.get(`/docs/documents/${docId}/tags`)
+    const { data } = await teamApi.get(`/documents/${docId}/tags`)
     docTags.value = data || []
     docTagIds.value = docTags.value.map((t: any) => t.id)
   } catch {}
@@ -853,7 +856,7 @@ async function loadDocTags() {
 
 async function loadAllTags() {
   try {
-    const { data } = await http.get('/docs/tags')
+    const { data } = await teamApi.get('/tags')
     allTags.value = data || []
   } catch {}
 }
@@ -861,20 +864,20 @@ async function loadAllTags() {
 async function addTag(tagId: string) {
   if (docTagIds.value.includes(tagId)) return
   const newIds = [...docTagIds.value, tagId]
-  await http.put(`/docs/documents/${docId}/tags`, { tag_ids: newIds })
+  await teamApi.put(`/documents/${docId}/tags`, { tag_ids: newIds })
   await loadDocTags()
 }
 
 async function removeTag(tagId: string) {
   const newIds = docTagIds.value.filter(id => id !== tagId)
-  await http.put(`/docs/documents/${docId}/tags`, { tag_ids: newIds })
+  await teamApi.put(`/documents/${docId}/tags`, { tag_ids: newIds })
   await loadDocTags()
 }
 
 async function createAndAddTag() {
   if (!newTagName.value.trim()) return
   try {
-    await http.post('/docs/tags', { name: newTagName.value, color: newTagColor.value })
+    await teamApi.post('/tags', { name: newTagName.value, color: newTagColor.value })
     await loadAllTags()
     // Find the new tag and add it
     const created = allTags.value.find((t: any) => t.name === newTagName.value.trim())
@@ -893,7 +896,7 @@ const showExportDialog = ref(false)
 
 async function loadAndShowStats() {
   try {
-    const res = await http.get(`/docs/documents/${docId}/stats`)
+    const res = await teamApi.get(`/documents/${docId}/stats`)
     stats.value = res.data?.data || res.data
     showStats.value = true
   } catch {}
@@ -910,20 +913,20 @@ const windowWidth = ref(window.innerWidth)
 // 锁定
 async function lockDoc() {
   try {
-    await http.post(`/docs/documents/${docId}/lock`)
+    await teamApi.post(`/documents/${docId}/lock`)
     if (doc.value) doc.value.locked_by = currentUserId.value
-    ElMessage.success('已锁定')
+    ElMessage.success(t('docEditor.lockSuccess'))
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error || '锁定失败')
+    ElMessage.error(e?.response?.data?.error || t('docEditor.lockFailed'))
   }
 }
 
 async function unlockDoc() {
   try {
-    await http.post(`/docs/documents/${docId}/unlock`)
+    await teamApi.post(`/documents/${docId}/unlock`)
     if (doc.value) doc.value.locked_by = ''
-    ElMessage.success('已解锁')
-  } catch { ElMessage.error('解锁失败') }
+    ElMessage.success(t('docEditor.unlockSuccess'))
+  } catch { ElMessage.error(t('docEditor.unlockFailed')) }
 }
 
 function openDiff(ver: number) {
@@ -938,8 +941,8 @@ async function loadDiff() {
   diffLoading.value = true
   try {
     const [oldResp, newResp] = await Promise.all([
-      fetch(`/api/docs/documents/${docId}/versions/${diffOld.value}/content`, { headers: authHeader() }),
-      fetch(`/api/docs/documents/${docId}/versions/${diffNew.value}/content`, { headers: authHeader() }),
+      fetch(`/api/teams/${auth.currentTeamId}/documents/${docId}/versions/${diffOld.value}/content`, { headers: authHeader() }),
+      fetch(`/api/teams/${auth.currentTeamId}/documents/${docId}/versions/${diffNew.value}/content`, { headers: authHeader() }),
     ])
     let oldText = await oldResp.text()
     let newText = await newResp.text()
@@ -951,18 +954,18 @@ async function loadDiff() {
       } catch {}
       return null
     }
-    const oldErr = checkError(oldText, '旧版本')
-    const newErr = checkError(newText, '新版本')
+    const oldErr = checkError(oldText, t('docEditor.diffVersion') + '(old)')
+    const newErr = checkError(newText, t('docEditor.diffVersion') + '(new)')
     if (oldErr || newErr) {
       diffHtml.value = '<div style="font-size:14px;line-height:1.8">' +
         (oldErr ? '<p style="color:#f56c6c"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 10a4 4 0 100-8 4 4 0 000 8zm0 2c-4.418 0-8 1.79-8 4v2h16v-2c0-2.21-3.582-4-8-4z"/></svg> ' + oldErr + '</p>' : '') +
         (newErr ? '<p style="color:#f56c6c"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 10a4 4 0 100-8 4 4 0 000 8zm0 2c-4.418 0-8 1.79-8 4v2h16v-2c0-2.21-3.582-4-8-4z"/></svg> ' + newErr + '</p>' : '') +
-        '<p style="color:#909399">提示：旧版本数据可能使用了不同加密密钥，无法解密</p>' +
+        t('docEditor.oldVersionDecryptHint') ? '<p style="color:#909399">' + t('docEditor.oldVersionDecryptHint') + '</p>' : '' +
         '</div>'
     } else {
       diffHtml.value = simpleDiff(oldText, newText)
     }
-  } catch { diffHtml.value = '<p style="color:#f56c6c">加载失败</p>' }
+  } catch { diffHtml.value = '<p style="color:#f56c6c">' + t('docEditor.loadFailed') + '</p>' }
   diffLoading.value = false
 }
 
@@ -987,10 +990,10 @@ function simpleDiff(oldHtml: string, newHtml: string): string {
   const removed = oldWords.filter(w => !newSet.has(w))
   const added = newWords.filter(w => !oldSet.has(w))
   if (removed.length === 0 && added.length === 0) {
-    html += '<p style="color:#67c23a"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg> 两个版本内容相同</p>'
+    html += '<p style="color:#67c23a"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg> ' + t('docEditor.twoVersionsSame') + '</p>'
   } else {
-    if (removed.length) html += '<p><strong style="color:#f56c6c">删除（' + removed.length + ' 词）：</strong></p><p>' + removed.slice(0, 50).map(w => `<span style="background:#fde2e2;color:#f56c6c;padding:1px 3px;border-radius:3px">${w}</span>`).join(' ') + (removed.length > 50 ? ' ...' : '') + '</p>'
-    if (added.length) html += '<p><strong style="color:#67c23a">新增（' + added.length + ' 词）：</strong></p><p>' + added.slice(0, 50).map(w => `<span style="background:#e1f3d8;color:#67c23a;padding:1px 3px;border-radius:3px">${w}</span>`).join(' ') + (added.length > 50 ? ' ...' : '') + '</p>'
+    if (removed.length) html += '<p><strong style="color:#f56c6c">' + t('docEditor.diffRemoved', [removed.length]) + '：</strong></p><p>' + removed.slice(0, 50).map(w => `<span style="background:#fde2e2;color:#f56c6c;padding:1px 3px;border-radius:3px">${w}</span>`).join(' ') + (removed.length > 50 ? ' ...' : '') + '</p>'
+    if (added.length) html += '<p><strong style="color:#67c23a">' + t('docEditor.diffAdded', [added.length]) + '：</strong></p><p>' + added.slice(0, 50).map(w => `<span style="background:#e1f3d8;color:#67c23a;padding:1px 3px;border-radius:3px">${w}</span>`).join(' ') + (added.length > 50 ? ' ...' : '') + '</p>'
   }
   html += '</div>'
   return html
@@ -1006,8 +1009,8 @@ function sheetDiff(oldJson: string, newJson: string): string {
     for (let si = 0; si < maxSheets; si++) {
       const os = oldSheets[si], ns = newSheets[si]
       const name = ns?.name || os?.name || `Sheet${si + 1}`
-      if (!os) { html += '<p><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg> <strong>' + name + '</strong>: <span style="color:#67c23a">新增工作表</span></p>'; hasDiff = true; continue }
-      if (!ns) { html += '<p><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg> <strong>' + name + '</strong>: <span style="color:#f56c6c">删除工作表</span></p>'; hasDiff = true; continue }
+      if (!os) { html += '<p><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg> <strong>' + name + '</strong>: <span style="color:#67c23a">' + t('docEditor.newSheetAdded') + '</span></p>'; hasDiff = true; continue }
+      if (!ns) { html += '<p><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg> <strong>' + name + '</strong>: <span style="color:#f56c6c">' + t('docEditor.sheetDeleted') + '</span></p>'; hasDiff = true; continue }
       const oldRows = os.rows || [], newRows = ns.rows || []
       const maxR = Math.max(oldRows.length, newRows.length)
       for (let ri = 0; ri < maxR; ri++) {
@@ -1024,18 +1027,18 @@ function sheetDiff(oldJson: string, newJson: string): string {
             if (ov) html += `<span style="background:#fde2e2;color:#f56c6c;padding:1px 3px;border-radius:3px">${String(ov).substring(0, 50)}</span>`
             html += ' → '
             if (nv) html += `<span style="background:#e1f3d8;color:#67c23a;padding:1px 3px;border-radius:3px">${String(nv).substring(0, 50)}</span>`
-            if (!ov) html += '<span style="color:#67c23a">新增</span>'
-            if (!nv) html += '<span style="color:#f56c6c">删除</span>'
+            if (!ov) html += '<span style="color:#67c23a">' + t('docEditor.diffNew') + '</span>'
+            if (!nv) html += '<span style="color:#f56c6c">' + t('common.delete') + '</span>'
             html += '</p>'
           }
         }
       }
     }
-    if (!hasDiff) html += '<p style="color:#67c23a"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg> 两个版本内容相同</p>'
+    if (!hasDiff) html += '<p style="color:#67c23a"><svg style="width:16px;height:16px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg> ' + t('docEditor.twoVersionsSame') + '</p>'
     html += '</div>'
     return html
   } catch {
-    return '<p style="color:#f56c6c">数据解析失败</p>'
+    return '<p style="color:#f56c6c">' + t('docEditor.dataParseFailed') + '</p>'
   }
 }
 
@@ -1052,7 +1055,7 @@ function searchDocsForLink() {
   }
   linkSearchTimer = setTimeout(async () => {
     try {
-      const { data } = await http.get('/docs/documents/search', { params: { q } })
+      const { data } = await teamApi.get('/documents/search', { params: { q } })
       linkDialog.results = (data.data || []).slice(0, 5).map((d: any) => ({ id: d.id, title: d.title, type: d.type }))
     } catch { linkDialog.results = [] }
   }, 300)
@@ -1081,7 +1084,7 @@ async function loadMedia() {
   try {
     const params: any = { limit: 50 }
     if (mediaFilter.value) params.type = mediaFilter.value
-    const { data } = await http.get('/docs/media', { params })
+    const { data } = await teamApi.get('/media', { params })
     mediaItems.value = data.data || []
   } catch { mediaItems.value = [] }
   mediaLoading.value = false
@@ -1094,7 +1097,7 @@ function insertMedia(item: {name: string; url: string; size: number; type: strin
     editor.value?.chain().focus().setLink({ href: item.url }).run()
   }
   showMediaLib.value = false
-  ElMessage.success('已插入')
+  ElMessage.success(t('common.inserted'))
 }
 
 function formatFileSize(bytes: number): string {
@@ -1117,7 +1120,7 @@ watch(showComments, (v) => {
 })
 
 async function loadDoc() {
-  const { data } = await http.get(`/docs/documents/${docId}/content`)
+  const { data } = await teamApi.get(`/documents/${docId}/content`)
   doc.value = data.data
   title.value = doc.value?.title || ''
   if (doc.value?.type === 'sheet') {
@@ -1130,7 +1133,7 @@ async function loadDoc() {
 // === 文档移动 ===
 async function loadFolderTree() {
   try {
-    const { data } = await http.get('/docs/tree')
+    const { data } = await teamApi.get('/folders/tree')
     folderTree.value = data || []
   } catch {}
 }
@@ -1138,17 +1141,17 @@ async function loadFolderTree() {
 async function moveDoc() {
   if (!moveTarget.value) return
   try {
-    await http.put(`/docs/documents/${docId}`, { title: title.value, folder_id: moveTarget.value })
-    ElMessage.success('文档已移动')
+    await teamApi.put(`/documents/${docId}`, { title: title.value, folder_id: moveTarget.value })
+    ElMessage.success(t('docEditor.moveSuccess'))
     showMoveDialog.value = false
     if (doc.value) doc.value.folder_id = moveTarget.value
-  } catch { ElMessage.error('移动失败') }
+  } catch { ElMessage.error(t('docEditor.moveFailed')) }
 }
 
 watch(showMoveDialog, (v) => { if (v) loadFolderTree() })
 
 async function loadVersions() {
-  const { data } = await http.get(`/docs/documents/${docId}/versions`)
+  const { data } = await teamApi.get(`/documents/${docId}/versions`)
   versions.value = (data.data || [])
 }
 
@@ -1198,7 +1201,7 @@ function initEditor(initialContent: string) {
           Underline,
           TaskList,
           TaskItem.configure({ nested: true }),
-          Placeholder.configure({ placeholder: '开始输入内容...' }),
+          Placeholder.configure({ placeholder: t('docEditor.placeholder') }),
           Image.configure({ inline: false, allowBase64: true, HTMLAttributes: { class: 'editor-image' } }),
           Link.configure({ openOnClick: false, HTMLAttributes: { class: 'editor-link', target: '_blank', rel: 'noopener' } }),
           Table.configure({ resizable: true }),
@@ -1212,7 +1215,7 @@ function initEditor(initialContent: string) {
           CollaborationCursor.configure({
             provider: { awareness: null } as any,
             user: {
-              name: auth.user?.display_name || auth.user?.username || '匿名',
+              name: auth.user?.display_name || auth.user?.username || t('docEditor.collabAnonymous'),
               color: userColors[userColorIdx],
               fallbackColor: userColors[userColorIdx],
             },
@@ -1258,7 +1261,7 @@ function initEditor(initialContent: string) {
           const { from, to } = ed.state.selection
           wsProvider.sendAwareness({
             userId: currentUserId.value,
-            userName: auth.user?.display_name || '匿名',
+            userName: auth.user?.display_name || t('docEditor.collabAnonymous'),
             color: userColors[userColorIdx],
             cursor: { from, to },
             timestamp: Date.now(),
@@ -1306,7 +1309,7 @@ function initEditor(initialContent: string) {
       Underline,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder: '开始输入内容...' }),
+      Placeholder.configure({ placeholder: t('docEditor.placeholder') }),
       Image.configure({ inline: false, allowBase64: true, HTMLAttributes: { class: 'editor-image' } }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'editor-link', target: '_blank', rel: 'noopener' } }),
       Table.configure({ resizable: true }),
@@ -1366,10 +1369,10 @@ async function uploadImageFile(file: File) {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    const { data } = await http.post('/docs/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+    const { data } = await teamApi.post('/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
     const url = data.data?.url || data.data?.path || data.data
     editor.value?.chain().focus().setImage({ src: url }).run()
-    ElMessage.success('图片已上传')
+    ElMessage.success(t('docEditor.imageUploaded'))
   } catch {
     const reader = new FileReader()
     reader.onload = () => { editor.value?.chain().focus().setImage({ src: reader.result as string }).run() }
@@ -1447,7 +1450,7 @@ async function doSave() {
   saving.value = true
   saveStatus.value = 'saving'
   try {
-    await http.put(`/docs/documents/${docId}/content`, { content })
+    await teamApi.put(`/documents/${docId}/content`, { content })
     saveStatus.value = 'saved'
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => { saveStatus.value = '' }, 3000)
@@ -1461,12 +1464,12 @@ async function doSave() {
 async function manualSave() {
   clearTimeout(autoSaveTimer)
   await doSave()
-  ElMessage.success('已保存')
+  ElMessage.success(t('docEditor.docSaved'))
 }
 
 async function saveTitle() {
   if (!title.value || title.value === doc.value?.title) return
-  await http.put(`/docs/documents/${docId}`, { title: title.value })
+  await teamApi.put(`/documents/${docId}`, { title: title.value })
   doc.value.title = title.value
 }
 
@@ -1489,15 +1492,15 @@ async function previewVersion(ver: number) {
   previewDialog.loading = true
   previewDialog.show = true
   try {
-    const resp = await fetch(`/api/docs/documents/${docId}/versions/${ver}/content`, { headers: authHeader() })
+    const resp = await fetch(`/api/teams/${auth.currentTeamId}/documents/${docId}/versions/${ver}/content`, { headers: authHeader() })
     const text = await resp.text()
     try {
       const obj = JSON.parse(text)
       if (obj.error) { ElMessage.error(obj.error); previewDialog.show = false; return }
     } catch {}
-    previewDialog.html = text || '<p style="color:#999;text-align:center">（空文档）</p>'
+    previewDialog.html = text || '<p style="color:#999;text-align:center">' + t('common.emptyDoc') + '</p>'
   } catch (e: any) {
-    ElMessage.error('加载版本内容失败')
+    ElMessage.error(t('docEditor.versionPreviewFailed'))
     previewDialog.show = false
   }
   previewDialog.loading = false
@@ -1505,14 +1508,14 @@ async function previewVersion(ver: number) {
 
 function selectRestoreVersion(ver: number) {
   ElMessageBox.confirm(
-    `将恢复到 v${ver}，当前内容将被保存为新版本。是否继续？`,
-    '恢复确认',
-    { type: 'warning', confirmButtonText: '恢复', cancelButtonText: '取消' }
+    t('common.restoreConfirmMsg', [ver]),
+    t('common.restoreConfirm'),
+    { type: 'warning', confirmButtonText: t('common.restore'), cancelButtonText: t('common.cancel') }
   ).then(async () => {
     versionDialog.loading = true
     try {
-      await http.post(`/docs/documents/${docId}/restore`, { version: ver })
-      ElMessage.success(`已恢复到 v${ver}`)
+      await teamApi.post(`/documents/${docId}/restore`, { version: ver })
+      ElMessage.success(t('common.restoreSuccess', [ver]))
       versionDialog.show = false
       await loadDoc()
       await loadVersions()
@@ -1523,7 +1526,7 @@ function selectRestoreVersion(ver: number) {
         sheetData.value = doc.value?.content || '{}'
       }
     } catch (e: any) {
-      ElMessage.error(e?.response?.data?.error || '恢复失败')
+      ElMessage.error(e?.response?.data?.error || t('common.restoreFailed'))
     }
     versionDialog.loading = false
   }).catch(() => {})
@@ -1532,9 +1535,9 @@ function selectRestoreVersion(ver: number) {
 function onSheetChange() { console.log('[SAVE] onSheetChange triggered, dataLoaded:', dataLoaded); scheduleAutoSave() }
 
 // === 分享 & 协作 ===
-const permRoleMap: any = { read: 'viewer', write: 'editor', admin: '管理员' }
+const permRoleMap: any = { read: 'viewer', write: 'editor', admin: t('docEditor.permRoleMap.admin') }
 function roleLabel(role: string) {
-  const m: any = { viewer: '查看者', editor: '编辑者', admin: '管理员', owner: '所有者' }
+  const m: any = { viewer: t('docEditor.permRoleMap.viewer'), editor: t('docEditor.permRoleMap.editor'), admin: t('docEditor.permRoleMap.admin'), owner: t('docEditor.permRoleMap.owner') }
   return m[role] || role
 }
 
@@ -1542,8 +1545,8 @@ async function loadCollaborators() {
   collaboratorsLoading.value = true
   try {
     const [collabRes, shareRes] = await Promise.all([
-      http.get(`/docs/documents/${docId}/collaborators`),
-      http.get(`/docs/documents/${docId}/shares`),
+      teamApi.get(`/documents/${docId}/collaborators`),
+      teamApi.get(`/documents/${docId}/shares`),
     ])
     collaborators.value = collabRes.data.data || []
     existingShares.value = shareRes.data.data || []
@@ -1555,7 +1558,7 @@ async function loadCollaborators() {
 
 function searchTargets(query: string, cb: any) {
   if (!query) { cb([]); return }
-  http.get('/docs/search-targets', { params: { q: query } }).then(({ data }) => {
+  teamApi.get('/search-targets', { params: { q: query } }).then(({ data }) => {
     const items = (data.data || []).map((t: any) => ({ ...t, value: t.display }))
     cb(items)
   }).catch(() => cb([]))
@@ -1567,12 +1570,12 @@ function onTargetSelect(item: any) {
 
 async function addCollaborator() {
   if (!selectedTarget.value) return
-  await http.post(`/docs/documents/${docId}/collaborators`, {
+  await teamApi.post(`/documents/${docId}/collaborators`, {
     target_type: selectedTarget.value.type,
     target_id: selectedTarget.value.id,
     role: newRole.value,
   })
-  ElMessage.success('已添加')
+  ElMessage.success(t('docEditor.collabAdded'))
   selectedTarget.value = null
   targetSearch.value = ''
   loadCollaborators()
@@ -1580,12 +1583,12 @@ async function addCollaborator() {
 
 async function updateCollaborator(id: string, role: string) {
   if (role === 'remove') {
-    await ElMessageBox.confirm('确定移除此协作者？', '确认')
-    await http.delete(`/docs/collaborators/${id}`)
-    ElMessage.success('已移除')
+    await ElMessageBox.confirm(t('docEditor.removeCollabConfirm'), t('docEditor.removeConfirmTitle'))
+    await teamApi.delete(`/collaborators/${id}`)
+    ElMessage.success(t('docEditor.collabRemoved'))
   } else {
-    await http.put(`/docs/collaborators/${id}`, { role })
-    ElMessage.success('已更新')
+    await teamApi.put(`/collaborators/${id}`, { role })
+    ElMessage.success(t('docEditor.collabUpdated'))
   }
   loadCollaborators()
 }
@@ -1593,9 +1596,9 @@ async function updateCollaborator(id: string, role: string) {
 function toggleLinkShare(val: boolean) {
   if (!val && existingShares.value.length > 0) {
     // 取消时删除所有分享链接
-    ElMessageBox.confirm('关闭链接分享将删除所有分享链接，确定？', '确认').then(async () => {
+    ElMessageBox.confirm(t('docEditor.disableLinkShareConfirm'), t('common.confirm') + '').then(async () => {
       for (const s of existingShares.value) {
-        await http.delete(`/docs/shares/${s.id}`)
+        await teamApi.delete(`/shares/${s.id}`)
       }
       existingShares.value = []
     }).catch(() => { linkShareEnabled.value = true })
@@ -1603,9 +1606,9 @@ function toggleLinkShare(val: boolean) {
 }
 
 async function createShare() {
-  const { data } = await http.post(`/docs/documents/${docId}/share`, shareForm)
+  const { data } = await teamApi.post(`/documents/${docId}/share`, shareForm)
   shareResult.value = data
-  ElMessage.success('分享链接已生成')
+  ElMessage.success(t('docEditor.shareLinkGenerated'))
   loadCollaborators()
 }
 
@@ -1613,12 +1616,12 @@ function copyShareUrl() {
   if (!shareResult.value) return
   const url = `${window.location.origin}${shareResult.value.share_url}`
   navigator.clipboard.writeText(url)
-  ElMessage.success('已复制到剪贴板')
+  ElMessage.success(t('docEditor.copiedToClipboard'))
 }
 
 async function deleteShare(id: string) {
-  await http.delete(`/docs/shares/${id}`)
-  ElMessage.success('已删除')
+  await teamApi.delete(`/shares/${id}`)
+  ElMessage.success(t('docEditor.shareDeleted'))
   loadCollaborators()
 }
 
@@ -1644,17 +1647,17 @@ function handleMore(cmd: string) {
 
 async function saveAsTemplate() {
   const html = editor.value?.getHTML() || ''
-  if (!html || html === '<p></p>') { ElMessage.warning('文档内容为空'); return }
-  const { value: name } = await ElMessageBox.prompt('输入模板名称', '保存为模板', {
+  if (!html || html === '<p></p>') { ElMessage.warning(t('docEditor.contentEmpty')); return }
+  const { value: name } = await ElMessageBox.prompt(t('docEditor.templateNamePrompt'), t('docEditor.templateSaveTitle'), {
     inputValue: doc.value?.title || '',
-    confirmButtonText: '保存',
-    cancelButtonText: '取消',
+    confirmButtonText: t('common.save'),
+    cancelButtonText: t('common.cancel'),
   }).catch(() => ({ value: '' }))
   if (!name) return
   try {
-    await http.post('/docs/templates', { name, type: 'doc', content: html, is_public: false })
-    ElMessage.success('模板已保存')
-  } catch { ElMessage.error('保存失败') }
+    await teamApi.post('/templates', { name, type: 'doc', content: html, is_public: false })
+    ElMessage.success(t('docEditor.templateSaved'))
+  } catch { ElMessage.error(t('docEditor.templateSaveFailed')) }
 }
 
 async function handleExport(format: string) {
@@ -1663,7 +1666,7 @@ async function handleExport(format: string) {
       // PDF: 前端生成，支持中文
       const html2pdf = (await import('html2pdf.js')).default
       const editorEl = document.querySelector('.ProseMirror') as HTMLElement
-      if (!editorEl) { ElMessage.error('导出失败'); return }
+      if (!editorEl) { ElMessage.error(t('docEditor.exportFailed')); return }
       // Clone and wrap for PDF
       const wrapper = document.createElement('div')
       wrapper.style.cssText = 'padding:20px;font-family:"Noto Sans SC",sans-serif;font-size:14px;line-height:1.8;color:#333'
@@ -1676,14 +1679,14 @@ async function handleExport(format: string) {
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
       }
       await html2pdf().set(opt).from(wrapper).save()
-      ElMessage.success('PDF 导出成功')
+      ElMessage.success(t('docEditor.pdfExportSuccess'))
       return
     }
     const token = localStorage.getItem('token')
-    const resp = await fetch(`/api/docs/documents/${docId}/export?format=${format}`, {
+    const resp = await fetch(`/api/teams/${auth.currentTeamId}/documents/${docId}/export?format=${format}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
-    if (!resp.ok) { ElMessage.error('导出失败'); return }
+    if (!resp.ok) { ElMessage.error(t('docEditor.exportFailed')); return }
     const blob = await resp.blob()
     const cd = resp.headers.get('Content-Disposition') || ''
     const match = cd.match(/filename="?([^"]+)"?/)
@@ -1692,20 +1695,20 @@ async function handleExport(format: string) {
     const a = document.createElement('a')
     a.href = url; a.download = filename; a.click()
     URL.revokeObjectURL(url)
-    ElMessage.success('导出成功')
-  } catch (e) { console.error(e); ElMessage.error('导出失败') }
+    ElMessage.success(t('docEditor.exportSuccess'))
+  } catch (e) { console.error(e); ElMessage.error(t('docEditor.exportFailed')) }
 }
 
 // === 评论 ===
 async function loadComments() {
-  const { data } = await http.get(`/docs/documents/${docId}/comments`)
+  const { data } = await teamApi.get(`/documents/${docId}/comments`)
   comments.value = data.data || []
   commentCount.value = comments.value.length
 }
 
 async function submitComment() {
   if (!newComment.value.trim()) return
-  await http.post(`/docs/documents/${docId}/comments`, {
+  await teamApi.post(`/documents/${docId}/comments`, {
     content: newComment.value,
     parent_id: replyParent.value,
   })
@@ -1720,7 +1723,7 @@ function replyTo(c: any) {
 }
 
 async function deleteComment(id: string) {
-  await http.delete(`/docs/comments/${id}`)
+  await teamApi.delete(`/comments/${id}`)
   loadComments()
 }
 
@@ -1790,7 +1793,7 @@ function handleGlobalKeydown(e: KeyboardEvent) {
   if (mod && e.key === '/') {
     e.preventDefault()
     ElMessage({
-      message: 'Ctrl+S 保存 · Ctrl+P PDF · Ctrl+Shift+E HTML · Ctrl+Shift+S 分享 · Ctrl+B 粗体 · Ctrl+I 斜体 · Ctrl+U 下划线',
+      message: t('docEditor.shortcutsHelp'),
       duration: 4000,
     })
   }

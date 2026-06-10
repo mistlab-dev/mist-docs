@@ -3,12 +3,6 @@ import { useAuthStore } from '@/stores/auth'
 
 const routes = [
   {
-    path: '/login',
-    name: 'Login',
-    component: () => import('@/views/Login.vue'),
-    meta: { public: true },
-  },
-  {
     path: '/auth/callback',
     name: 'SSOCallback',
     component: () => import('@/views/SSOCallback.vue'),
@@ -32,8 +26,6 @@ const routes = [
       // Admin pages now scoped to team
       { path: 'admin/dashboard', name: 'Dashboard', component: () => import('@/views/admin/Dashboard.vue'), meta: { admin: true } },
       { path: 'admin/folders', name: 'TeamFolders', component: () => import('@/views/admin/TeamFolders.vue'), meta: { admin: true } },
-      { path: 'admin/users', name: 'Users', component: () => import('@/views/admin/Users.vue'), meta: { admin: true } },
-      { path: 'admin/departments', name: 'Departments', component: () => import('@/views/admin/Departments.vue'), meta: { admin: true } },
       { path: 'admin/audits', name: 'Audits', component: () => import('@/views/admin/Audits.vue'), meta: { admin: true } },
       { path: 'admin/storage', name: 'Storage', component: () => import('@/views/admin/Storage.vue'), meta: { admin: true } },
       { path: 'admin/permissions', name: 'Permissions', component: () => import('@/views/admin/Permissions.vue'), meta: { admin: true } },

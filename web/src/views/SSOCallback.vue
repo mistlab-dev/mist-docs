@@ -2,7 +2,7 @@
   <div class="sso-callback">
     <div class="loading">
       <el-icon class="is-loading" :size="32"><Loading /></el-icon>
-      <p>正在登录...</p>
+      <p>{{ t('sso.loggingIn') }}</p>
     </div>
   </div>
 </template>
@@ -11,11 +11,13 @@
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
 import { Loading } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 onMounted(async () => {
   const token = (route.query.token as string) || ''

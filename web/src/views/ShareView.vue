@@ -3,25 +3,25 @@
     <!-- 加载 -->
     <div v-if="loading" class="state-center">
       <div class="loader-ring" />
-      <p class="loader-text">加载中...</p>
+      <p class="loader-text">{{ t('share.loading') }}</p>
     </div>
 
     <!-- 错误 -->
     <div v-else-if="error" class="state-center">
       <div class="error-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="48" height="48"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg></div>
       <h2 class="error-title">{{ error }}</h2>
-      <p class="error-desc">请确认链接是否正确，或联系分享者</p>
+      <p class="error-desc">{{ t('share.errorDesc') }}</p>
     </div>
 
     <!-- 密码验证 -->
     <div v-else-if="needPassword" class="state-center">
       <div class="password-card">
         <div class="pw-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg></div>
-        <h3 class="pw-title">{{ shareInfo?.title || '受保护的文档' }}</h3>
-        <p class="pw-desc">此文档需要密码才能访问</p>
-        <el-input v-model="password" type="password" placeholder="输入访问密码" size="large" show-password @keyup.enter="accessWithPassword" />
+        <h3 class="pw-title">{{ shareInfo?.title || t('common.protectedDoc') }}</h3>
+        <p class="pw-desc">{{ t('share.passwordDesc') }}</p>
+        <el-input v-model="password" type="password" :placeholder="t('share.passwordPlaceholder')" size="large" show-password @keyup.enter="accessWithPassword" />
         <el-button type="primary" size="large" class="pw-btn" @click="accessWithPassword" :loading="verifying">
-          访问文档
+          {{ t('share.accessDoc') }}
         </el-button>
       </div>
     </div>
@@ -34,12 +34,12 @@
             <div class="badge-icon" :class="doc.type === 'sheet' ? 'sheet' : 'doc'">
               <el-icon :size="16"><Document v-if="doc.type !== 'sheet'" /><Grid v-else /></el-icon>
             </div>
-            <span>{{ doc.type === 'sheet' ? '表格' : '文档' }}</span>
+            <span>{{ doc.type === 'sheet' ? t('common.sheet') : t('common.doc') }}</span>
           </div>
           <h1 class="doc-title">{{ doc.title }}</h1>
           <div class="share-meta">
             <el-icon :size="14"><Link /></el-icon>
-            <span>通过分享链接访问</span>
+            <span>{{ t('share.viaShareLink') }}</span>
           </div>
         </div>
         <el-divider />
@@ -48,7 +48,7 @@
         <!-- 表格类型 -->
         <div v-else class="sheet-preview">
           <div v-for="(sheet, si) in parsedSheets" :key="si" class="sheet-section">
-            <div v-if="parsedSheets.length > 1" class="sheet-tab">{{ sheet.name || ('工作表' + (si + 1)) }}</div>
+            <div v-if="parsedSheets.length > 1" class="sheet-tab">{{ sheet.name || (t('share.workSheetPrefix') + (si + 1)) }}</div>
             <div class="table-wrapper">
               <table class="sheet-table">
                 <tbody>
@@ -59,7 +59,7 @@
               </table>
             </div>
           </div>
-          <div v-if="!parsedSheets.length" class="empty-sheet">空表格</div>
+          <div v-if="!parsedSheets.length" class="empty-sheet">{{ t('share.emptySheet') }}</div>
         </div>
       </div>
     </div>
@@ -68,8 +68,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const token = route.params.token as string
@@ -188,15 +191,15 @@ async function loadShare() {
     const resp = e.response?.data
     if (resp?.need_password) {
       needPassword.value = true
-      shareInfo.value = { title: '受保护的文档' }
+      shareInfo.value = { title: t('common.protectedDoc') }
       try {
         const { data: info } = await axios.get(`/api/s/${token}/info`)
         shareInfo.value = info
       } catch {}
     } else if (e.response?.status === 410) {
-      error.value = '分享链接已过期'
+      error.value = t('share.linkExpired')
     } else {
-      error.value = resp?.error || '分享链接不存在'
+      error.value = resp?.error || t('share.linkNotExist')
     }
   } finally {
     loading.value = false
@@ -211,7 +214,7 @@ async function accessWithPassword() {
     doc.value = data
     needPassword.value = false
   } catch (e: any) {
-    error.value = e.response?.data?.error || '密码错误'
+    error.value = e.response?.data?.error || t('share.passwordError')
   } finally {
     verifying.value = false
   }

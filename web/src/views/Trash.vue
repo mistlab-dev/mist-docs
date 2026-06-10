@@ -3,15 +3,15 @@
     <!-- 页头 -->
     <div class="page-header">
       <div class="header-info">
-        <h2 class="page-title">回收站</h2>
-        <span v-if="trash.length" class="page-count">{{ trash.length }} 个文档</span>
+        <h2 class="page-title">{{ t('trash.title') }}</h2>
+        <span v-if="trash.length" class="page-count">{{ t('trash.docCount', [trash.length]) }}</span>
       </div>
       <div class="header-actions">
-        <el-input v-model="searchKey" placeholder="搜索..." style="width:180px" clearable size="default">
+        <el-input v-model="searchKey" :placeholder="t('trash.searchPlaceholder')" style="width:180px" clearable size="default">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
         <el-button v-if="trash.length" type="danger" plain @click="emptyTrash">
-          <el-icon><Delete /></el-icon> 清空回收站
+          <el-icon><Delete /></el-icon> {{ t('trash.emptyTrash') }}
         </el-button>
       </div>
     </div>
@@ -19,10 +19,10 @@
     <!-- 空状态 -->
     <div v-if="!filteredTrash.length && !loading" class="empty-state">
       <div class="empty-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="48" height="48"><path d="M6 2a2 2 0 00-2 2v1H3a1 1 0 100 2h14a1 1 0 100-2h-1V4a2 2 0 00-2-2H6zm0 2h8v1H6V4zm-2 5v7a2 2 0 002 2h8a2 2 0 002-2V9H4z"/></svg></div>
-      <p v-if="searchKey" class="empty-title">没有匹配的文档</p>
+      <p v-if="searchKey" class="empty-title">{{ t('trash.noMatchingDocs') }}</p>
       <template v-else>
-        <p class="empty-title">回收站为空</p>
-        <p class="empty-desc">删除的文档会在这里保留 30 天</p>
+        <p class="empty-title">{{ t('trash.emptyTrashEmpty') }}</p>
+        <p class="empty-desc">{{ t('trash.emptyTrashHint') }}</p>
       </template>
     </div>
 
@@ -39,7 +39,7 @@
         :cell-style="{ fontSize: '14px' }"
         :row-style="{ height: '56px' }"
       >
-        <el-table-column label="名称" min-width="280">
+        <el-table-column :label="t('trash.columnName')" min-width="280">
           <template #default="{ row }">
             <div class="doc-title">
               <div class="type-icon" :class="row.type">
@@ -49,14 +49,14 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="100" align="center">
+        <el-table-column :label="t('trash.columnType')" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="row.type === 'doc' ? '' : 'success'" size="small" effect="light" round>
-              {{ row.type === 'doc' ? '文档' : '表格' }}
+              {{ row.type === 'doc' ? t('common.doc') : t('common.sheet') }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="删除时间" width="160">
+        <el-table-column :label="t('trash.columnDeleteTime')" width="160">
           <template #default="{ row }">
             <span class="time-text">{{ formatTime(row.updated_at) }}</span>
           </template>
@@ -65,9 +65,9 @@
           <template #default="{ row }">
             <div class="row-actions">
               <el-button link type="primary" @click="restore(row)">
-                <el-icon><RefreshRight /></el-icon> 恢复
+                <el-icon><RefreshRight /></el-icon> {{ t('trash.restore') }}
               </el-button>
-              <el-button link type="danger" @click="purge(row)">永久删除</el-button>
+              <el-button link type="danger" @click="purge(row)">{{ t('trash.permanentDelete') }}</el-button>
             </div>
           </template>
         </el-table-column>
@@ -78,8 +78,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '@/utils/http'
+import teamApi from '@/utils/team-api'
+
+const { t } = useI18n()
 
 const trash = ref<any[]>([])
 const searchKey = ref('')
@@ -88,50 +92,50 @@ const loading = ref(false)
 const filteredTrash = computed(() => {
   if (!searchKey.value) return trash.value
   const q = searchKey.value.toLowerCase()
-  return trash.value.filter(t => t.title.toLowerCase().includes(q))
+  return trash.value.filter(item => item.title.toLowerCase().includes(q))
 })
 
 async function load() {
   loading.value = true
   try {
-    const { data } = await http.get('/docs/trash')
+    const { data } = await teamApi.get('/trash')
     trash.value = data.data || []
   } finally { loading.value = false }
 }
 
 async function restore(row: any) {
-  await http.post(`/docs/trash/restore/${row.id}`)
-  ElMessage.success('已恢复')
+  await teamApi.post(`/trash/restore/${row.id}`)
+  ElMessage.success(t('trash.restoreSuccess'))
   load()
 }
 
 async function purge(row: any) {
-  await ElMessageBox.confirm(`永久删除「${row.title}」？不可恢复！`, '危险操作', { type: 'warning' })
-  await http.delete(`/docs/trash/purge/${row.id}`)
-  ElMessage.success('已永久删除')
+  await ElMessageBox.confirm(t('trash.purgeConfirm', [row.title]), t('trash.dangerAction'), { type: 'warning' })
+  await teamApi.delete(`/trash/purge/${row.id}`)
+  ElMessage.success(t('trash.purgeSuccess'))
   load()
 }
 
 async function emptyTrash() {
-  await ElMessageBox.confirm('清空回收站？所有文档将永久删除！', '危险操作', { type: 'error' })
+  await ElMessageBox.confirm(t('trash.emptyTrashConfirm'), t('trash.dangerAction'), { type: 'error' })
   try {
-    const { data } = await http.delete('/docs/trash/empty')
-    ElMessage.success(data.message || `已清空回收站`)
+    const { data } = await teamApi.delete('/trash/empty')
+    ElMessage.success(data.message || t('trash.emptyTrashSuccess'))
     trash.value = []
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error || '清空失败')
+    ElMessage.error(e?.response?.data?.error || t('trash.emptyTrashFailed'))
   }
 }
 
-function formatTime(t: string): string {
-  if (!t) return ''
-  const d = new Date(t)
+function formatTime(ts: string): string {
+  if (!ts) return ''
+  const d = new Date(ts)
   const now = new Date()
   const diff = now.getTime() - d.getTime()
-  if (diff < 60000) return '刚刚'
-  if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前'
-  if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前'
-  if (diff < 604800000) return Math.floor(diff / 86400000) + ' 天前'
+  if (diff < 60000) return t('common.justNow')
+  if (diff < 3600000) return t('common.minutesAgo', [Math.floor(diff / 60000)])
+  if (diff < 86400000) return t('common.hoursAgo', [Math.floor(diff / 3600000)])
+  if (diff < 604800000) return t('common.daysAgo', [Math.floor(diff / 86400000)])
   return d.toLocaleDateString('zh-CN')
 }
 

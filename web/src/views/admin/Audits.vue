@@ -2,30 +2,30 @@
   <div class="admin-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">审计日志</h2>
-        <span class="header-count">共 {{ total }} 条记录</span>
+        <h2 class="page-title">{{ t('admin.audits.title') }}</h2>
+        <span class="header-count">{{ t('admin.audits.recordsCount', [total]) }}</span>
       </div>
     </div>
 
     <!-- 筛选栏 -->
     <div class="filter-bar">
       <div class="filter-left">
-        <el-select v-model="filter.action" clearable placeholder="操作类型" size="default" class="filter-select">
-          <el-option label="登录" value="login" />
-          <el-option label="创建" value="create_doc" />
-          <el-option label="编辑" value="edit" />
-          <el-option label="删除" value="delete" />
-          <el-option label="权限变更" value="set_permission" />
+        <el-select v-model="filter.action" clearable :placeholder="t('admin.audits.actionType')" size="default" class="filter-select">
+          <el-option :label="t('admin.audits.login')" value="login" />
+          <el-option :label="t('admin.audits.create')" value="create_doc" />
+          <el-option :label="t('admin.audits.editAction')" value="edit" />
+          <el-option :label="t('admin.audits.delete')" value="delete" />
+          <el-option :label="t('admin.audits.permissionChange')" value="set_permission" />
         </el-select>
-        <el-input v-model="filter.user_name" clearable placeholder="用户名" size="default" class="filter-user" />
-        <el-date-picker v-model="filter.start_date" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" size="default" class="filter-date" />
+        <el-input v-model="filter.user_name" clearable :placeholder="t('admin.audits.userName')" size="default" class="filter-user" />
+        <el-date-picker v-model="filter.start_date" type="date" value-format="YYYY-MM-DD" :placeholder="t('admin.audits.startDate')" size="default" class="filter-date" />
         <span class="filter-sep">—</span>
-        <el-date-picker v-model="filter.end_date" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" size="default" class="filter-date" />
+        <el-date-picker v-model="filter.end_date" type="date" value-format="YYYY-MM-DD" :placeholder="t('admin.audits.endDate')" size="default" class="filter-date" />
       </div>
       <div class="filter-right">
-        <el-button type="primary" size="default" @click="load">查询</el-button>
+        <el-button type="primary" size="default" @click="load">{{ t('admin.audits.query') }}</el-button>
         <el-button size="default" @click="exportCSV">
-          <el-icon><Download /></el-icon> 导出
+          <el-icon><Download /></el-icon> {{ t('common.export') }}
         </el-button>
       </div>
     </div>
@@ -36,7 +36,7 @@
         :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
         :cell-style="{ fontSize: '14px' }"
       >
-        <el-table-column label="时间" width="170">
+        <el-table-column :label="t('admin.audits.time')" width="170">
           <template #default="{ row }">
             <div class="time-cell">
               <el-icon :size="14" color="#909399"><Clock /></el-icon>
@@ -44,7 +44,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="用户" width="120">
+        <el-table-column :label="t('admin.audits.user')" width="120">
           <template #default="{ row }">
             <div class="user-cell">
               <div class="mini-avatar" :style="{ background: avatarColor(row.user_name) }">
@@ -54,19 +54,19 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120">
+        <el-table-column :label="t('admin.audits.action')" width="120">
           <template #default="{ row }">
             <el-tag :type="actionColor[row.action] || 'info'" size="small" effect="light" round disable-transitions>
               {{ actionMap[row.action] || row.action }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="资源" width="80">
+        <el-table-column :label="t('admin.audits.resource')" width="80">
           <template #default="{ row }">
             <span class="resource-type">{{ resourceMap[row.resource_type] || '—' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="resource_name" label="名称" min-width="200" show-overflow-tooltip>
+        <el-table-column prop="resource_name" :label="t('admin.audits.resourceName')" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="res-name">{{ row.resource_name || '—' }}</span>
           </template>
@@ -78,7 +78,7 @@
         </el-table-column>
         <el-table-column label="" width="60" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button link size="small" class="detail-btn" @click="showDetail(row)">详情</el-button>
+            <el-button link size="small" class="detail-btn" @click="showDetail(row)">{{ t('admin.audits.detail') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -97,7 +97,7 @@
       />
     </div>
 
-    <el-dialog v-model="showDetailDialog" title="操作详情" width="520">
+    <el-dialog v-model="showDetailDialog" :title="t('admin.audits.detailTitle')" width="520">
       <pre class="detail-pre">{{ formatDetail(detail) }}</pre>
     </el-dialog>
   </div>
@@ -105,12 +105,16 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import http from '@/utils/http'
+import teamApi from '@/utils/team-api'
 
-const actionMap: any = { login: '登录', logout: '登出', create_doc: '创建', edit: '编辑', delete: '删除', view: '查看', set_permission: '权限变更' }
+const { t } = useI18n()
+
+const actionMap: any = { login: t('admin.audits.login'), logout: t('admin.audits.logout'), create_doc: t('admin.audits.create'), edit: t('admin.audits.editAction'), delete: t('admin.audits.delete'), view: t('admin.audits.view'), set_permission: t('admin.audits.permissionChange') }
 const actionColor: any = { login: 'success', logout: 'info', create_doc: 'primary', edit: 'warning', delete: 'danger', set_permission: 'warning' }
-const resourceMap: any = { document: '文档', folder: '文件夹', user: '用户', department: '部门' }
+const resourceMap: any = { document: t('common.doc'), folder: t('common.folder'), user: t('common.user'), department: t('common.department') }
 
 const audits = ref<any[]>([])
 const page = ref(1)
@@ -133,19 +137,19 @@ function formatDetail(raw: string) {
 
 async function load() {
   const params = { page: page.value, page_size: pageSize, ...filter.value }
-  const { data } = await http.get('/audits', { params })
+  const { data } = await teamApi.get('/audits', { params })
   audits.value = data.data || []
   total.value = audits.value.length < pageSize ? (page.value - 1) * pageSize + audits.value.length : page.value * pageSize + 1
 }
 
 async function exportCSV() {
   const params = { ...filter.value }
-  const { data } = await http.get('/audits/export', { params, responseType: 'blob' })
+  const { data } = await teamApi.get('/audits/export', { params, responseType: 'blob' })
   const url = URL.createObjectURL(data)
   const a = document.createElement('a')
   a.href = url; a.download = 'audits.csv'; a.click()
   URL.revokeObjectURL(url)
-  ElMessage.success('已导出')
+  ElMessage.success(t('admin.audits.exportSuccess'))
 }
 
 function showDetail(row: any) {

@@ -1,8 +1,8 @@
 <template>
   <div class="team-folders">
     <div class="header">
-      <h2>文件夹管理</h2>
-      <el-button type="primary" @click="showCreate = true">新建文件夹</el-button>
+      <h2>{{ t('admin.teamFolders.title') }}</h2>
+      <el-button type="primary" @click="showCreate = true">{{ t('admin.teamFolders.newFolder') }}</el-button>
     </div>
 
     <el-tree
@@ -15,27 +15,27 @@
         <div class="tree-node">
           <span>{{ data.name }}</span>
           <span class="actions">
-            <el-button size="small" link @click="editFolder(data)">编辑</el-button>
-            <el-button size="small" link type="danger" @click="deleteFolder(data)">删除</el-button>
+            <el-button size="small" link @click="editFolder(data)">{{ t('common.edit') }}</el-button>
+            <el-button size="small" link type="danger" @click="deleteFolder(data)">{{ t('common.delete') }}</el-button>
           </span>
         </div>
       </template>
     </el-tree>
 
-    <el-dialog v-model="showCreate" title="新建文件夹" width="400px">
+    <el-dialog v-model="showCreate" :title="t('admin.teamFolders.newFolder')" width="400px">
       <el-form>
-        <el-form-item label="名称">
+        <el-form-item :label="t('common.name')">
           <el-input v-model="newFolder.name" />
         </el-form-item>
-        <el-form-item label="父文件夹">
-          <el-select v-model="newFolder.parent_id" clearable placeholder="根目录">
+        <el-form-item :label="t('admin.teamFolders.parentFolder')">
+          <el-select v-model="newFolder.parent_id" clearable :placeholder="t('admin.teamFolders.rootFolder')">
             <el-option v-for="f in flatFolders" :key="f.id" :label="f.name" :value="f.id" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCreate = false">取消</el-button>
-        <el-button type="primary" @click="createFolder">创建</el-button>
+        <el-button @click="showCreate = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="createFolder">{{ t('common.create') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -43,9 +43,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import http from '@/utils/http'
+import teamApi from '@/utils/team-api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+
+const { t } = useI18n()
 
 const auth = useAuthStore()
 const tree = ref<any[]>([])
@@ -67,38 +70,35 @@ const flatFolders = computed(() => {
 async function loadTree() {
   const teamId = auth.currentTeamId
   if (!teamId) return
-  const { data } = await http.get(`/teams/${teamId}/folders/tree`)
+  const { data } = await teamApi.get('/folders/tree')
   tree.value = data.data || []
 }
 
 async function createFolder() {
   if (!newFolder.value.name) {
-    ElMessage.warning('请输入名称')
+    ElMessage.warning(t('admin.teamFolders.nameRequired'))
     return
   }
-  const teamId = auth.currentTeamId
-  await http.post(`/teams/${teamId}/folders`, newFolder.value)
-  ElMessage.success('已创建')
+  await teamApi.post('/folders', newFolder.value)
+  ElMessage.success(t('admin.teamFolders.createSuccess'))
   showCreate.value = false
   newFolder.value = { name: '', parent_id: '' }
   loadTree()
 }
 
 async function editFolder(data: any) {
-  const { value } = await ElMessageBox.prompt('新名称', '编辑文件夹', {
+  const { value } = await ElMessageBox.prompt(t('admin.teamFolders.newName'), t('admin.teamFolders.editFolder'), {
     inputValue: data.name,
   })
-  const teamId = auth.currentTeamId
-  await http.put(`/teams/${teamId}/folders/${data.id}`, { name: value })
-  ElMessage.success('已更新')
+  await teamApi.put(`/folders/${data.id}`, { name: value })
+  ElMessage.success(t('admin.teamFolders.updateSuccess'))
   loadTree()
 }
 
 async function deleteFolder(data: any) {
-  await ElMessageBox.confirm(`确定删除「${data.name}」？子文件夹将被移到根目录。`, '确认')
-  const teamId = auth.currentTeamId
-  await http.delete(`/teams/${teamId}/folders/${data.id}`)
-  ElMessage.success('已删除')
+  await ElMessageBox.confirm(t('admin.teamFolders.deleteConfirm', [data.name]), t('admin.teamFolders.deleteConfirmTitle'))
+  await teamApi.delete(`/folders/${data.id}`)
+  ElMessage.success(t('admin.teamFolders.deleteSuccess'))
   loadTree()
 }
 

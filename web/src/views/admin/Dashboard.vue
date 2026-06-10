@@ -2,8 +2,8 @@
   <div class="admin-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">系统概览</h2>
-        <span class="header-sub">MistDocs 运行状态</span>
+        <h2 class="page-title">{{ t('admin.dashboard.title') }}</h2>
+        <span class="header-sub">{{ t('admin.dashboard.subtitle') }}</span>
       </div>
     </div>
 
@@ -33,7 +33,7 @@
     <div class="charts-row">
       <!-- 每日新增图表 -->
       <div class="chart-panel">
-        <div class="panel-header">近 7 天新增文档</div>
+        <div class="panel-header">{{ t('admin.dashboard.dailyNewTitle') }}</div>
         <div class="chart-body">
           <div class="chart-container">
             <div v-for="d in stats.daily_new" :key="d.date" class="chart-bar-wrapper">
@@ -42,13 +42,13 @@
               <div class="chart-label">{{ d.date.slice(5) }}</div>
             </div>
           </div>
-          <div v-if="!stats.daily_new?.length" class="no-data">暂无数据</div>
+          <div v-if="!stats.daily_new?.length" class="no-data">{{ t('common.noData') }}</div>
         </div>
       </div>
 
       <!-- 最近活动 -->
       <div class="chart-panel">
-        <div class="panel-header">最近活动</div>
+        <div class="panel-header">{{ t('admin.dashboard.recentActivity') }}</div>
         <div class="activity-list">
           <div v-for="a in stats.recent_activities" :key="a.created_at" class="activity-item">
             <div class="activity-avatar" :style="{ background: avatarColor(a.user_name) }">
@@ -63,7 +63,7 @@
               <div class="activity-time">{{ formatTime(a.created_at) }}</div>
             </div>
           </div>
-          <div v-if="!stats.recent_activities?.length" class="no-data">暂无活动</div>
+          <div v-if="!stats.recent_activities?.length" class="no-data">{{ t('admin.dashboard.noActivity') }}</div>
         </div>
       </div>
     </div>
@@ -72,22 +72,26 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import http from '@/utils/http'
+import teamApi from '@/utils/team-api'
+
+const { t } = useI18n()
 
 const stats = ref<any>({})
 
 const mainStats = computed(() => [
-  { label: '用户', value: stats.value.users?.total || 0, icon: 'User', gradient: 'linear-gradient(135deg, #667eea, #764ba2)' },
-  { label: '文档', value: stats.value.documents?.total || 0, icon: 'Document', gradient: 'linear-gradient(135deg, #36b37e, #00875a)' },
-  { label: '表格', value: stats.value.documents?.sheets || 0, icon: 'Grid', gradient: 'linear-gradient(135deg, #ff991f, #ff5630)' },
-  { label: '回收站', value: stats.value.trash || 0, icon: 'Delete', gradient: 'linear-gradient(135deg, #8993a4, #505f79)' },
+  { label: t('admin.dashboard.users'), value: stats.value.users?.total || 0, icon: 'User', gradient: 'linear-gradient(135deg, #667eea, #764ba2)' },
+  { label: t('admin.dashboard.documents'), value: stats.value.documents?.total || 0, icon: 'Document', gradient: 'linear-gradient(135deg, #36b37e, #00875a)' },
+  { label: t('admin.dashboard.sheets'), value: stats.value.documents?.sheets || 0, icon: 'Grid', gradient: 'linear-gradient(135deg, #ff991f, #ff5630)' },
+  { label: t('admin.dashboard.trash'), value: stats.value.trash || 0, icon: 'Delete', gradient: 'linear-gradient(135deg, #8993a4, #505f79)' },
 ])
 
 const subStats = computed(() => [
-  { label: '部门', value: stats.value.departments || 0 },
-  { label: '分享链接', value: stats.value.shares || 0 },
-  { label: '评论', value: stats.value.comments?.total || 0 },
-  { label: '本周新增', value: stats.value.week_new || 0 },
+  { label: t('admin.dashboard.departments'), value: stats.value.departments || 0 },
+  { label: t('admin.dashboard.shareLinks'), value: stats.value.shares || 0 },
+  { label: t('admin.dashboard.comments'), value: stats.value.comments?.total || 0 },
+  { label: t('admin.dashboard.weekNew'), value: stats.value.week_new || 0 },
 ])
 
 const maxCount = computed(() => {
@@ -106,19 +110,19 @@ function avatarColor(name: string) {
   return colors[Math.abs(hash) % colors.length]
 }
 
-function formatTime(t: string) {
-  if (!t) return ''
-  const d = new Date(t)
+function formatTime(ts: string) {
+  if (!ts) return ''
+  const d = new Date(ts)
   const now = new Date()
   const diff = now.getTime() - d.getTime()
-  if (diff < 60000) return '刚刚'
-  if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前'
-  if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前'
+  if (diff < 60000) return t('common.justNow')
+  if (diff < 3600000) return t('common.minutesAgo', [Math.floor(diff / 60000)])
+  if (diff < 86400000) return t('common.hoursAgo', [Math.floor(diff / 3600000)])
   return d.toLocaleDateString()
 }
 
 async function loadStats() {
-  const { data } = await http.get('/admin/dashboard')
+  const { data } = await teamApi.get('/dashboard')
   stats.value = data.data || {}
 }
 
