@@ -439,6 +439,11 @@ func TeamGetDocument(c *gin.Context) {
 
 // TeamUpdateDocument PUT /teams/:team_id/documents/:id
 func TeamUpdateDocument(c *gin.Context) {
+	role := getTeamRole(c)
+	if role == "viewer" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
 	docID := c.Param("id")
 	var req struct {
 		Title    string `json:"title"`
@@ -462,6 +467,11 @@ func TeamUpdateDocument(c *gin.Context) {
 
 // TeamDeleteDocument DELETE /teams/:team_id/documents/:id
 func TeamDeleteDocument(c *gin.Context) {
+	role := getTeamRole(c)
+	if role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可删除文档"})
+		return
+	}
 	docID := c.Param("id")
 	_, err := database.DB.Exec(`UPDATE md_documents SET status=0 WHERE id=?`, docID)
 	if err != nil {
@@ -497,6 +507,11 @@ func TeamGetDocumentContent(c *gin.Context) {
 
 // TeamSaveDocumentContent PUT /teams/:team_id/documents/:id/content
 func TeamSaveDocumentContent(c *gin.Context) {
+	role := getTeamRole(c)
+	if role == "viewer" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
 	docID := c.Param("id")
 	userID := c.GetString("user_id")
 
@@ -511,7 +526,7 @@ func TeamSaveDocumentContent(c *gin.Context) {
 	// Check lock
 	var lockedBy string
 	database.DB.QueryRow("SELECT locked_by FROM md_documents WHERE id=?", docID).Scan(&lockedBy)
-	role := getTeamRole(c)
+	role = getTeamRole(c)
 	if lockedBy != "" && lockedBy != userID && role != "admin" {
 		c.JSON(http.StatusConflict, gin.H{"error": "文档已被锁定"})
 		return
@@ -700,6 +715,11 @@ func TeamListTags(c *gin.Context) {
 }
 
 func TeamCreateTag(c *gin.Context) {
+	role := getTeamRole(c)
+	if role == "viewer" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
 	teamID := getTeamID(c)
 	var req struct {
 		Name  string `json:"name" binding:"required"`
@@ -720,6 +740,11 @@ func TeamCreateTag(c *gin.Context) {
 }
 
 func TeamDeleteTag(c *gin.Context) {
+	role := getTeamRole(c)
+	if role == "viewer" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
 	id := c.Param("id")
 	database.DB.Exec(`DELETE FROM md_doc_tags WHERE tag_id=?`, id)
 	_, err := database.DB.Exec(`DELETE FROM md_tags WHERE id=?`, id)
@@ -844,6 +869,11 @@ func TeamRestoreVersion(c *gin.Context) {
 // ==================== 锁定 ====================
 
 func TeamLockDocument(c *gin.Context) {
+	role := getTeamRole(c)
+	if role == "viewer" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
 	docID := c.Param("id")
 	userID := c.GetString("user_id")
 	_, err := database.DB.Exec(`UPDATE md_documents SET locked_by=?, locked_at=NOW() WHERE id=?`, userID, docID)
@@ -855,6 +885,11 @@ func TeamLockDocument(c *gin.Context) {
 }
 
 func TeamUnlockDocument(c *gin.Context) {
+	role := getTeamRole(c)
+	if role == "viewer" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
 	docID := c.Param("id")
 	_, err := database.DB.Exec(`UPDATE md_documents SET locked_by='', locked_at=NULL WHERE id=?`, docID)
 	if err != nil {

@@ -1167,3 +1167,124 @@ func TestAccessInvalidShare(t *testing.T) {
 		t.Errorf("invalid share should return 404, got %d", w.Code)
 	}
 }
+
+// ==================== 权限隔离测试 ====================
+
+// TestViewerCannotEditDocument verifies viewer cannot save/update document content
+func TestViewerCannotEditDocument(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "权限隔离-查看者测试")
+
+	// Viewer cannot update document title
+	w := request("PUT", teamPath("/documents/"+docID), map[string]interface{}{
+		"title": "查看者篡改标题",
+	}, viewerToken)
+	if w.Code != 403 {
+		t.Errorf("viewer should not update document, got %d", w.Code)
+	}
+
+	// Viewer cannot save document content
+	w = request("PUT", teamPath("/documents/"+docID+"/content"), map[string]interface{}{
+		"content": "<p>查看者篡改内容</p>",
+		"version": 1,
+	}, viewerToken)
+	if w.Code != 403 {
+		t.Errorf("viewer should not save document content, got %d", w.Code)
+	}
+}
+
+// TestViewerCannotDeleteDocument verifies viewer cannot delete document
+func TestViewerCannotDeleteDocument(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "权限隔离-删除测试")
+
+	w := request("DELETE", teamPath("/documents/"+docID), nil, viewerToken)
+	if w.Code != 403 {
+		t.Errorf("viewer should not delete document, got %d", w.Code)
+	}
+}
+
+// TestEditorCannotDeleteDocument verifies editor cannot delete document (admin only)
+func TestEditorCannotDeleteDocument(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "权限隔离-编辑者删除测试")
+
+	w := request("DELETE", teamPath("/documents/"+docID), nil, editorToken)
+	if w.Code != 403 {
+		t.Errorf("editor should not delete document, got %d", w.Code)
+	}
+}
+
+// TestViewerCanReadDocument verifies viewer can still read document content
+func TestViewerCanReadDocument(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "权限隔离-查看者读取测试")
+
+	// Viewer can read content
+	w := request("GET", teamPath("/documents/"+docID+"/content"), nil, viewerToken)
+	if w.Code != 200 {
+		t.Errorf("viewer should be able to read document content, got %d", w.Code)
+	}
+
+	// Viewer can get document info
+	w = request("GET", teamPath("/documents/"+docID), nil, viewerToken)
+	if w.Code != 200 {
+		t.Errorf("viewer should be able to read document info, got %d", w.Code)
+	}
+}
+
+// TestEditorCanEditButNotDelete verifies editor can create/edit but not delete
+func TestEditorCanEditButNotDelete(t *testing.T) {
+	// Editor can create
+	docID := createTestDoc(t, editorToken, "权限隔离-编辑者创建")
+
+	// Editor can update own document
+	w := request("PUT", teamPath("/documents/"+docID), map[string]interface{}{
+		"title": "编辑者修改标题",
+	}, editorToken)
+	if w.Code != 200 {
+		t.Errorf("editor should update own document, got %d", w.Code)
+	}
+
+	// Editor can save content
+	w = request("PUT", teamPath("/documents/"+docID+"/content"), map[string]interface{}{
+		"content": "<p>编辑者保存内容</p>",
+		"version": 1,
+	}, editorToken)
+	if w.Code != 200 {
+		t.Errorf("editor should save document content, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Editor cannot delete
+	w = request("DELETE", teamPath("/documents/"+docID), nil, editorToken)
+	if w.Code != 403 {
+		t.Errorf("editor should not delete document, got %d", w.Code)
+	}
+}
+
+// TestViewerCannotLockDocument verifies viewer cannot lock/unlock
+func TestViewerCannotLockDocument(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "权限隔离-锁定测试")
+
+	w := request("POST", teamPath("/documents/"+docID+"/lock"), nil, viewerToken)
+	if w.Code != 403 {
+		t.Errorf("viewer should not lock document, got %d", w.Code)
+	}
+}
+
+// TestViewerCannotManageTags verifies viewer cannot create/delete tags
+func TestViewerCannotManageTags(t *testing.T) {
+	w := request("POST", teamPath("/tags"), map[string]string{
+		"name": "查看者标签",
+	}, viewerToken)
+	if w.Code != 403 {
+		t.Errorf("viewer should not create tags, got %d", w.Code)
+	}
+}
+
+// TestViewerCannotUploadMedia verifies viewer cannot upload files
+func TestViewerCannotUploadMedia(t *testing.T) {
+	w := request("POST", teamPath("/upload"), map[string]interface{}{
+		"filename": "test.txt",
+	}, viewerToken)
+	// Even if the upload fails for other reasons, it should not be 200
+	if w.Code == 200 {
+		t.Errorf("viewer should not upload media, got %d", w.Code)
+	}
+}
