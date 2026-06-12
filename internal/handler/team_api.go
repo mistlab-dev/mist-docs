@@ -785,7 +785,8 @@ func TeamSetDocTags(c *gin.Context) {
 	}
 	database.DB.Exec(`DELETE FROM md_doc_tags WHERE document_id=?`, docID)
 	for _, tagID := range req.TagIDs {
-		database.DB.Exec(`INSERT IGNORE INTO md_doc_tags (document_id, tag_id) VALUES (?, ?)`, docID, tagID)
+		id := uuid.New().String()
+		database.DB.Exec(`INSERT IGNORE INTO md_doc_tags (id, document_id, tag_id) VALUES (?, ?, ?)`, id, docID, tagID)
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "已更新"})
 }
@@ -822,9 +823,20 @@ func TeamListVersions(c *gin.Context) {
 func TeamGetVersionContent(c *gin.Context) {
 	docID := c.Param("id")
 	ver := c.Param("ver")
-	var content []byte
-	err := database.DB.QueryRow(
-		`SELECT content FROM md_versions WHERE document_id=? AND version=?`, docID, ver).Scan(&content)
+	verNum, err := strconv.Atoi(ver)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "版本号无效"})
+		return
+	}
+
+	var teamID, deptID string
+	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
+	bucket := teamID
+	if bucket == "" {
+		bucket = deptID
+	}
+
+	content, err := store.ReadVersion(bucket, docID, verNum)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "版本不存在"})
 		return
@@ -1469,7 +1481,7 @@ func TeamListWebhookLogs(c *gin.Context) {
 	database.DB.QueryRow("SELECT COUNT(*) FROM md_webhook_logs WHERE webhook_id=?", webhookID).Scan(&total)
 
 	rows, err := database.DB.Query(
-		`SELECT id, status_code, response_body, error, created_at
+		`SELECT id, event, status, created_at
 		 FROM md_webhook_logs WHERE webhook_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
 		webhookID, pageSize, offset)
 	if err != nil {
@@ -1479,11 +1491,10 @@ func TeamListWebhookLogs(c *gin.Context) {
 	defer rows.Close()
 	var logs []map[string]interface{}
 	for rows.Next() {
-		var id, statusCode, respBody, errMsg, createdAt string
-		rows.Scan(&id, &statusCode, &respBody, &errMsg, &createdAt)
+		var id, event, status, createdAt string
+		rows.Scan(&id, &event, &status, &createdAt)
 		logs = append(logs, map[string]interface{}{
-			"id": id, "status_code": statusCode, "response_body": respBody,
-			"error": errMsg, "created_at": createdAt,
+			"id": id, "event": event, "status": status, "created_at": createdAt,
 		})
 	}
 	if logs == nil {
@@ -1542,6 +1553,11 @@ var _ = model.Document{}
 // ==================== Media Upload (Team-scoped) ====================
 
 func TeamUploadFile(c *gin.Context) {
+	role := getTeamRole(c)
+	if role == "viewer" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
 	teamID := getTeamID(c)
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
