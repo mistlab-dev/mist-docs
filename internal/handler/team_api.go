@@ -1522,7 +1522,14 @@ func writeDocContent(docID string, content []byte) {
 	if bucket == "" {
 		bucket = deptID // fallback for legacy docs
 	}
-	_, _, err := store.WriteVersion(bucket, docID, 1, content)
+
+	var version int
+	database.DB.QueryRow("SELECT version FROM md_documents WHERE id=?", docID).Scan(&version)
+	if version < 1 {
+		version = 1
+	}
+
+	_, _, err := store.WriteVersion(bucket, docID, version, content)
 	if err != nil {
 		log.Printf("writeDocContent error: %v", err)
 	}
