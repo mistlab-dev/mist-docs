@@ -20,21 +20,6 @@ import (
 
 // ==================== 文件夹 ====================
 
-func DocTree(c *gin.Context) {
-	deptID := c.Query("department_id")
-	role := c.GetString("role")
-	if role == "dept_admin" {
-		deptID = c.GetString("department_id")
-	}
-
-	tree, err := service.GetFolderTree(c.Request.Context(), deptID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"data": tree})
-}
-
 func resolveDeptID(c *gin.Context, folderID string, userDeptID string) string {
 	// 1. 用用户部门
 	if userDeptID != "" {
