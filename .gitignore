@@ -8,3 +8,9 @@ dist/
 secrets/master.key
 mist-docs
 mist-docs-linux
+
+# Build artifacts
+server
+mist-docs-test
+mist-docs
+build/
