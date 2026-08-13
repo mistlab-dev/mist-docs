@@ -112,6 +112,8 @@ func main() {
 
 	// 静态文件
 	r.Static("/assets", "./web/dist/assets")
+	r.GET("/healthz", handler.Healthz) // 探活：不依赖鉴权，供监控/systemd
+	r.GET("/health", handler.Healthz) // 兼容别名
 	r.NoRoute(func(c *gin.Context) {
 		c.File("./web/dist/index.html")
 	})

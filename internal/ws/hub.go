@@ -70,6 +70,12 @@ var upgrader = websocket.Upgrader{
 // globalConnCount tracks total active WebSocket connections
 var globalConnCount int64
 
+// ActiveConnections returns the current number of active WebSocket connections
+// (synchronized via sync/atomic). Used by health checks / metrics.
+func ActiveConnections() int64 {
+	return atomic.LoadInt64(&globalConnCount)
+}
+
 type Client struct {
 	Hub       *Hub
 	Conn      *websocket.Conn
