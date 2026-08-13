@@ -17,9 +17,9 @@ import (
 	"github.com/c-wind/mist-docs/internal/handler"
 	"github.com/c-wind/mist-docs/internal/middleware"
 	"github.com/c-wind/mist-docs/internal/store"
-	"github.com/google/uuid"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 )
 
 // ==================== Test Helpers ====================
@@ -47,13 +47,18 @@ var (
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
 
+	dbPassword := os.Getenv("MIST_DOCS_TEST_DB_PASSWORD")
+	if dbPassword == "" {
+		dbPassword = "MistTeam@2026"
+	}
+
 	config.C = config.Config{
 		Server: config.ServerConfig{Port: 0},
 		Database: config.DatabaseConfig{
 			Host:         "127.0.0.1",
 			Port:         3306,
 			User:         "mist_team",
-			Password:     "MistTeam@2026",
+			Password:     dbPassword,
 			DBName:       "mist_team",
 			MaxOpenConns: 5,
 			MaxIdleConns: 2,
@@ -134,18 +139,19 @@ func setupTestData() {
 	db := database.DB
 
 	// 使用真实 admin 用户
-	adminID = "u_adm_f38a1c13-488"
+	adminID = "test-user-admin"
 	editorID = "test-user-editor"
 	viewerID = "test-user-viewer"
 
-	// 在共享 users 表创建测试用户
+	// 在共享 users 表创建完整的测试用户集，不依赖本地数据库中预先存在真实账号。
 	hashed := "$2a$10$X5VtjlPu/whem0Jgbe/WDecwDAI9tTQYLNVMhq3OVoacvnwLEHWiS"
 	for _, u := range []struct {
 		id, email, username, displayName string
-		isAdmin                         bool
+		isAdmin                          bool
 	}{
-		{editorID, "editor@test.com", "editor", "编辑者", false},
-		{viewerID, "viewer@test.com", "viewer", "查看者", false},
+		{adminID, "test-admin@mistdocs.invalid", "test-admin", "管理员", true},
+		{editorID, "test-editor@mistdocs.invalid", "test-editor", "编辑者", false},
+		{viewerID, "test-viewer@mistdocs.invalid", "test-viewer", "查看者", false},
 	} {
 		_, err := db.ExecContext(ctx,
 			`INSERT INTO users (id, email, username, display_name, password_hash, is_admin, email_verified) VALUES (?,?,?,?,?,?,1)`,
@@ -407,8 +413,8 @@ func TestMe(t *testing.T) {
 	}
 	resp := parseJSON(t, w)
 	data := resp["data"].(map[string]interface{})
-	if getString(data["username"]) != "admin" {
-		t.Errorf("username should be admin, got %v", data["username"])
+	if getString(data["username"]) != "test-admin" {
+		t.Errorf("username should be test-admin, got %v", data["username"])
 	}
 }
 
@@ -607,8 +613,8 @@ func TestCreateSubFolder(t *testing.T) {
 
 	// 创建子文件夹
 	w = request("POST", teamPath("/folders"), map[string]interface{}{
-		"name":       "子文件夹",
-		"parent_id":  parentID,
+		"name":      "子文件夹",
+		"parent_id": parentID,
 	}, adminToken)
 	if w.Code != 200 {
 		t.Errorf("create subfolder failed: %d %s", w.Code, w.Body.String())
