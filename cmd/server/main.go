@@ -106,6 +106,11 @@ func main() {
 
 	// 初始化路由
 	r := gin.Default()
+	// 信任本机 nginx 反代（docs.conf proxy_pass 127.0.0.1:8900）的 XFF，
+	// 保留真实客户端 IP（用于限流/审计），同时消除 “trusted all proxies” 警告。
+	if err := r.SetTrustedProxies([]string{"127.0.0.1", "::1"}); err != nil {
+		log.Printf("[BOOT] failed to set trusted proxies: %v", err)
+	}
 	r.Use(middleware.CORS())
 	r.Use(middleware.Recovery())
 	r.Use(middleware.RateLimit(30, 60)) // 30 req/s per IP, burst 60
