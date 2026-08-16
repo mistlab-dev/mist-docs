@@ -3,8 +3,11 @@
     <div class="page-header">
       <div class="header-left">
         <h2 class="page-title">{{ t('admin.storage.title') }}</h2>
-        <el-tag :type="health === 'healthy' ? 'success' : health === 'warning' ? 'warning' : 'danger'" effect="light" round size="small">
-          {{ health === 'healthy' ? t('admin.storage.healthy') : health === 'warning' ? t('admin.storage.warning') : t('admin.storage.error') }}
+        <el-tag v-if="quota.unlimited" type="info" effect="light" round size="small">
+          {{ t('admin.storage.quotaUnlimited') }}
+        </el-tag>
+        <el-tag v-else :type="percentColor" effect="light" round size="small">
+          {{ Math.round(quota.usage_percent || 0) }}%
         </el-tag>
       </div>
       <el-button size="default" @click="load">
@@ -12,95 +15,83 @@
       </el-button>
     </div>
 
-    <!-- 磁盘 + 加密 -->
-    <div class="top-grid">
-      <div class="panel disk-panel">
-        <div class="panel-title">{{ t('admin.storage.diskUsage') }}</div>
-        <div class="disk-stats">
-          <div class="disk-item">
-            <span class="disk-label">{{ t('admin.storage.used') }}</span>
-            <span class="disk-value">{{ disk.used_human }}</span>
-          </div>
-          <div class="disk-item">
-            <span class="disk-label">{{ t('admin.storage.available') }}</span>
-            <span class="disk-value">{{ disk.available_human }}</span>
-          </div>
-          <div class="disk-item">
-            <span class="disk-label">{{ t('admin.storage.total') }}</span>
-            <span class="disk-value">{{ disk.total_human }}</span>
-          </div>
+    <!-- 用量概览 -->
+    <div class="panel">
+      <div class="panel-title">{{ t('admin.storage.teamUsage') }}</div>
+      <div class="quota-stats">
+        <div class="quota-item">
+          <span class="disk-label">{{ t('admin.storage.used') }}</span>
+          <span class="quota-value">{{ usage.total_human }}</span>
         </div>
-        <el-progress
-          :percentage="disk.usage_percent"
-          :stroke-width="10"
-          :color="disk.usage_percent > 90 ? '#f56c6c' : disk.usage_percent > 75 ? '#e6a23c' : '#36b37e'"
-          style="margin-top: 16px"
-        />
-      </div>
-
-      <div class="panel encrypt-panel">
-        <div class="panel-title">{{ t('admin.storage.encryptionStatus') }}</div>
-        <div class="encrypt-badge">
-          <el-tag :type="encryption.enabled ? 'success' : 'danger'" effect="dark" round size="large">
-            {{ encryption.enabled ? t('admin.storage.encryptionEnabled') : t('admin.storage.encryptionDisabled') }}
-          </el-tag>
+        <div class="quota-item" v-if="!quota.unlimited">
+          <span class="disk-label">{{ t('admin.storage.usedOf') }}</span>
+          <span class="quota-value">{{ usage.total_human }} / {{ quota.max_human }}</span>
         </div>
-        <div class="encrypt-detail">
-          <span class="disk-label">{{ t('admin.storage.algorithm') }}</span>
-          <span class="disk-value">{{ encryption.algorithm || '—' }}</span>
+        <div class="quota-item" v-if="!quota.unlimited">
+          <span class="disk-label">{{ t('admin.storage.remaining') }}</span>
+          <span class="quota-value">{{ quota.remaining_human }}</span>
         </div>
-        <div class="encrypt-detail">
-          <span class="disk-label">{{ t('admin.storage.storagePath') }}</span>
-          <code class="path-code">{{ storageRoot }}</code>
+        <div class="quota-item">
+          <span class="disk-label">{{ t('admin.storage.yourPlan') }}</span>
+          <span class="quota-value">{{ quota.max_mb === 0 ? t('admin.storage.infinite') : quota.max_mb + ' MB' }}</span>
         </div>
       </div>
+      <el-progress
+        v-if="!quota.unlimited"
+        :percentage="quota.usage_percent > 100 ? 100 : quota.usage_percent"
+        :stroke-width="12"
+        :color="quota.usage_percent > 90 ? '#f56c6c' : quota.usage_percent > 75 ? '#e6a23c' : '#36b37e'"
+        style="margin-top: 16px"
+      />
+      <div class="admin-hint" v-if="!isAdmin">{{ t('admin.storage.adminOnly') }}</div>
     </div>
 
-    <!-- 文件统计 -->
+    <!-- 存储构成 -->
     <div class="stat-grid">
-      <div class="stat-card" v-for="s in fileStats" :key="s.label">
-        <div class="stat-dot" :style="{ background: s.color }" />
+      <div class="stat-card">
+        <div class="stat-dot" style="background:#4f6ef7" />
         <div>
-          <div class="stat-val">{{ s.value }}</div>
-          <div class="stat-lbl">{{ s.label }}</div>
+          <div class="stat-val">{{ usage.documents.human }}</div>
+          <div class="stat-lbl">{{ t('admin.storage.docStorage') }} · {{ usage.documents.count }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-dot" style="background:#00b8d9" />
+        <div>
+          <div class="stat-val">{{ usage.versions.human }}</div>
+          <div class="stat-lbl">{{ t('admin.storage.versionStorage') }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-dot" style="background:#ff991f" />
+        <div>
+          <div class="stat-val">{{ usage.media.human }}</div>
+          <div class="stat-lbl">{{ t('admin.storage.mediaStorage') }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-dot" style="background:#ff5630" />
+        <div>
+          <div class="stat-val">{{ usage.trash.human }}</div>
+          <div class="stat-lbl">{{ t('admin.storage.trashStorage') }} · {{ usage.trash.count }}</div>
         </div>
       </div>
     </div>
 
-    <!-- 部门占用 -->
-    <div class="panel" v-if="files.departments?.length">
-      <div class="panel-title">{{ t('admin.storage.deptDistribution') }}</div>
-      <el-table :data="files.departments" size="small"
+    <!-- 类型分布 -->
+    <div class="panel" v-if="Object.keys(usage.by_type || {}).length">
+      <div class="panel-title">{{ t('admin.storage.storageDetailed') }}</div>
+      <el-table :data="typeRows" size="small"
         :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
       >
-        <el-table-column prop="department_id" :label="t('admin.storage.deptId')" min-width="240" show-overflow-tooltip>
-          <template #default="{ row }">
-            <code class="mono-id">{{ row.department_id }}</code>
-          </template>
+        <el-table-column prop="type" label="Type" min-width="180" />
+        <el-table-column prop="human" :label="t('admin.storage.usage')" width="160" align="center">
+          <template #default="{ row }"><span class="size-text">{{ row.human }}</span></template>
         </el-table-column>
-        <el-table-column prop="file_count" :label="t('admin.storage.fileCount')" width="100" align="center" />
-        <el-table-column prop="document_count" :label="t('admin.storage.docCount')" width="100" align="center" />
-        <el-table-column prop="total_size_human" :label="t('admin.storage.usage')" width="100" align="center">
-          <template #default="{ row }">
-            <span class="size-text">{{ row.total_size_human }}</span>
-          </template>
+        <el-table-column prop="bytes" label="Bytes" width="140" align="center">
+          <template #default="{ row }"><code class="mono-id">{{ row.bytes }}</code></template>
         </el-table-column>
       </el-table>
-    </div>
-
-    <!-- 健康检查 -->
-    <div class="panel">
-      <div class="panel-title">{{ t('admin.storage.healthCheck') }}</div>
-      <div class="check-list">
-        <div v-for="c in checks" :key="c.name" class="check-item">
-          <div class="check-status" :class="c.status" />
-          <span class="check-name">{{ checkNames[c.name] || c.name }}</span>
-          <span class="check-detail">{{ c.detail }}</span>
-        </div>
-      </div>
-      <div v-if="warnings.length" class="warnings">
-        <div v-for="w in warnings" :key="w" class="warning-item"><el-icon color="#e6a23c" style="vertical-align:middle;margin-right:4px"><WarningFilled /></el-icon>{{ w }}</div>
-      </div>
     </div>
   </div>
 </template>
@@ -108,43 +99,48 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { WarningFilled } from '@element-plus/icons-vue'
-import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
 
 const { t } = useI18n()
 
-const checkNames: any = {
-  disk_usage: t('admin.storage.checks.disk_usage'), storage_root: t('admin.storage.checks.storage_root'), write_permission: t('admin.storage.checks.write_permission'),
-  encryption: t('admin.storage.checks.encryption'), trash: t('admin.storage.checks.trash'), versions: t('admin.storage.checks.versions'), config: t('admin.storage.checks.config'),
+const usage = ref<any>({
+  total_human: '-',
+  documents: { human: '-', count: 0 },
+  versions: { human: '-' },
+  media: { human: '-' },
+  trash: { human: '-', count: 0 },
+  by_type: {},
+})
+const quota = ref<any>({ max_mb: 0, unlimited: true, usage_percent: 0 })
+const isAdmin = ref(false)
+
+const percentColor = computed(() => {
+  const p = quota.value.usage_percent || 0
+  return p > 90 ? 'danger' : p > 75 ? 'warning' : 'success'
+})
+
+const typeRows = computed(() =>
+  Object.entries(usage.value.by_type || {}).map(([type, bytes]) => ({
+    type, bytes, human: humanSize(bytes as number),
+  }))
+)
+
+function humanSize(b: number): string {
+  if (b == null || Number.isNaN(b)) return '-'
+  const unit = 1024
+  if (b < unit) return `${b} B`
+  const units = ['K', 'M', 'G', 'T', 'P']
+  let i = -1
+  let n = b
+  do { n /= unit; i++ } while (n >= unit && i < units.length - 1)
+  return `${n.toFixed(1)} ${units[i]}B`
 }
-
-const storageRoot = ref('')
-const disk = ref<any>({ total_human: '-', used_human: '-', available_human: '-', usage_percent: 0 })
-const files = ref<any>({ total_files: 0, total_size_human: '-', departments: [] })
-const encryption = ref<any>({ enabled: false })
-const checks = ref<any[]>([])
-const warnings = ref<string[]>([])
-const health = ref('healthy')
-
-const fileStats = computed(() => [
-  { label: t('admin.storage.totalFiles'), value: files.value.total_files, color: '#4f6ef7' },
-  { label: t('admin.storage.usedSpace'), value: files.value.total_size_human, color: '#6554c0' },
-  { label: t('admin.storage.currentVersion'), value: files.value.current_files, color: '#36b37e' },
-  { label: t('admin.storage.historyVersion'), value: files.value.version_files, color: '#00b8d9' },
-  { label: t('admin.storage.collabState'), value: files.value.yjs_state_files, color: '#ff991f' },
-  { label: t('admin.storage.trashFiles'), value: files.value.trash_files, color: '#ff5630' },
-])
 
 async function load() {
   const { data } = await teamApi.get('/storage/status')
-  storageRoot.value = data.storage_root || ''
-  disk.value = data.disk || {}
-  files.value = data.files || {}
-  encryption.value = data.encryption || {}
-  checks.value = data.health?.checks || []
-  warnings.value = data.health?.warnings || []
-  health.value = data.health?.status || 'unknown'
+  usage.value = { ...usage.value, ...(data.usage || {}) }
+  quota.value = data.quota || quota.value
+  isAdmin.value = !!data.is_admin
 }
 
 onMounted(load)
@@ -160,9 +156,6 @@ onMounted(load)
 .header-left { display: flex; align-items: center; gap: 16px; }
 .page-title { font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0; letter-spacing: -0.02em; }
 
-/* 顶部面板 */
-.top-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-
 .panel {
   background: #fff; border-radius: 16px; padding: 20px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.04); margin-bottom: 16px;
@@ -172,17 +165,14 @@ onMounted(load)
   margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0;
 }
 
-.disk-stats { display: flex; gap: 24px; }
-.disk-item { display: flex; flex-direction: column; gap: 4px; }
+.quota-stats { display: flex; gap: 40px; flex-wrap: wrap; }
+.quota-item { display: flex; flex-direction: column; gap: 4px; }
 .disk-label { font-size: 13px; color: #909399; }
-.disk-value { font-size: 18px; font-weight: 600; color: #1a1a2e; }
+.quota-value { font-size: 20px; font-weight: 700; color: #1a1a2e; }
 
-.encrypt-badge { text-align: center; margin: 8px 0 16px; }
-.encrypt-detail { display: flex; justify-content: space-between; padding: 6px 0; }
-.path-code { font-size: 12px; color: #909399; background: #f5f7fa; padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Monaco, monospace; }
+.admin-hint { margin-top: 12px; font-size: 12px; color: #e6a23c; }
 
-/* 文件统计 */
-.stat-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px; }
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .stat-card {
   background: #fff; border-radius: 14px; padding: 16px;
   display: flex; align-items: center; gap: 12px;
@@ -198,26 +188,7 @@ onMounted(load)
 }
 .size-text { font-weight: 600; color: #1a1a2e; }
 
-/* 健康检查 */
-.check-list { display: flex; flex-direction: column; gap: 12px; }
-.check-item { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
-.check-status {
-  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-}
-.check-status.ok { background: #36b37e; box-shadow: 0 0 0 3px rgba(54,179,126,0.15); }
-.check-status.warn { background: #ff991f; box-shadow: 0 0 0 3px rgba(255,153,31,0.15); }
-.check-status.error { background: #ff5630; box-shadow: 0 0 0 3px rgba(255,86,48,0.15); }
-.check-name { font-size: 14px; font-weight: 500; color: #1a1a2e; min-width: 100px; }
-.check-detail { font-size: 13px; color: #909399; }
-
-.warnings { margin-top: 12px; padding-top: 12px; border-top: 1px solid #fff7e6; }
-.warning-item {
-  padding: 8px 12px; margin-bottom: 6px; border-radius: 8px;
-  background: #fff7e6; font-size: 13px; color: #ad6800;
-}
-
 @media (max-width: 768px) {
-  .top-grid { grid-template-columns: 1fr; }
-  .stat-grid { grid-template-columns: repeat(3, 1fr); }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
 }
 </style>

@@ -82,6 +82,10 @@
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg>
                 {{ t("docEditor.saveAsTemplate") }}
               </el-dropdown-item>
+              <el-dropdown-item command="fragments" divided>
+                <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V4zm2 0v12h10V6H9L7 4H5z"/></svg>
+                {{ t("docEditor.fragmentsMenu") }}
+              </el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -158,6 +162,9 @@
         </button>
         <button class="tb-btn" @click="editor.chain().focus().setHorizontalRule().run()" :title="t('docEditor.toolbar.hr')">
           <svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="9" width="16" height="2" rx="1"/></svg>
+        </button>
+        <button class="tb-btn" @click="openFragmentsPanel" :title="t('docEditor.fragmentsMenu')" :class="{active: showFragments}">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V4zm2 0v12h10V6H9L7 4H5z"/></svg>
         </button>
       </div>
 
@@ -674,6 +681,47 @@
         <div v-if="!comments.length" class="no-data">{{ t('docEditor.noComments') }}</div>
       </div>
     </el-drawer>
+
+    <!-- 团队片段面板 -->
+    <el-drawer v-model="showFragments" :title="t('docEditor.fragmentsTitle')" size="400px">
+      <div class="frag-search">
+        <el-input v-model="fragSearch" :placeholder="t('docEditor.fragSearchPlaceholder')" clearable @input="searchFragments" />
+      </div>
+      <div class="frag-section-title">{{ t('docEditor.fragLinkedTitle') }}</div>
+      <div class="frag-list">
+        <div v-for="f in linkedFragments" :key="f.link_id" class="frag-item">
+          <div class="frag-item-head">
+            <el-tag v-if="f.deleted" type="danger" size="small" effect="plain">{{ t('docEditor.fragDeleted') }}</el-tag>
+            <strong class="frag-title">{{ f.title || t('docEditor.fragUntitled') }}</strong>
+            <span class="frag-cat">{{ f.category }}</span>
+          </div>
+          <pre v-if="!f.deleted" class="frag-cmd">{{ f.command }}</pre>
+          <div class="frag-actions">
+            <el-button v-if="!f.deleted" link size="small" @click="copyFragment(f.command)">{{ t('docEditor.fragCopy') }}</el-button>
+            <el-button link type="danger" size="small" @click="detachFragment(f)">{{ t('common.delete') }}</el-button>
+          </div>
+        </div>
+        <div v-if="!linkedFragments.length" class="no-data">{{ t('docEditor.fragEmpty') }}</div>
+      </div>
+
+      <div class="frag-section-title">{{ t('docEditor.fragTeamTitle') }}</div>
+      <div class="frag-list">
+        <div v-for="f in teamFragments" :key="f.fragment_id" class="frag-item">
+          <div class="frag-item-head">
+            <strong class="frag-title">{{ f.title }}</strong>
+            <span class="frag-cat">{{ f.category }}</span>
+          </div>
+          <pre class="frag-cmd">{{ f.command }}</pre>
+          <div class="frag-actions">
+            <el-button link size="small" @click="copyFragment(f.command)">{{ t('docEditor.fragCopy') }}</el-button>
+            <el-button link type="primary" size="small" :disabled="isLinked(f.fragment_id)" @click="attachFragment(f)">
+              {{ isLinked(f.fragment_id) ? t('docEditor.fragAttached') : t('docEditor.fragAttach') }}
+            </el-button>
+          </div>
+        </div>
+        <div v-if="!teamFragments.length" class="no-data">{{ t('docEditor.fragNoTeam') }}</div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -900,6 +948,69 @@ async function loadAndShowStats() {
     stats.value = res.data?.data || res.data
     showStats.value = true
   } catch {}
+}
+
+// === 团队片段联动（方向一：终端进、知识出） ===
+const showFragments = ref(false)
+const fragSearch = ref('')
+const linkedFragments = ref<any[]>([])
+const teamFragments = ref<any[]>([])
+
+async function openFragmentsPanel() {
+  showFragments.value = true
+  await Promise.all([loadLinkedFragments(), searchFragments()])
+}
+
+async function loadLinkedFragments() {
+  try {
+    const res = await teamApi.get(`/documents/${docId}/fragments`)
+    linkedFragments.value = res.data?.data || []
+  } catch {
+    linkedFragments.value = []
+  }
+}
+
+async function searchFragments() {
+  try {
+    const params: any = {}
+    if (fragSearch.value.trim()) params.q = fragSearch.value.trim()
+    const res = await teamApi.get('/fragments-search', { params })
+    teamFragments.value = (res.data?.data || [])
+  } catch {
+    teamFragments.value = []
+  }
+}
+
+function isLinked(fragmentID: string): boolean {
+  return linkedFragments.value.some((f) => f.fragment_id === fragmentID)
+}
+
+async function attachFragment(f: any) {
+  try {
+    await teamApi.post(`/documents/${docId}/fragments`, { fragment_id: f.fragment_id })
+    ElMessage.success(t('docEditor.fragAttachOk'))
+    await Promise.all([loadLinkedFragments(), searchFragments()])
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || t('common.error'))
+  }
+}
+
+async function detachFragment(f: any) {
+  try {
+    await teamApi.delete(`/documents/${docId}/fragments/${f.fragment_id}`)
+    ElMessage.success(t('docEditor.fragDetachOk'))
+    await Promise.all([loadLinkedFragments(), searchFragments()])
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || t('common.error'))
+  }
+}
+
+function copyFragment(cmd: string) {
+  navigator.clipboard.writeText(cmd || '').then(() => {
+    ElMessage.success(t('docEditor.fragCopied'))
+  }).catch(() => {
+    ElMessage.warning(t('docEditor.fragCopyFail'))
+  })
 }
 
 // 版本对比
@@ -1661,6 +1772,7 @@ function handleMore(cmd: string) {
     case 'move': showMoveDialog.value = true; break
     case 'watermark': toggleWatermark(); break
     case 'comments': showComments.value = true; break
+    case 'fragments': openFragmentsPanel(); break
     case 'stats': loadAndShowStats(); break
     case 'versions':
       if (versions.value.length) handleVersion(versions.value[0].version)
@@ -2016,6 +2128,17 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .mention-item { padding: 6px 12px; cursor: pointer; font-size: 13px; }
 .mention-item:hover { background: #f5f7fa; }
 .no-data { text-align: center; color: #c0c4cc; padding: 24px; }
+
+/* 团队片段面板 */
+.frag-search { margin-bottom: 12px; }
+.frag-section-title { font-size: 13px; font-weight: 600; color: #5a5f6b; margin: 16px 0 8px; }
+.frag-list { display: flex; flex-direction: column; gap: 10px; }
+.frag-item { padding: 10px 12px; border: 1px solid #eef0f3; border-radius: 10px; background: #fafbfc; }
+.frag-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.frag-title { font-size: 14px; color: #1a1a2e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frag-cat { font-size: 12px; color: #909399; margin-left: auto; flex-shrink: 0; }
+.frag-cmd { font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 13px; color: #e6553e; background: #fff; border: 1px solid #f0f0f0; border-radius: 6px; padding: 8px 10px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0 0 8px; }
+.frag-actions { display: flex; gap: 8px; }
 
 /* 标签栏 */
 .doc-tags-bar { padding: 8px 16px; border-bottom: 1px solid #e8ecf0; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }

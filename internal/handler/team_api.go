@@ -184,8 +184,12 @@ func TeamListDocuments(c *gin.Context) {
 	docType := c.Query("type")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 { page = 1 }
-	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
 
 	offset := (page - 1) * pageSize
 	where := "WHERE d.team_id = ? AND d.status = 1"
@@ -265,8 +269,12 @@ func TeamSearchDocuments(c *gin.Context) {
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 { page = 1 }
-	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
 	offset := (page - 1) * pageSize
 
 	pattern := "%" + keyword + "%"
@@ -577,8 +585,12 @@ func TeamListTrash(c *gin.Context) {
 	teamID := getTeamID(c)
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 { page = 1 }
-	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
 	offset := (page - 1) * pageSize
 
 	var total int
@@ -605,7 +617,9 @@ func TeamListTrash(c *gin.Context) {
 			"file_size": fileSize, "deleted_at": deletedAt, "created_by": createdBy,
 		})
 	}
-	if docs == nil { docs = []map[string]interface{}{} }
+	if docs == nil {
+		docs = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": docs, "total": total})
 }
 
@@ -667,7 +681,9 @@ func TeamListFavorites(c *gin.Context) {
 			"id": id, "title": title, "type": docType, "updated_at": updatedAt,
 		})
 	}
-	if docs == nil { docs = []map[string]interface{}{} }
+	if docs == nil {
+		docs = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": docs})
 }
 
@@ -710,7 +726,9 @@ func TeamListTags(c *gin.Context) {
 		rows.Scan(&id, &name, &color)
 		tags = append(tags, map[string]interface{}{"id": id, "name": name, "color": color})
 	}
-	if tags == nil { tags = []map[string]interface{}{} }
+	if tags == nil {
+		tags = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": tags})
 }
 
@@ -770,7 +788,9 @@ func TeamGetDocTags(c *gin.Context) {
 		rows.Scan(&id, &name, &color)
 		tags = append(tags, map[string]interface{}{"id": id, "name": name, "color": color})
 	}
-	if tags == nil { tags = []map[string]interface{}{} }
+	if tags == nil {
+		tags = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": tags})
 }
 
@@ -816,7 +836,9 @@ func TeamListVersions(c *gin.Context) {
 			"created_by": createdBy, "created_at": createdAt, "user_name": userName,
 		})
 	}
-	if versions == nil { versions = []map[string]interface{}{} }
+	if versions == nil {
+		versions = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": versions})
 }
 
@@ -971,7 +993,9 @@ func TeamListShares(c *gin.Context) {
 			"expires_at": expires, "created_by": createdBy, "created_at": createdAt,
 		})
 	}
-	if shares == nil { shares = []map[string]interface{}{} }
+	if shares == nil {
+		shares = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": shares})
 }
 
@@ -999,7 +1023,9 @@ func TeamListCollaborators(c *gin.Context) {
 			"created_by": createdBy, "user_name": userName,
 		})
 	}
-	if collabs == nil { collabs = []map[string]interface{}{} }
+	if collabs == nil {
+		collabs = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": collabs})
 }
 
@@ -1050,7 +1076,9 @@ func TeamListComments(c *gin.Context) {
 			"updated_at": updatedAt, "user_name": userName,
 		})
 	}
-	if comments == nil { comments = []map[string]interface{}{} }
+	if comments == nil {
+		comments = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": comments})
 }
 
@@ -1105,8 +1133,12 @@ func TeamListAudits(c *gin.Context) {
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 { page = 1 }
-	if pageSize < 1 || pageSize > 100 { pageSize = 20 }
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
 	offset := (page - 1) * pageSize
 
 	var total int
@@ -1135,7 +1167,9 @@ func TeamListAudits(c *gin.Context) {
 			"created_at": createdAt, "user_name": userName,
 		})
 	}
-	if audits == nil { audits = []map[string]interface{}{} }
+	if audits == nil {
+		audits = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": audits, "total": total})
 }
 
@@ -1212,7 +1246,9 @@ func TeamListPermissions(c *gin.Context) {
 			"created_by": createdBy, "user_name": userName,
 		})
 	}
-	if perms == nil { perms = []map[string]interface{}{} }
+	if perms == nil {
+		perms = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": perms})
 }
 
@@ -1310,7 +1346,9 @@ func TeamListTemplates(c *gin.Context) {
 			"is_public": isPublic, "created_at": createdAt, "updated_at": updatedAt,
 		})
 	}
-	if templates == nil { templates = []map[string]interface{}{} }
+	if templates == nil {
+		templates = []map[string]interface{}{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": templates})
 }
 
@@ -1378,14 +1416,118 @@ func TeamDeleteTemplate(c *gin.Context) {
 
 // ==================== 存储 ====================
 
+// TeamStorageStatus 返回团队存储用量总览（活跃文档、回收站、版本历史、媒体附件）
+// 以及配额占用情况（配额取当前用户所属套餐，与创建时的拦截口径一致）。
 func TeamStorageStatus(c *gin.Context) {
 	teamID := getTeamID(c)
-	var totalSize int64
-	database.DB.QueryRow(`SELECT COALESCE(SUM(file_size), 0) FROM md_documents WHERE team_id=?`, teamID).Scan(&totalSize)
-	var docCount int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM md_documents WHERE team_id=? AND status=1`, teamID).Scan(&docCount)
+
+	// 活跃文档占用（status=1）
+	var activeSize int64
+	var activeCount int
+	database.DB.QueryRow(
+		`SELECT COALESCE(SUM(file_size), 0) FROM md_documents WHERE team_id=? AND status=1`,
+		teamID).Scan(&activeSize)
+	database.DB.QueryRow(
+		`SELECT COUNT(*) FROM md_documents WHERE team_id=? AND status=1`,
+		teamID).Scan(&activeCount)
+
+	// 回收站占用（status=0，文件仍在磁盘）
+	var trashSize int64
+	var trashCount int
+	database.DB.QueryRow(
+		`SELECT COALESCE(SUM(file_size), 0) FROM md_documents WHERE team_id=? AND status=0`,
+		teamID).Scan(&trashSize)
+	database.DB.QueryRow(
+		`SELECT COUNT(*) FROM md_documents WHERE team_id=? AND status=0`,
+		teamID).Scan(&trashCount)
+
+	// 文档类型分布（活跃）
+	byType := map[string]int64{}
+	rows, err := database.DB.Query(
+		`SELECT type, COALESCE(SUM(file_size), 0) FROM md_documents WHERE team_id=? AND status=1 GROUP BY type`,
+		teamID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var t string
+			var s int64
+			if rows.Scan(&t, &s) == nil {
+				byType[t] = s
+			}
+		}
+	}
+
+	// 版本历史额外占用 = 团队全部版本文件 - 当前文档文件
+	// （回收到归档态的文档仍保留版本文件，故版本统计覆盖 status IN (0,1)）
+	var versionAll int64
+	database.DB.QueryRow(
+		`SELECT COALESCE(SUM(v.file_size), 0) FROM md_versions v
+		 JOIN md_documents d ON v.document_id = d.id WHERE d.team_id=? AND d.status IN (0,1)`,
+		teamID).Scan(&versionAll)
+	versionExtra := versionAll - activeSize
+	if versionExtra < 0 {
+		versionExtra = 0
+	}
+
+	// 媒体附件占用（<root>/<teamID>/media/）
+	var mediaSize int64
+	mediaDir := fmt.Sprintf("%s/%s/media", store.RootPath(), teamID)
+	if entries, err := os.ReadDir(mediaDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			if info, err := e.Info(); err == nil {
+				mediaSize += info.Size()
+			}
+		}
+	}
+
+	// 总占用（不含回收站）
+	totalBytes := activeSize + versionExtra + mediaSize
+
+	// 配额：取当前用户套餐（0 = 不限）
+	userID := c.GetString("user_id")
+	limits := service.GetPlanLimits(userID)
+	maxBytes := int64(limits.MaxStorageMB) * 1024 * 1024
+
+	// 组装配额信息
+	quota := gin.H{
+		"max_mb":        limits.MaxStorageMB,
+		"max_bytes":     maxBytes,
+		"unlimited":     limits.MaxStorageMB == 0,
+		"usage_percent": nil,
+		"used_bytes":    totalBytes,
+		"used_human":    formatBytes(totalBytes),
+	}
+	if limits.MaxStorageMB != 0 {
+		usagePercent := float64(totalBytes) / float64(maxBytes) * 100
+		quota["usage_percent"] = usagePercent
+		quota["max_human"] = formatBytes(maxBytes)
+		quota["remaining_bytes"] = maxBytes - totalBytes
+		quota["remaining_human"] = formatBytes(maxBytes - totalBytes)
+	}
+
+	// 请求者是否团队管理员（仅管理员可写，前端据此展示）
+	role := getTeamRole(c)
+
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
-		"total_size": totalSize, "doc_count": docCount,
+		"team_id":   teamID,
+		"doc_count": activeCount,
+		"usage": gin.H{
+			"total_bytes": totalBytes,
+			"total_human": formatBytes(totalBytes),
+			"documents":   gin.H{"bytes": activeSize, "count": activeCount, "human": formatBytes(activeSize)},
+			"versions":    gin.H{"bytes": versionExtra, "human": formatBytes(versionExtra)},
+			"media":       gin.H{"bytes": mediaSize, "human": formatBytes(mediaSize)},
+			"trash":       gin.H{"bytes": trashSize, "count": trashCount, "human": formatBytes(trashSize)},
+			"by_type":     byType,
+		},
+		// 向后兼容字段
+		"quota":      quota,
+		"role":       role,
+		"is_admin":   role == "admin" || role == "owner",
+		"total_size": activeSize,
 	}})
 }
 
@@ -1903,14 +2045,14 @@ func TeamDashboardStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
-		"users":            gin.H{"total": userCount},
-		"documents":        gin.H{"total": docCount, "sheets": sheetCount},
-		"trash":            trashCount,
-		"departments":      deptCount,
-		"shares":           shareCount,
-		"comments":         gin.H{"total": commentCount},
-		"week_new":         weekNew,
-		"daily_new":        dailyNew,
+		"users":             gin.H{"total": userCount},
+		"documents":         gin.H{"total": docCount, "sheets": sheetCount},
+		"trash":             trashCount,
+		"departments":       deptCount,
+		"shares":            shareCount,
+		"comments":          gin.H{"total": commentCount},
+		"week_new":          weekNew,
+		"daily_new":         dailyNew,
 		"recent_activities": recentActivities,
 	}})
 }

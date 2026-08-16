@@ -118,7 +118,7 @@ func main() {
 	// 静态文件
 	r.Static("/assets", "./web/dist/assets")
 	r.GET("/healthz", handler.Healthz) // 探活：不依赖鉴权，供监控/systemd
-	r.GET("/health", handler.Healthz) // 兼容别名
+	r.GET("/health", handler.Healthz)  // 兼容别名
 	r.NoRoute(func(c *gin.Context) {
 		c.File("./web/dist/index.html")
 	})
@@ -176,6 +176,12 @@ func main() {
 				teams.GET("/documents/:id/comments", handler.TeamListComments)
 				teams.POST("/documents/:id/comments", handler.TeamCreateComment)
 				teams.GET("/documents/:id/export", handler.TeamExportDocument)
+
+				// 文档 ↔ 团队片段联动
+				teams.GET("/documents/:id/fragments", handler.TeamListDocFragments)
+				teams.POST("/documents/:id/fragments", handler.TeamAttachDocFragment)
+				teams.DELETE("/documents/:id/fragments/:fragment_id", handler.TeamDetachDocFragment)
+				teams.GET("/fragments-search", handler.TeamSearchTeamFragments)
 
 				// 回收站
 				teams.GET("/trash", handler.TeamListTrash)

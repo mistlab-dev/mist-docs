@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/c-wind/mist-docs/internal/config"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 var DB *sql.DB
@@ -73,6 +73,31 @@ func Init(cfg config.DatabaseConfig) error {
 			INDEX idx_parent (parent_id)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
 	}
+
+	// Auto-migrate: md_doc_fragments 关联表（文档 ↔ 团队片段）
+	// 片段数据位于同一库的 fragments 表(mist-team-server),此处仅存关联与顺序
+	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_doc_fragments'`).Scan(&tblExists)
+	if tblExists == 0 {
+		DB.Exec(`CREATE TABLE md_doc_fragments (
+			id VARCHAR(36) PRIMARY KEY,
+			team_id VARCHAR(64) NOT NULL,
+			document_id VARCHAR(36) NOT NULL COLLATE utf8mb4_general_ci,
+			fragment_id VARCHAR(64) NOT NULL COLLATE utf8mb4_unicode_ci,
+			position INT NOT NULL DEFAULT 0,
+			created_by VARCHAR(64) NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE KEY uk_doc_frag (document_id, fragment_id),
+			INDEX idx_team (team_id),
+			INDEX idx_doc (document_id),
+			INDEX idx_frag (fragment_id),
+			CONSTRAINT fk_docfrag_doc FOREIGN KEY (document_id) REFERENCES md_documents(id) ON DELETE CASCADE
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+	}
+
+	// Auto-migrate: 对齐 md_doc_fragments 关联字段 collation，避免与 fragments/源表 JOIN 冲突
+	// fragments.id 为 utf8mb4_unicode_ci，md_documents.id 为 utf8mb4_general_ci
+	DB.Exec(`ALTER TABLE md_doc_fragments MODIFY fragment_id VARCHAR(64) NOT NULL COLLATE utf8mb4_unicode_ci`)
+	DB.Exec(`ALTER TABLE md_doc_fragments MODIFY document_id VARCHAR(36) NOT NULL COLLATE utf8mb4_general_ci`)
 
 	return nil
 }
