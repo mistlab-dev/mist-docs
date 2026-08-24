@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
@@ -1094,16 +1095,21 @@ func TeamCreateComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
+	userName, _ := c.Get("username")
+	if userName == nil || userName == "" {
+		userName = "未知用户"
+	}
 	id := uuid.New().String()
+	now := time.Now()
 	_, err := database.DB.Exec(
-		`INSERT INTO md_comments (id, team_id, document_id, user_id, content, parent_id) VALUES (?, ?, ?, ?, ?, ?)`,
-		id, teamID, docID, userID, req.Content, req.ParentID)
+		`INSERT INTO md_comments (id, team_id, document_id, user_id, user_name, content, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, teamID, docID, userID, userName, req.Content, req.ParentID, now, now)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
-		"id": id, "content": req.Content, "user_id": userID,
+		"id": id, "content": req.Content, "user_id": userID, "user_name": userName,
 	}})
 }
 
