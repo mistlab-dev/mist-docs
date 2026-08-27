@@ -64,6 +64,7 @@ export default {
   },
   mainLayout: {
     docs: 'Documents',
+    openPortal: 'Open Portal',
     trash: 'Trash',
     admin: 'Admin',
     help: 'Help',

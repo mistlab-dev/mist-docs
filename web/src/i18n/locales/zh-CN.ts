@@ -64,6 +64,7 @@ export default {
   },
   mainLayout: {
     docs: '文档',
+    openPortal: '打开 Portal',
     trash: '回收站',
     admin: '管理后台',
     help: '帮助',

@@ -3,6 +3,12 @@
    Palette: blue-violet dark, aligned with Element Plus dark
    ============================================================ */
 
+:root {
+  --md-brand: #6366f1;
+  --md-brand-light: #818cf8;
+  --md-brand-dim: rgba(99, 102, 241, 0.12);
+}
+
 /* Element Plus base variable overrides */
 html.dark {
   --md-bg: #0f0f23;

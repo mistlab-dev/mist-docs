@@ -16,9 +16,9 @@
         :default-active="route.path"
         :collapse="collapsed"
         router
-        background-color="#1d1e2c"
-        text-color="#a0a4b8"
-        active-text-color="#409eff"
+        background-color="#15151e"
+        text-color="#94a3b8"
+        active-text-color="#818cf8"
         @select="onMenuSelect"
       >
         <el-menu-item index="/docs">
@@ -77,6 +77,11 @@
           </el-breadcrumb>
         </div>
         <div class="user-area">
+          <a class="portal-link" href="https://mistlab.dev" target="_blank" rel="noopener noreferrer">
+            <span class="portal-link-mark">&gt;_</span>
+            {{ t('mainLayout.openPortal') }}
+          </a>
+
           <!-- 语言切换 -->
           <LangSwitch />
 
@@ -352,9 +357,21 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #e8e8e8;
-  background: #fff;
+  border-bottom: 1px solid var(--md-border-light, #e8e8e8);
+  background: var(--md-surface, #fff);
 }
+.portal-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  color: var(--md-accent, #6366f1);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.portal-link:hover { color: var(--md-accent-text, #818cf8); }
+.portal-link-mark { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
 .user-area { display: flex; align-items: center; gap: 16px; }
 .user-name {
   cursor: pointer;
@@ -362,7 +379,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
 }
-.user-avatar { background: #409eff; color: #fff; font-size: 13px; flex-shrink: 0; }
+.user-avatar { background: var(--md-accent, #6366f1); color: #fff; font-size: 13px; flex-shrink: 0; }
 .notif-badge { margin-right: 4px; }
 .el-divider { margin: 8px 16px; border-color: #2a2b3d; }
 
@@ -381,7 +398,7 @@ onMounted(() => {
 .help-content kbd { background: #f5f5f5; border: 1px solid #dcdfe6; border-radius: 3px; padding: 1px 6px; font-size: 12px; }
 
 /* Mobile */
-.menu-btn { display: none; color: #fff !important; }
+.menu-btn { display: none; color: var(--md-text, #fff) !important; }
 .sidebar-overlay { display: none; }
 
 @media (max-width: 768px) {
@@ -404,5 +421,7 @@ onMounted(() => {
   .el-aside.sidebar.open { left: 0; }
   .breadcrumb { display: none; }
   .user-name-text { display: none; }
+  .portal-link { font-size: 12px; }
 }
+
 </style>
