@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title id="page-title">文档分享 — MistDocs</title>
+  <meta name="description" content="MistDocs shared document">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon-32.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f; --bg2: #111827; --card: #1e293b;
+      --border: #334155; --text: #f1f5f9; --muted: #94a3b8;
+      --accent: #6366f1; --green: #22c55e; --red: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Noto Sans SC', sans-serif;
+      background: var(--bg); color: var(--text);
+      line-height: 1.6; min-height: 100vh;
+    }
+    .header {
+      background: var(--bg2); border-bottom: 1px solid var(--border);
+      padding: 12px 24px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .header-brand {
+      font-weight: 700; font-size: 16px; color: #fff; text-decoration: none;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .header-brand span { color: var(--accent); }
+    .header-info { font-size: 13px; color: var(--muted); }
+
+    /* Password prompt */
+    .pw-box {
+      max-width: 400px; margin: 120px auto; padding: 40px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      text-align: center;
+    }
+    .pw-box h2 { font-size: 24px; margin-bottom: 8px; }
+    .pw-box p { color: var(--muted); margin-bottom: 24px; }
+    .pw-input {
+      width: 100%; padding: 12px 16px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 16px; text-align: center;
+      letter-spacing: 4px; margin-bottom: 16px;
+    }
+    .pw-input:focus { outline: none; border-color: var(--accent); }
+    .pw-btn {
+      width: 100%; padding: 12px; background: var(--accent); color: #fff;
+      border: none; border-radius: 8px; font-size: 15px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .pw-btn:hover { background: #4f46e5; }
+    .pw-error { color: var(--red); font-size: 13px; margin-top: 12px; }
+
+    /* Document viewer */
+    .doc-container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+    .doc-title {
+      font-size: 32px; font-weight: 800; margin-bottom: 16px;
+      padding-bottom: 16px; border-bottom: 1px solid var(--border);
+    }
+    .doc-meta {
+      display: flex; gap: 16px; margin-bottom: 24px; font-size: 13px; color: var(--muted);
+      flex-wrap: wrap;
+    }
+    .doc-meta span { display: flex; align-items: center; gap: 4px; }
+    .doc-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600;
+    }
+    .doc-badge.sheet { background: rgba(34,197,94,0.15); color: var(--green); }
+    .doc-badge.markdown { background: rgba(99,102,241,0.15); color: var(--accent); }
+
+    .doc-content {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+      padding: 32px; font-size: 15px; line-height: 1.8;
+      white-space: pre-wrap; word-wrap: break-word;
+    }
+    .doc-content h1, .doc-content h2, .doc-content h3 {
+      font-weight: 700; margin: 24px 0 12px; color: #fff;
+    }
+    .doc-content h1 { font-size: 24px; }
+    .doc-content h2 { font-size: 20px; }
+    .doc-content h3 { font-size: 17px; }
+    .doc-content code {
+      background: rgba(99,102,241,0.1); padding: 2px 6px; border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--accent);
+    }
+    .doc-content pre {
+      background: #0d1117; border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px; overflow-x: auto; margin: 16px 0;
+    }
+    .doc-content pre code { background: none; padding: 0; color: #e6edf3; }
+    .doc-content a { color: var(--accent); }
+    .doc-content img { max-width: 100%; border-radius: 8px; }
+
+    /* Error */
+    .error-box {
+      max-width: 400px; margin: 120px auto; padding: 40px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      text-align: center;
+    }
+    .error-box .icon { font-size: 48px; margin-bottom: 16px; }
+    .error-box h2 { font-size: 20px; margin-bottom: 8px; }
+    .error-box p { color: var(--muted); font-size: 14px; }
+
+    .footer {
+      text-align: center; padding: 32px; color: var(--muted); font-size: 13px;
+      border-top: 1px solid var(--border); margin-top: 60px;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <a class="header-brand" href="/"><span>mist</span>docs</a>
+    <div class="header-info" id="header-info"></div>
+  </div>
+
+  <!-- States -->
+  <div id="state-loading" style="text-align:center;padding:120px;color:var(--muted)">加载中…</div>
+
+  <div id="state-password" style="display:none">
+    <div class="pw-box">
+      <div style="font-size:48px;margin-bottom:16px">🔒</div>
+      <h2>需要密码</h2>
+      <p>此文档受密码保护，请输入访问密码</p>
+      <input type="password" id="pw-input" class="pw-input" placeholder="输入密码" onkeydown="if(event.key==='Enter')submitPassword()">
+      <button class="pw-btn" onclick="submitPassword()">访问文档</button>
+      <div class="pw-error" id="pw-error"></div>
+    </div>
+  </div>
+
+  <div id="state-doc" style="display:none">
+    <div class="doc-container">
+      <h1 class="doc-title" id="doc-title"></h1>
+      <div class="doc-meta" id="doc-meta"></div>
+      <div class="doc-content" id="doc-content"></div>
+    </div>
+  </div>
+
+  <div id="state-error" style="display:none">
+    <div class="error-box">
+      <div class="icon">❌</div>
+      <h2 id="error-title">链接不存在</h2>
+      <p id="error-msg">此分享链接不存在或已失效</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    Powered by <a href="https://docs.mistlab.dev">MistDocs</a> · <a href="https://mistlab.dev">MistLab</a>
+  </div>
+
+  <script>
+    var token = window.location.pathname.split('/s/')[1];
+    if (!token) { showError('链接无效', '请检查分享链接是否正确'); }
+    else { loadInfo(); }
+
+    function showState(name) {
+      ['loading','password','doc','error'].forEach(function(s) {
+        document.getElementById('state-' + s).style.display = s === name ? 'block' : 'none';
+      });
+    }
+
+    async function loadInfo() {
+      showState('loading');
+      try {
+        var r = await fetch('/v1/s/' + token + '/info');
+        var d = await r.json();
+        if (r.status === 404) { showError('链接不存在', d.error || '分享链接不存在或已失效'); return; }
+        if (r.status === 410) { showError('链接已过期', d.error || '此分享链接已过期'); return; }
+        document.getElementById('page-title').textContent = (d.title || '文档分享') + ' — MistDocs';
+        if (d.has_password) {
+          document.getElementById('header-info').textContent = '🔒 ' + (d.title || '');
+          showState('password');
+        } else {
+          loadContent('');
+        }
+      } catch(e) {
+        showError('加载失败', '网络错误，请稍后重试');
+      }
+    }
+
+    async function loadContent(password) {
+      showState('loading');
+      try {
+        var url = '/v1/s/' + token + (password ? '?password=' + encodeURIComponent(password) : '');
+        var r = await fetch(url);
+        var d = await r.json();
+        if (r.status === 403 && d.need_password) {
+          document.getElementById('pw-error').textContent = '密码错误';
+          showState('password');
+          return;
+        }
+        if (r.status === 404) { showError('链接不存在', d.error); return; }
+        if (r.status === 410) { showError('链接已过期', d.error); return; }
+        renderDoc(d);
+      } catch(e) {
+        showError('加载失败', '网络错误');
+      }
+    }
+
+    function renderDoc(d) {
+      document.getElementById('doc-title').textContent = d.title || '无标题';
+      document.getElementById('header-info').textContent = d.title || '';
+      document.getElementById('page-title').textContent = (d.title || '文档') + ' — MistDocs';
+
+      var typeBadge = d.type === 'sheet'
+        ? '<span class="doc-badge sheet">Sheet</span>'
+        : '<span class="doc-badge markdown">Markdown</span>';
+      document.getElementById('doc-meta').innerHTML = typeBadge +
+        '<span>📄 公开分享</span>';
+
+      var content = d.content || '（空文档）';
+      // Basic markdown rendering
+      content = renderMarkdown(content);
+      document.getElementById('doc-content').innerHTML = content;
+      showState('doc');
+    }
+
+    function renderMarkdown(md) {
+      var html = md
+        // Code blocks
+        .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+        // Inline code
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Headers
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        // Bold
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        // Italic
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Links
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+        // Images
+        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
+        // Line breaks
+        .replace(/\n/g, '<br>');
+      return html;
+    }
+
+    function submitPassword() {
+      var pw = document.getElementById('pw-input').value;
+      if (!pw) { document.getElementById('pw-error').textContent = '请输入密码'; return; }
+      document.getElementById('pw-error').textContent = '';
+      loadContent(pw);
+    }
+
+    function showError(title, msg) {
+      document.getElementById('error-title').textContent = title;
+      document.getElementById('error-msg').textContent = msg;
+      showState('error');
+    }
+  </script>
+</body>
+</html>
