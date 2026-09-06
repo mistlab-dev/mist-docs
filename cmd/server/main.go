@@ -156,6 +156,7 @@ func main() {
 				// 文档
 				teams.GET("/documents", handler.TeamListDocuments)
 				teams.GET("/documents/search", handler.TeamSearchDocuments)
+				teams.GET("/docs/search", handler.TeamDocParagraphSearch)
 				teams.GET("/documents/recent", handler.TeamRecentDocuments)
 				teams.POST("/documents", handler.TeamCreateDocument)
 				teams.GET("/documents/:id", handler.TeamGetDocument)

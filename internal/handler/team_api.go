@@ -260,6 +260,99 @@ func TeamListDocuments(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": docs, "total": total, "page": page, "page_size": pageSize})
 }
 
+// TeamDocParagraphSearch GET /teams/:team_id/docs/search
+// 满足 MistTerm 客户端文档检索契约 (docs/tech/TEAM-DOCS.md)
+func TeamDocParagraphSearch(c *gin.Context) {
+	teamID := getTeamID(c)
+	keyword := strings.TrimSpace(c.Query("q"))
+	if keyword == "" {
+		c.JSON(http.StatusOK, gin.H{"items": []interface{}{}})
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if limit < 1 {
+		limit = 1
+	} else if limit > 20 {
+		limit = 20
+	}
+
+	pattern := "%" + keyword + "%"
+	query := `SELECT d.id, d.title, IFNULL(d.content_text, '') as content_text
+		FROM md_documents d
+		WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR d.content_text LIKE ?)
+		ORDER BY d.updated_at DESC LIMIT ?`
+
+	rows, err := database.DB.Query(query, teamID, pattern, pattern, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type SearchHitItem struct {
+		ID      string `json:"id"`
+		Title   string `json:"title"`
+		Excerpt string `json:"excerpt"`
+		Slug    string `json:"slug"`
+		Score   int    `json:"score"`
+	}
+
+	var items []SearchHitItem
+	for rows.Next() {
+		var id, title, contentText string
+		if err := rows.Scan(&id, &title, &contentText); err != nil {
+			continue
+		}
+
+		// 从正文中截取包含关键词的段落片段作为 excerpt
+		excerpt := ""
+		lowerContent := strings.ToLower(contentText)
+		lowerKw := strings.ToLower(keyword)
+		idx := strings.Index(lowerContent, lowerKw)
+		if idx >= 0 {
+			start := idx - 40
+			if start < 0 {
+				start = 0
+			}
+			end := idx + len(keyword) + 60
+			if end > len(contentText) {
+				end = len(contentText)
+			}
+			snippet := contentText[start:end]
+			snippet = strings.ReplaceAll(snippet, "\n", " ")
+			snippet = strings.TrimSpace(snippet)
+			if start > 0 {
+				snippet = "…" + snippet
+			}
+			if end < len(contentText) {
+				snippet = snippet + "…"
+			}
+			excerpt = snippet
+		} else {
+			// 如果命中的是标题，截取开头一段
+			r := []rune(strings.ReplaceAll(contentText, "\n", " "))
+			if len(r) > 100 {
+				excerpt = string(r[:100]) + "…"
+			} else {
+				excerpt = string(r)
+			}
+		}
+
+		items = append(items, SearchHitItem{
+			ID:      id,
+			Title:   title,
+			Excerpt: excerpt,
+			Slug:    "",
+			Score:   10,
+		})
+	}
+
+	if items == nil {
+		items = []SearchHitItem{}
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
 // TeamSearchDocuments GET /teams/:team_id/documents/search
 func TeamSearchDocuments(c *gin.Context) {
 	teamID := getTeamID(c)
