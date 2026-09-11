@@ -1151,8 +1151,8 @@ func TeamAddCollaborator(c *gin.Context) {
 func TeamListComments(c *gin.Context) {
 	docID := c.Param("id")
 	rows, err := database.DB.Query(
-		`SELECT c.id, c.content, c.user_id, c.parent_id, c.created_at, c.updated_at,
-		 IFNULL(u.display_name,'') as user_name
+		`SELECT c.id, c.content, c.user_id, IFNULL(c.parent_id,''), c.created_at, c.updated_at,
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(c.user_name,''), '未知用户') as user_name
 		 FROM md_comments c LEFT JOIN users u ON c.user_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE c.document_id=? ORDER BY c.created_at`, docID)
 	if err != nil {

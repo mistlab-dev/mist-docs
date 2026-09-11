@@ -1,6 +1,6 @@
 module github.com/c-wind/mist-docs
 
-go 1.25.13
+go 1.25.8
 
 require (
 	github.com/gin-gonic/gin v1.12.0

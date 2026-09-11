@@ -220,6 +220,8 @@ export default {
     templateWeekly: 'Weekly Report',
     templateRequirement: 'Requirements',
     templateApi: 'API Document',
+    templateSop: 'Troubleshooting SOP',
+    templateRunbook: 'Operations Runbook',
   },
   docEditor: {
     back: 'Back',

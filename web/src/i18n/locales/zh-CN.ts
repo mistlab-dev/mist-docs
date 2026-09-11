@@ -220,6 +220,8 @@ export default {
     templateWeekly: '周报',
     templateRequirement: '需求文档',
     templateApi: 'API 文档',
+    templateSop: '故障排查 SOP',
+    templateRunbook: '变更运维手册',
   },
   docEditor: {
     back: '返回',
