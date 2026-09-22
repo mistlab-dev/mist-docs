@@ -12,6 +12,7 @@ import (
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/handler"
 	"github.com/c-wind/mist-docs/internal/middleware"
+	"github.com/c-wind/mist-docs/internal/scheduler"
 	"github.com/c-wind/mist-docs/internal/ws"
 	"github.com/gin-gonic/gin"
 )
@@ -266,6 +267,23 @@ func main() {
 				teams.PUT("/notifications/read-all", handler.TeamMarkAllNotificationsRead)
 				teams.DELETE("/notifications/:id", handler.TeamDeleteNotification)
 				teams.GET("/notifications/unread-count", handler.TeamUnreadCount)
+
+				// 交期看板（deadlines are DB rows, not documents）
+				teams.GET("/deadlines", handler.TeamListDeadlines)
+				teams.GET("/deadlines/board", handler.TeamDeadlineBoard)
+				teams.POST("/deadlines", handler.TeamCreateDeadline)
+				teams.GET("/deadlines/:id", handler.TeamGetDeadline)
+				teams.PUT("/deadlines/:id", handler.TeamUpdateDeadline)
+				teams.DELETE("/deadlines/:id", handler.TeamDeleteDeadline)
+				teams.GET("/deadlines/:id/events", handler.TeamDeadlineEvents)
+
+				// 交期提醒规则
+				teams.GET("/reminder-rules", handler.TeamListReminderRules)
+				teams.POST("/reminder-rules", handler.TeamCreateReminderRule)
+				teams.POST("/reminder-rules/seed", handler.TeamSeedDeadlineRules)
+				teams.PUT("/reminder-rules/:id", handler.TeamUpdateReminderRule)
+				teams.DELETE("/reminder-rules/:id", handler.TeamDeleteReminderRule)
+				teams.GET("/reminder-log", handler.TeamListReminderLog)
 			}
 		}
 	}
@@ -276,6 +294,10 @@ func main() {
 	r.GET("/ws/teams/:team_id/docs/:doc_id", func(c *gin.Context) {
 		ws.ServeWS(hub, c)
 	})
+
+	// 交期提醒扫描。幂等由 md_reminder_log 的 UNIQUE(rule_id, deadline_id) 保证，
+	// 所以扫描频率只影响及时性，不影响是否会重复通知。
+	scheduler.StartReminderScheduler(scheduler.ReminderScanInterval)
 
 	addr := fmt.Sprintf("%s:%d", config.C.Server.Host, config.C.Server.Port)
 	encStatus := "OFF"

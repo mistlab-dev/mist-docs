@@ -99,6 +99,118 @@ func Init(cfg config.DatabaseConfig) error {
 	DB.Exec(`ALTER TABLE md_doc_fragments MODIFY fragment_id VARCHAR(64) NOT NULL COLLATE utf8mb4_unicode_ci`)
 	DB.Exec(`ALTER TABLE md_doc_fragments MODIFY document_id VARCHAR(36) NOT NULL COLLATE utf8mb4_general_ci`)
 
+	return migrateDeadlines()
+}
+
+// migrateDeadlines creates the交期看板 (deadline board) tables.
+//
+// Design note: deadlines are stored as DB rows with a due_date index, NOT as
+// spreadsheet documents. A sheet is an opaque encrypted blob that the server
+// cannot query; "which orders are due in 3 days" would otherwise require
+// decrypting and parsing every sheet. Keeping due_date as an indexed column
+// makes the reminder scan a plain date range query.
+func migrateDeadlines() error {
+	var tblExists int
+
+	// 1. md_deadlines — the ledger. Single source of truth for the board.
+	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_deadlines'`).Scan(&tblExists)
+	if tblExists == 0 {
+		if _, err := DB.Exec(`CREATE TABLE md_deadlines (
+			id VARCHAR(36) PRIMARY KEY,
+			team_id VARCHAR(64) NOT NULL,
+			order_no VARCHAR(64) NOT NULL,
+			title VARCHAR(255) NOT NULL,
+			customer VARCHAR(128) DEFAULT '',
+			quantity INT DEFAULT 0,
+			start_date DATE DEFAULT NULL,
+			due_date DATE NOT NULL,
+			status VARCHAR(16) NOT NULL DEFAULT 'pending',
+			progress TINYINT DEFAULT 0,
+			priority VARCHAR(16) NOT NULL DEFAULT 'normal',
+			owner_id VARCHAR(64) DEFAULT '',
+			remark TEXT,
+			created_by VARCHAR(64) NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_by VARCHAR(64) DEFAULT '',
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			deleted_at DATETIME DEFAULT NULL,
+			INDEX idx_due (team_id, due_date, status),
+			INDEX idx_owner (team_id, owner_id),
+			INDEX idx_status (team_id, status),
+			INDEX idx_order (team_id, order_no)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+			return fmt.Errorf("create md_deadlines: %w", err)
+		}
+	}
+
+	// 2. md_reminder_rules — configurable T-N reminder rules.
+	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_reminder_rules'`).Scan(&tblExists)
+	if tblExists == 0 {
+		if _, err := DB.Exec(`CREATE TABLE md_reminder_rules (
+			id VARCHAR(36) PRIMARY KEY,
+			team_id VARCHAR(64) NOT NULL,
+			name VARCHAR(64) NOT NULL,
+			offset_days INT NOT NULL COMMENT 'days before due date; 0 = due today; negative = overdue',
+			channel VARCHAR(32) NOT NULL DEFAULT 'inapp' COMMENT 'inapp|webhook',
+			target VARCHAR(32) NOT NULL DEFAULT 'owner' COMMENT 'owner|creator',
+			enabled TINYINT(1) NOT NULL DEFAULT 1,
+			created_by VARCHAR(64) NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			INDEX idx_team (team_id, enabled)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+			return fmt.Errorf("create md_reminder_rules: %w", err)
+		}
+	}
+
+	// 3. md_reminder_log — the idempotency guard.
+	// The scheduler runs repeatedly; the UNIQUE key is what prevents the same
+	// rule+deadline from notifying more than once. Without it users get
+	// bombarded and switch notifications off, which kills the feature.
+	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_reminder_log'`).Scan(&tblExists)
+	if tblExists == 0 {
+		if _, err := DB.Exec(`CREATE TABLE md_reminder_log (
+			id VARCHAR(36) PRIMARY KEY,
+			rule_id VARCHAR(36) NOT NULL,
+			deadline_id VARCHAR(36) NOT NULL,
+			team_id VARCHAR(64) NOT NULL,
+			target_user_id VARCHAR(64) DEFAULT '',
+			channel VARCHAR(32) NOT NULL DEFAULT 'inapp',
+			result VARCHAR(16) NOT NULL DEFAULT 'ok',
+			detail VARCHAR(255) DEFAULT '',
+			sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE KEY uk_once (rule_id, deadline_id),
+			INDEX idx_deadline (deadline_id),
+			INDEX idx_team_time (team_id, sent_at)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+			return fmt.Errorf("create md_reminder_log: %w", err)
+		}
+	}
+
+	// 4. md_deadline_events — change history.
+	// Historical data cannot be reconstructed later, so this is written from
+	// day one. `reason` is optional but is the most valuable column: it is the
+	// fuel for any future "why was this order pushed back" explanation.
+	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_deadline_events'`).Scan(&tblExists)
+	if tblExists == 0 {
+		if _, err := DB.Exec(`CREATE TABLE md_deadline_events (
+			id VARCHAR(36) PRIMARY KEY,
+			team_id VARCHAR(64) NOT NULL,
+			deadline_id VARCHAR(36) NOT NULL,
+			event_type VARCHAR(32) NOT NULL COMMENT 'created|updated|status_changed|date_changed|deleted',
+			field VARCHAR(32) DEFAULT '',
+			old_value TEXT,
+			new_value TEXT,
+			reason TEXT,
+			actor_id VARCHAR(64) DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			INDEX idx_deadline (deadline_id, created_at),
+			INDEX idx_team (team_id, created_at)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+			return fmt.Errorf("create md_deadline_events: %w", err)
+		}
+	}
+
 	return nil
 }
 

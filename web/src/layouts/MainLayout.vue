@@ -25,6 +25,10 @@
           <el-icon><Folder /></el-icon>
           <template #title>{{ t('mainLayout.docs') }}</template>
         </el-menu-item>
+        <el-menu-item index="/deadlines">
+          <el-icon><Calendar /></el-icon>
+          <template #title>{{ t('mainLayout.deadlines') }}</template>
+        </el-menu-item>
         <el-menu-item index="/trash">
           <el-icon><Delete /></el-icon>
           <template #title>{{ t('mainLayout.trash') }}</template>
@@ -184,7 +188,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Sunny, Moon, Folder, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled } from '@element-plus/icons-vue'
+import { Sunny, Moon, Folder, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled, Calendar } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'

@@ -20,6 +20,7 @@ const routes = [
     children: [
       { path: '', redirect: '/docs' },
       { path: 'docs', name: 'Docs', component: () => import('@/views/Docs.vue') },
+      { path: 'deadlines', name: 'Deadlines', component: () => import('@/views/DeadlineBoard.vue') },
       { path: 'docs/:id', name: 'DocEditor', component: () => import('@/views/DocEditor.vue') },
       { path: 'trash', name: 'Trash', component: () => import('@/views/Trash.vue') },
       { path: 'help', name: 'Help', component: () => import('@/views/Help.vue') },
