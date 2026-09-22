@@ -42,6 +42,61 @@ html.dark {
 }
 html.dark body { background-color: var(--md-bg); color: var(--md-text); }
 
+/* ----- 交期看板 -----
+   DeadlineBoard.vue 的样式全部是硬编码浅色值（#fff / #f8fafc / #e2e8f0 …），
+   它没有吃 Element Plus 的暗色变量，所以深色模式下整页就是一块大白块。
+   这里统一覆盖（与 docs-page / editor-page 同一套变量）。 */
+html.dark .deadline-page { background: var(--md-bg); }
+
+html.dark .stat-card {
+  background: var(--md-surface);
+  border-color: var(--md-border);
+}
+html.dark .stat-card:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
+html.dark .stat-card.overdue { background: rgba(220, 38, 38, 0.14); border-color: rgba(220, 38, 38, 0.4); }
+html.dark .stat-card.today { background: rgba(234, 88, 12, 0.14); border-color: rgba(234, 88, 12, 0.4); }
+html.dark .stat-card.next3 { background: rgba(202, 138, 4, 0.14); border-color: rgba(202, 138, 4, 0.4); }
+html.dark .stat-card.next7 { background: rgba(2, 132, 199, 0.14); border-color: rgba(2, 132, 199, 0.4); }
+html.dark .stat-label { color: var(--md-text-dim); }
+
+html.dark .column {
+  background: var(--md-surface);
+  border-color: var(--md-border);
+}
+html.dark .column-head { border-bottom-color: var(--md-border); }
+html.dark .column-head.overdue { background: rgba(220, 38, 38, 0.2); color: #fca5a5; }
+html.dark .column-head.today { background: rgba(234, 88, 12, 0.2); color: #fdba74; }
+html.dark .column-head.next3 { background: rgba(202, 138, 4, 0.2); color: #fde047; }
+html.dark .column-head.next7 { background: rgba(2, 132, 199, 0.2); color: #7dd3fc; }
+html.dark .column-empty { color: var(--md-text-dim); border-color: var(--md-border); }
+
+html.dark .deadline-card {
+  background: var(--md-surface-2);
+  border-color: var(--md-border);
+}
+html.dark .deadline-card:hover { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); }
+html.dark .card-foot { border-top-color: var(--md-border); }
+html.dark .card-order,
+html.dark .card-meta,
+html.dark .card-foot { color: var(--md-text-dim); }
+html.dark .cell-unassigned,
+html.dark .owner.unassigned { color: #5a5a7a; }
+
+html.dark .days.overdue, html.dark .due-cell.overdue { color: #f87171; }
+html.dark .days.critical, html.dark .due-cell.critical { color: #fb923c; }
+html.dark .days.warning, html.dark .due-cell.warning { color: #facc15; }
+html.dark .days.ok, html.dark .due-cell.ok { color: #4ade80; }
+
+html.dark .page-sub,
+html.dark .hint,
+html.dark .muted,
+html.dark .list-foot .total { color: var(--md-text-dim); }
+html.dark .detail-grid label { color: var(--md-text-dim); }
+html.dark .event-time { color: var(--md-text-dim); }
+html.dark .event-type { background: var(--md-brand-dim); color: var(--md-brand-light); }
+html.dark .event-change { color: var(--md-text-muted); }
+html.dark .event-reason { color: #5eead4; }
+
 /* ----- Editor ----- */
 html.dark .editor-page { background: var(--md-bg); }
 html.dark .editor-header { background: var(--md-surface-2); border-color: var(--md-border); }

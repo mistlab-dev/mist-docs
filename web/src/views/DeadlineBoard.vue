@@ -76,7 +76,7 @@
                   <span class="days" :class="d.risk_level">{{ daysText(d) }}</span>
                 </div>
                 <div class="card-foot">
-                  <span class="owner">{{ d.owner_name || '—' }}</span>
+                  <span class="owner" :class="{ unassigned: !d.owner_name }">{{ d.owner_name || t('deadlines.unassigned') }}</span>
                   <span class="status">{{ statusText(d.status) }}</span>
                 </div>
               </div>
@@ -93,29 +93,29 @@
             :placeholder="t('deadlines.searchPlaceholder')"
             clearable
             style="width: 260px"
-            @keyup.enter="loadList"
-            @clear="loadList"
+            @keyup.enter="applyFilters"
+            @clear="applyFilters"
           >
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
-          <el-select v-model="filters.status" :placeholder="t('deadlines.allStatus')" clearable style="width: 130px" @change="loadList">
+          <el-select v-model="filters.status" :placeholder="t('deadlines.allStatus')" clearable style="width: 130px" @change="applyFilters">
             <el-option :label="t('deadlines.statusPending')" value="pending" />
             <el-option :label="t('deadlines.statusRunning')" value="running" />
             <el-option :label="t('deadlines.statusDone')" value="done" />
             <el-option :label="t('deadlines.statusOverdue')" value="overdue" />
           </el-select>
-          <el-select v-model="filters.risk" :placeholder="t('deadlines.allRisk')" clearable style="width: 130px" @change="loadList">
+          <el-select v-model="filters.risk" :placeholder="t('deadlines.allRisk')" clearable style="width: 130px" @change="applyFilters">
             <el-option :label="t('deadlines.riskOverdue')" value="overdue" />
             <el-option :label="t('deadlines.riskCritical')" value="critical" />
             <el-option :label="t('deadlines.riskWarning')" value="warning" />
             <el-option :label="t('deadlines.openTotal')" value="open" />
           </el-select>
-          <el-select v-model="filters.priority" :placeholder="t('deadlines.allPriority')" clearable style="width: 130px" @change="loadList">
+          <el-select v-model="filters.priority" :placeholder="t('deadlines.allPriority')" clearable style="width: 130px" @change="applyFilters">
             <el-option :label="t('deadlines.priorityNormal')" value="normal" />
             <el-option :label="t('deadlines.priorityUrgent')" value="urgent" />
             <el-option :label="t('deadlines.priorityInserted')" value="inserted" />
           </el-select>
-          <el-button @click="loadList">{{ t('common.search') }}</el-button>
+          <el-button @click="applyFilters">{{ t('common.search') }}</el-button>
         </div>
 
         <el-table :data="list" v-loading="loading" class="deadline-table" empty-text="—">
@@ -142,14 +142,35 @@
               <el-progress :percentage="row.progress" :stroke-width="10" />
             </template>
           </el-table-column>
-          <el-table-column prop="owner_name" :label="t('deadlines.owner')" width="110" />
-          <el-table-column :label="t('common.detail')" width="150" fixed="right">
+          <el-table-column :label="t('deadlines.owner')" width="110">
             <template #default="{ row }">
-              <el-button size="small" @click="openDetail(row)">{{ t('common.detail') }}</el-button>
-              <el-button size="small" type="primary" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
+              <span :class="{ 'cell-unassigned': !row.owner_name }">
+                {{ row.owner_name || t('deadlines.unassigned') }}
+              </span>
+            </template>
+          </el-table-column>
+          <!-- 操作收敛成文字按钮：以前每行一个实心蓝块，整表都是高饱和色块 -->
+          <el-table-column :label="t('common.operation')" width="120" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openDetail(row)">{{ t('common.detail') }}</el-button>
+              <el-button link @click="openEdit(row)">{{ t('common.edit') }}</el-button>
             </template>
           </el-table-column>
         </el-table>
+
+        <div class="list-foot">
+          <span class="total">{{ t('deadlines.totalCount', { num: listTotal }) }}</span>
+          <el-pagination
+            v-model:current-page="page"
+            :page-size="pageSize"
+            :total="listTotal"
+            layout="prev, pager, next"
+            :pager-count="5"
+            background
+            hide-on-single-page
+            @current-change="loadList"
+          />
+        </div>
       </el-tab-pane>
 
       <!-- ==================== 提醒规则 ==================== -->
@@ -273,7 +294,7 @@
           <div><label>{{ t('deadlines.daysLeft') }}</label><span :class="detail.risk_level">{{ daysText(detail) }}</span></div>
           <div><label>{{ t('deadlines.status') }}</label><span>{{ statusText(detail.status) }}</span></div>
           <div><label>{{ t('deadlines.progress') }}</label><span>{{ detail.progress }}%</span></div>
-          <div><label>{{ t('deadlines.owner') }}</label><span>{{ detail.owner_name || '—' }}</span></div>
+          <div><label>{{ t('deadlines.owner') }}</label><span>{{ detail.owner_name || t('deadlines.unassigned') }}</span></div>
           <div v-if="detail.remark"><label>{{ t('deadlines.remark') }}</label><span>{{ detail.remark }}</span></div>
         </div>
 
@@ -388,6 +409,9 @@ const today = ref<Deadline[]>([])
 const next3 = ref<Deadline[]>([])
 const next7 = ref<Deadline[]>([])
 const list = ref<Deadline[]>([])
+const listTotal = ref(0)
+const page = ref(1)
+const pageSize = 50
 const rules = ref<Rule[]>([])
 const logs = ref<any[]>([])
 const events = ref<any[]>([])
@@ -439,11 +463,13 @@ const columns = computed(() => [
 
 // ---- 展示辅助 ----
 
+// 统一剩余天数文案：以前混用 "7 已延期" / "2 天" / "今天到期"，
+// 同一个视觉位置有三种句式，扫一眼读不出规律。
 function daysText(d: Deadline) {
   if (d.status === 'done') return t('deadlines.statusDone')
-  if (d.days_left < 0) return `${-d.days_left} ${t('deadlines.riskOverdue')}`
+  if (d.days_left < 0) return t('deadlines.daysOverdue', { days: -d.days_left })
   if (d.days_left === 0) return t('deadlines.today')
-  return `${d.days_left} 天`
+  return t('deadlines.daysRemaining', { days: d.days_left })
 }
 
 function statusText(s: string) {
@@ -503,15 +529,22 @@ async function loadBoard() {
   }
 }
 
+// 筛选项一变就回到第一页，否则停在第 3 页换筛选条件会直接显示空表。
+function applyFilters() {
+  page.value = 1
+  loadList()
+}
+
 async function loadList() {
   try {
-    const params: Record<string, string> = {}
+    const params: Record<string, string | number> = { limit: pageSize, offset: (page.value - 1) * pageSize }
     if (filters.q) params.q = filters.q
     if (filters.status) params.status = filters.status
     if (filters.risk) params.risk = filters.risk
     if (filters.priority) params.priority = filters.priority
     const { data } = await teamApi.get('/deadlines', { params })
     list.value = data.data || []
+    listTotal.value = data.total ?? list.value.length
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error || t('deadlines.loadFailed'))
   }
@@ -548,6 +581,7 @@ async function loadAll() {
 
 function jumpTo(key: string) {
   tab.value = 'list'
+  page.value = 1
   // Map a board bucket to the equivalent list filter.
   if (key === 'overdue') {
     filters.risk = 'overdue'
@@ -800,7 +834,9 @@ onMounted(loadAll)
   display: grid;
   grid-template-columns: repeat(4, minmax(240px, 1fr));
   gap: 14px;
-  align-items: start;
+  /* 以前是 align-items: start → 四列各自按内容高度收缩，底边参差不齐。
+     改成 stretch 让四列等高，看板下沿是一条齐线。 */
+  align-items: stretch;
 }
 @media (max-width: 1100px) {
   .columns {
@@ -817,6 +853,9 @@ onMounted(loadAll)
   border-radius: 10px;
   border: 1px solid #e2e8f0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
 }
 .column-head {
   display: flex;
@@ -851,6 +890,7 @@ onMounted(loadAll)
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
   max-height: 60vh;
   overflow-y: auto;
 }
@@ -859,6 +899,10 @@ onMounted(loadAll)
   font-size: 12px;
   text-align: center;
   padding: 18px 0;
+  /* 空列不再是一块弱到像坏掉的空白：给个浅浅的占位框 */
+  border: 1px dashed #e2e8f0;
+  border-radius: 8px;
+  margin: 2px 0;
 }
 
 /* 订单卡 */
@@ -915,6 +959,24 @@ onMounted(loadAll)
   margin-top: 4px;
   padding-top: 6px;
   border-top: 1px dashed #e2e8f0;
+}
+.cell-unassigned,
+.owner.unassigned {
+  color: #cbd5e1;
+}
+
+/* 列表底部：总数 + 分页 */
+.list-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.list-foot .total {
+  font-size: 12px;
+  color: #64748b;
 }
 
 /* 风险着色 */

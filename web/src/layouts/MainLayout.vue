@@ -56,9 +56,11 @@
         </template>
       </el-menu>
       <div class="sidebar-bottom">
-        <div class="help-btn" @click="showHelp = true" :title="collapsed ? t('mainLayout.help') : ''">
+        <!-- 菜单里已有「帮助」入口，这里同样叫「帮助」会让人以为是重复项；
+             这个按钮开的是快捷帮助弹窗，改叫「使用帮助」区分开。 -->
+        <div class="help-btn" @click="showHelp = true" :title="collapsed ? t('mainLayout.helpDialogTitle') : ''">
           <el-icon><QuestionFilled /></el-icon>
-          <span v-if="!collapsed">{{ t('mainLayout.help') }}</span>
+          <span v-if="!collapsed">{{ t('mainLayout.helpDialogTitle') }}</span>
         </div>
       </div>
     </el-aside>

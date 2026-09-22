@@ -152,6 +152,12 @@ export default {
     daysLeft: '剩余天数',
     risk: '风险',
 
+    // 剩余天数统一文案（原来混用 "7 已延期" / "2 天" / "今天到期"）
+    daysOverdue: '已延期 {days} 天',
+    daysRemaining: '剩余 {days} 天',
+    unassigned: '未指派',
+    totalCount: '共 {num} 条',
+
     statusPending: '待开工',
     statusRunning: '生产中',
     statusDone: '已完成',
@@ -179,6 +185,7 @@ export default {
     emptyNext3: '3 天内没有到期的订单',
     emptyNext7: '7 天内没有到期的订单',
     emptyList: '还没有订单，先加一张',
+    noOwner: '未指派',
 
     filterStatus: '按状态筛选',
     filterRisk: '按风险筛选',
