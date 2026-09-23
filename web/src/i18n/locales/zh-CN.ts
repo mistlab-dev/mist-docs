@@ -125,6 +125,9 @@ export default {
     notifReply: '回复',
     notifShare: '分享',
     deadlines: '交期看板',
+    // 面包屑末级：根据当前路由名显示，以前硬编码成「文档」，
+    // 在交期看板/回收站/帮助页顯示「文档 > 」是错的。
+    breadcrumbRoot: '工作台',
   },
   deadlines: {
     title: '交期看板',

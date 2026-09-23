@@ -315,9 +315,12 @@
         </div>
       </div>
       <template #footer>
-        <el-button type="danger" @click="removeDeadline">{{ t('common.delete') }}</el-button>
-        <el-button @click="detailVisible = false">{{ t('common.close') }}</el-button>
-        <el-button type="primary" @click="openEdit(detail)">{{ t('common.edit') }}</el-button>
+        <div class="detail-footer">
+          <el-button type="danger" plain @click="removeDeadline">{{ t('common.delete') }}</el-button>
+          <span class="footer-gap" />
+          <el-button @click="detailVisible = false">{{ t('common.close') }}</el-button>
+          <el-button type="primary" @click="openEdit(detail)">{{ t('common.edit') }}</el-button>
+        </div>
       </template>
     </el-dialog>
 
@@ -752,16 +755,22 @@ onMounted(loadAll)
 
 <style scoped>
 .deadline-page {
-  padding: 20px 24px;
-  height: 100%;
-  overflow-y: auto;
+  padding: 16px 20px;
+  /* 以前是 height:100% + overflow-y:auto —— el-main 本身已经是滚动容器，
+     双层滚动在小屏上会出现两条滚动条、且滚到底谁先到底取决于指针在哪。
+     改为 min-height 让 el-main 做唯一的滚动容器。 */
+  min-height: 100%;
+  /* 与 docs-page / trash-page / admin-page 同为 #f5f7fa，
+     之前是透明的，所以看板页是刺眼的纯白，与其它页并排切换时明显脱层。 */
+  background: #f5f7fa;
+  box-sizing: border-box;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -769,6 +778,7 @@ onMounted(loadAll)
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+  color: #303133;
 }
 .page-sub {
   color: #94a3b8;
@@ -785,7 +795,7 @@ onMounted(loadAll)
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 .stat-card {
   border-radius: 10px;
@@ -827,6 +837,12 @@ onMounted(loadAll)
   font-size: 12px;
   color: #64748b;
   margin-top: 2px;
+}
+
+/* tab 下间距和标签内边距：Element Plus 默认首个 tab 只有右内边距、
+   末个只有左内边距，四个标签间距看起来不匀。改成均匀 16px。 */
+.board-tabs :deep(.el-tabs__item) {
+  padding: 0 16px;
 }
 
 /* 看板列 */
@@ -935,6 +951,9 @@ onMounted(loadAll)
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+  /* 有优先级标签的卡头部 20px、无标签只有 14px，导致同列卡片高度
+     在 116/110 之间跳。固定最小高度让所有卡等齐。 */
+  min-height: 20px;
 }
 .card-order {
   font-size: 12px;
@@ -1017,6 +1036,17 @@ onMounted(loadAll)
   font-size: 12px;
   color: #94a3b8;
   line-height: 1.5;
+}
+
+/* 详情弹窗页脚：删除是破坏性操作，不该紧贴「关闭/编辑」，
+   推到最左侧隔开，减少误点。 */
+.detail-footer {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.detail-footer .footer-gap {
+  flex: 1;
 }
 
 /* 详情 */

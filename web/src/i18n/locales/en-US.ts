@@ -103,7 +103,11 @@ export default {
     storage: 'Storage Monitor',
     teamFolders: 'Folders',
     permissions: 'Permissions',
+    deadlines: 'Delivery Board',
     breadcrumbEdit: 'Edit',
+    // Breadcrumb tail follows the current route name; it used to be hardcoded
+    // to "Documents", so the board/trash/help pages showed a wrong trail.
+    breadcrumbRoot: 'Workspace',
     helpSectionDocMgmt: 'Document Management',
     helpDocList: 'Click "Documents" in the sidebar to open the doc list',
     helpNewDoc: 'Click "New Document" to create a blank document with rich text editing',

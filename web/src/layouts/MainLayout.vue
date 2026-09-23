@@ -76,10 +76,8 @@
         </el-button>
         <div class="breadcrumb">
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item :to="{ path: '/docs' }">{{ t('mainLayout.docs') }}</el-breadcrumb-item>
-            <el-breadcrumb-item v-if="route.name === 'DocEditor'">
-              {{ t('mainLayout.breadcrumbEdit') }}
-            </el-breadcrumb-item>
+            <el-breadcrumb-item :to="{ path: '/docs' }">{{ t('mainLayout.breadcrumbRoot') }}</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="breadcrumbTail">{{ breadcrumbTail }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <div class="user-area">
@@ -189,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Sunny, Moon, Folder, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled, Calendar } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -209,6 +207,28 @@ const collapsed = ref(false)
 const mobileMenu = ref(false)
 const sidebarHidden = ref(false)
 const showHelp = ref(false)
+
+// 面包屑末级跟随当前路由。以前这里是写死的 t('mainLayout.docs')，
+// 所以在「交期看板」页顶部显示的是「文档」，属于明显的错误导航。
+const breadcrumbTail = computed(() => {
+  const map: Record<string, string> = {
+    Docs: t('mainLayout.docs'),
+    DocEditor: t('mainLayout.breadcrumbEdit'),
+    Deadlines: t('mainLayout.deadlines'),
+    Trash: t('mainLayout.trash'),
+    Help: t('mainLayout.help'),
+    Dashboard: t('mainLayout.dashboard'),
+    TeamFolders: t('mainLayout.teamFolders'),
+    Audits: t('mainLayout.audits'),
+    Storage: t('mainLayout.storage'),
+    Permissions: t('mainLayout.permissions'),
+  }
+  const name = String(route.name || '')
+  if (!name) return ''
+  // 根级页面（文档列表）不再重复一遍，避免「工作台 / 文档」这种冗余
+  if (name === 'Docs') return ''
+  return map[name] || ''
+})
 
 function onMenuSelect() {
   if (window.innerWidth <= 768) mobileMenu.value = false
