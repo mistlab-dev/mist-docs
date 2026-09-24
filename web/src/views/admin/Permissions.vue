@@ -31,17 +31,14 @@
                 <svg v-if="row.resource_type === 'document'" viewBox="0 0 20 20" fill="#409eff"><path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg>
                 <svg v-else viewBox="0 0 20 20" fill="#fa8c16"><path d="M3 4a1 1 0 011-1h4a1 1 0 01.8.4L10.5 6H17a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>
               </div>
-              <code class="mono-id">{{ row.resource_id }}</code>
+              <span class="res-name">{{ row.resource_name || row.resource_id }}</span>
             </div>
           </template>
         </el-table-column>
         <el-table-column :label="t('admin.permissions.target')" width="160">
           <template #default="{ row }">
             <div class="target-cell">
-              <el-tag size="small" :type="row.target_type === 'user' ? '' : 'warning'" effect="light" round>
-                {{ row.target_type === 'user' ? t('common.user') : t('common.department') }}
-              </el-tag>
-              <code class="mono-id sm">{{ row.target_id?.slice(0, 8) }}...</code>
+              <span>{{ row.user_name || row.target_id }}</span>
             </div>
           </template>
         </el-table-column>
@@ -66,44 +63,37 @@
       </el-table>
     </div>
 
-    <el-dialog v-model="showForm" :title="t('admin.permissions.setPermission')" width="480" destroy-on-close>
+    <el-dialog v-model="showForm" :title="t('admin.permissions.setPermission')" width="480" destroy-on-close @open="loadChoices">
       <el-form :model="form" label-position="top" class="perm-form">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('admin.permissions.resourceType')">
-              <el-select v-model="form.resource_type" class="full-width">
-                <el-option :label="t('common.doc')" value="document" />
-                <el-option :label="t('common.folder')" value="folder" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('admin.permissions.targetType')">
-              <el-select v-model="form.target_type" class="full-width">
-                <el-option :label="t('common.user')" value="user" />
-                <el-option :label="t('common.department')" value="department" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item :label="t('admin.permissions.resourceId')">
-          <el-input v-model="form.resource_id" :placeholder="t('admin.permissions.resourceIdPlaceholder')" />
+        <el-form-item :label="t('admin.permissions.resourceType')">
+          <el-select v-model="form.resource_type" class="full-width" @change="form.resource_id = ''">
+            <el-option :label="t('common.doc')" value="document" />
+            <el-option :label="t('common.folder')" value="folder" />
+          </el-select>
         </el-form-item>
-        <el-form-item :label="t('admin.permissions.targetId')">
-          <el-input v-model="form.target_id" :placeholder="t('admin.permissions.targetIdPlaceholder')" />
+        <el-form-item :label="t('admin.permissions.resource')">
+          <el-select v-model="form.resource_id" class="full-width" filterable :placeholder="t('admin.permissions.pickResource')">
+            <el-option v-for="item in resourceChoices" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('admin.permissions.target')">
+          <el-select v-model="form.target_id" class="full-width" filterable :placeholder="t('admin.permissions.pickMember')">
+            <el-option v-for="m in members" :key="m.id" :label="m.display_name || m.username" :value="m.id" />
+          </el-select>
         </el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item :label="t('admin.permissions.permissionLevel')">
               <el-select v-model="form.permission" class="full-width">
                 <el-option :label="t('admin.permissions.read')" value="read" />
+                <el-option :label="t('admin.permissions.comment')" value="comment" />
                 <el-option :label="t('admin.permissions.write')" value="write" />
                 <el-option :label="t('admin.permissions.adminPerm')" value="admin" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item :label="t('admin.permissions.childInherit')">
+            <el-form-item v-if="form.resource_type === 'folder'" :label="t('admin.permissions.childInherit')">
               <el-switch v-model="form.inherit" :active-text="t('admin.permissions.inheritYes')" :inactive-text="t('admin.permissions.inheritNo')" />
             </el-form-item>
           </el-col>
@@ -118,16 +108,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
 
 const { t } = useI18n()
 
-const permMap: any = { read: t('admin.permissions.read'), write: t('admin.permissions.write'), admin: t('admin.permissions.adminPerm') }
-const permColor: any = { read: 'info', write: 'warning', admin: 'danger' }
+const permMap: any = { read: t('admin.permissions.read'), comment: t('admin.permissions.comment'), write: t('admin.permissions.write'), admin: t('admin.permissions.adminPerm') }
+const permColor: any = { read: 'info', comment: '', write: 'warning', admin: 'danger' }
 const perms = ref<any[]>([])
 const filter = ref({ resource_type: 'document' })
 const showForm = ref(false)
@@ -136,6 +125,36 @@ const form = ref({
   target_type: 'user', target_id: '',
   permission: 'read', inherit: true,
 })
+const documents = ref<{ id: string; name: string }[]>([])
+const folders = ref<{ id: string; name: string }[]>([])
+const members = ref<any[]>([])
+const resourceChoices = computed(() => form.value.resource_type === 'folder' ? folders.value : documents.value)
+
+function flattenFolders(nodes: any[], prefix = ''): { id: string; name: string }[] {
+  const out: { id: string; name: string }[] = []
+  for (const n of nodes || []) {
+    const name = prefix ? `${prefix} / ${n.name}` : n.name
+    out.push({ id: n.id, name })
+    out.push(...flattenFolders(n.children, name))
+  }
+  return out
+}
+
+async function loadChoices() {
+  try {
+    const [docs, tree, people] = await Promise.all([
+      teamApi.get('/documents', { params: { page: 1, page_size: 100 } }),
+      teamApi.get('/folders/tree'),
+      teamApi.get('/members'),
+    ])
+    documents.value = (docs.data.data || []).map((d: any) => ({ id: d.id, name: d.title }))
+    const roots = tree.data.data || tree.data || []
+    folders.value = flattenFolders(Array.isArray(roots) ? roots : [])
+    members.value = people.data.data || []
+  } catch {
+    ElMessage.error(t('common.failed'))
+  }
+}
 
 async function load() {
   const { data } = await teamApi.get('/permissions', { params: filter.value })
@@ -143,7 +162,11 @@ async function load() {
 }
 
 async function submit() {
-  await teamApi.post('/permissions', form.value)
+  if (!form.value.resource_id || !form.value.target_id) {
+    ElMessage.error(t('admin.permissions.pickResource'))
+    return
+  }
+  await teamApi.post('/permissions', { ...form.value, target_type: 'user' })
   ElMessage.success(t('admin.permissions.setSuccess'))
   showForm.value = false
   load()

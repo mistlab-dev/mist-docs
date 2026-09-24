@@ -17,7 +17,7 @@ func GetDocumentYjsState(docID string) ([]byte, error) {
 		return nil, nil
 	}
 
-	path := filepath.Join(store.DocPath(doc.DepartmentID, doc.ID), "yjs.state.dat")
+	path := filepath.Join(store.DocPath(yjsBucket(doc.DepartmentID, doc.TeamID), doc.ID), "yjs.state.dat")
 	encryptedData, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -45,7 +45,7 @@ func SaveDocumentYjsState(docID string, state []byte) error {
 		return nil
 	}
 
-	dir := store.DocPath(doc.DepartmentID, doc.ID)
+	dir := store.DocPath(yjsBucket(doc.DepartmentID, doc.TeamID), doc.ID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
@@ -64,6 +64,15 @@ func SaveDocumentYjsState(docID string, state []byte) error {
 
 	path := filepath.Join(dir, "yjs.state.dat")
 	return os.WriteFile(path, dataToWrite, 0644)
+}
+
+// yjsBucket keeps existing department-scoped state files, and uses the team
+// id when a team document has no department.
+func yjsBucket(departmentID, teamID string) string {
+	if departmentID != "" {
+		return departmentID
+	}
+	return teamID
 }
 
 // ==================== 简化权限检查（WS 用） ====================

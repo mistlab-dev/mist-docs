@@ -126,9 +126,12 @@ func UploadFile(c *gin.Context) {
 }
 
 func GetFile(c *gin.Context) {
-	filename := c.Param("filename")
+	filename, ok := safeBaseName(c.Param("filename"))
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件名无效"})
+		return
+	}
 	fullPath := filepath.Join(store.RootPath(), "uploads", filename)
-
 	c.File(fullPath)
 }
 
@@ -191,7 +194,9 @@ func SearchDocuments(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if docs == nil { docs = []*model.Document{} }
+	if docs == nil {
+		docs = []*model.Document{}
+	}
 
 	// Add content snippets for search results
 	type docWithSnippet struct {
@@ -221,7 +226,9 @@ func RecentDocuments(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if docs == nil { docs = []*model.Document{} }
+	if docs == nil {
+		docs = []*model.Document{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": docs})
 }
 
@@ -255,7 +262,9 @@ func ListFavorites(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if docs == nil { docs = []*model.Document{} }
+	if docs == nil {
+		docs = []*model.Document{}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": docs})
 }
 

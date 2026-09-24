@@ -117,19 +117,16 @@ type webhookPayload struct {
 // fireWebhooks checks enabled webhooks for the team and POSTs matching events.
 // event should be the name the API advertises (document.created / document.updated).
 // Subscriptions may use that name or an audit alias such as create_doc / edit_doc.
+type webhookTarget struct {
+	id, url, secret, events string
+}
+
 func fireWebhooks(teamID, event, resourceType, resourceID, title, detail string) {
 	go func() {
-		query := `SELECT id, url, secret, events FROM md_webhooks WHERE enabled = 1`
-		args := []interface{}{}
-		if teamID != "" {
-			query += ` AND team_id = ?`
-			args = append(args, teamID)
-		}
-		rows, err := database.DB.Query(query, args...)
-		if err != nil {
+		targets := loadWebhookTargets(teamID)
+		if len(targets) == 0 {
 			return
 		}
-		defer rows.Close()
 
 		payload := webhookPayload{
 			Event:     event,
@@ -139,40 +136,74 @@ func fireWebhooks(teamID, event, resourceType, resourceID, title, detail string)
 			Timestamp: time.Now().Format(time.RFC3339),
 			Detail:    detail,
 		}
+		body, _ := json.Marshal(payload)
+		client := &http.Client{Timeout: 5 * time.Second}
 
-		for rows.Next() {
-			var id, url, secret, events string
-			rows.Scan(&id, &url, &secret, &events)
-
-			if !webhookSubscribed(events, event) {
+		for _, t := range targets {
+			if !webhookSubscribed(t.events, event) {
 				continue
 			}
 
-			body, _ := json.Marshal(payload)
-			req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
+			req, err := http.NewRequest("POST", t.url, bytes.NewReader(body))
+			if err != nil {
+				logWebhookDelivery(t.id, event, "error:"+err.Error())
+				continue
+			}
 			req.Header.Set("Content-Type", "application/json")
-			if secret != "" {
-				req.Header.Set("X-Webhook-Secret", secret)
+			if t.secret != "" {
+				req.Header.Set("X-Webhook-Secret", t.secret)
 			}
 			req.Header.Set("X-Webhook-Event", event)
 
-			client := &http.Client{Timeout: 5 * time.Second}
 			resp, err := client.Do(req)
 			if err == nil {
-				io.ReadAll(resp.Body)
+				io.Copy(io.Discard, resp.Body)
 				resp.Body.Close()
 			}
 
-			// Log delivery
 			status := "ok"
 			if err != nil {
 				status = "error:" + err.Error()
 			}
-			database.DB.Exec(
-				"INSERT INTO md_webhook_logs (id, webhook_id, event, status, created_at) VALUES (?,?,?,?,NOW())",
-				uuid.New().String(), id, event, status)
+			logWebhookDelivery(t.id, event, status)
 		}
 	}()
+}
+
+// loadWebhookTargets reads matching hooks and releases the connection before any HTTP call.
+// Holding rows open across a slow POST exhausts the pool (tests cap it at 5) and deadlocks the log insert.
+func loadWebhookTargets(teamID string) []webhookTarget {
+	query := `SELECT id, url, secret, events FROM md_webhooks WHERE enabled = 1`
+	args := []interface{}{}
+	if teamID != "" {
+		query += ` AND team_id = ?`
+		args = append(args, teamID)
+	}
+	rows, err := database.DB.Query(query, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var targets []webhookTarget
+	for rows.Next() {
+		var t webhookTarget
+		if err := rows.Scan(&t.id, &t.url, &t.secret, &t.events); err != nil {
+			continue
+		}
+		targets = append(targets, t)
+	}
+	return targets
+}
+
+func logWebhookDelivery(webhookID, event, status string) {
+	const maxStatus = 200
+	if len(status) > maxStatus {
+		status = status[:maxStatus]
+	}
+	database.DB.Exec(
+		"INSERT INTO md_webhook_logs (id, webhook_id, event, status, created_at) VALUES (?,?,?,?,NOW())",
+		uuid.New().String(), webhookID, event, status)
 }
 
 // parseWebhookEvents accepts a JSON array or a comma-separated list.

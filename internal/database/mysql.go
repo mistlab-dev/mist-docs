@@ -99,7 +99,26 @@ func Init(cfg config.DatabaseConfig) error {
 	DB.Exec(`ALTER TABLE md_doc_fragments MODIFY fragment_id VARCHAR(64) NOT NULL COLLATE utf8mb4_unicode_ci`)
 	DB.Exec(`ALTER TABLE md_doc_fragments MODIFY document_id VARCHAR(36) NOT NULL COLLATE utf8mb4_general_ci`)
 
+	// Older installs created these tables before team scope and updated_at.
+	// Adding a missing column keeps existing rows.
+	ensureColumn("md_webhooks", "team_id", "team_id VARCHAR(64) DEFAULT ''")
+	ensureColumn("md_webhooks", "updated_at", "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+	ensureColumn("md_templates", "team_id", "team_id VARCHAR(64) DEFAULT ''")
+
 	return migrateDeadlines()
+}
+
+func ensureColumn(table, column, ddl string) {
+	var n int
+	if err := DB.QueryRow(
+		`SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?`,
+		table, column,
+	).Scan(&n); err != nil || n > 0 {
+		return
+	}
+	if _, err := DB.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + ddl); err != nil {
+		fmt.Printf("migrate %s.%s: %v\n", table, column, err)
+	}
 }
 
 // migrateDeadlines creates the交期看板 (deadline board) tables.

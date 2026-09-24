@@ -13,7 +13,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25.8'
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -38,6 +38,13 @@ jobs:
             exit 1
           fi
           echo "✅ SheetEditor type check passed"
+
+      - name: Test Frontend formulas
+        working-directory: web
+        run: npx vitest run
+
+      - name: Test Backend
+        run: go test ./internal/...
 
       - name: Build Frontend
         working-directory: web

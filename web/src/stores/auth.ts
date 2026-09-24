@@ -17,6 +17,8 @@ interface User {
   teams: Team[]
 }
 
+const TEAM_KEY = 'mist-docs-team'
+
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('mist-docs-token') || '')
   const refreshToken = ref(localStorage.getItem('mist-docs-refresh-token') || '')
@@ -24,16 +26,25 @@ export const useAuthStore = defineStore('auth', () => {
   const currentTeamId = ref<string>('')
   const currentTeamRole = ref<string>('')
 
+  function applyTeam(teams: Team[] | undefined) {
+    if (!teams?.length) {
+      currentTeamId.value = ''
+      currentTeamRole.value = ''
+      return
+    }
+    const saved = localStorage.getItem(TEAM_KEY) || currentTeamId.value
+    const picked = teams.find(t => t.team_id === saved) || teams[0]
+    currentTeamId.value = picked.team_id
+    currentTeamRole.value = picked.role
+    localStorage.setItem(TEAM_KEY, picked.team_id)
+  }
+
   // 从 localStorage 恢复用户信息
   const savedUser = localStorage.getItem('mist-docs-user')
   if (savedUser && !user.value) {
     try {
       user.value = JSON.parse(savedUser)
-      // Set default team
-      if (user.value?.teams && user.value.teams.length > 0) {
-        currentTeamId.value = user.value.teams[0].team_id
-        currentTeamRole.value = user.value.teams[0].role
-      }
+      applyTeam(user.value?.teams)
     } catch { /* ignore */ }
   }
 
@@ -80,23 +91,22 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('mist-docs-token')
     localStorage.removeItem('mist-docs-refresh-token')
     localStorage.removeItem('mist-docs-user')
+    localStorage.removeItem(TEAM_KEY)
   }
 
   async function fetchMe() {
     const { data } = await http.get('/auth/me')
     user.value = data.data as User
     localStorage.setItem('mist-docs-user', JSON.stringify(data.data))
-    // Set default team
-    if (user.value?.teams && user.value.teams.length > 0) {
-      currentTeamId.value = user.value.teams[0].team_id
-      currentTeamRole.value = user.value.teams[0].role
-    }
+    applyTeam(user.value?.teams)
   }
 
   function setTeam(teamId: string) {
-    currentTeamId.value = teamId
     const team = user.value?.teams?.find(t => t.team_id === teamId)
-    currentTeamRole.value = team?.role || ''
+    if (!team) return
+    currentTeamId.value = team.team_id
+    currentTeamRole.value = team.role
+    localStorage.setItem(TEAM_KEY, team.team_id)
   }
 
   return {

@@ -71,12 +71,11 @@ export class MistWSProvider {
       if (data[0] === MSG_SYNC && data.length >= 2) {
         const subType = data[1]
         const payload = data.slice(2)
-        if (subType === SYNC_STEP2 && payload.length > 0) {
-          // Apply server's state. Yjs applyUpdate is idempotent —
-          // duplicates are automatically handled by CRDT merge logic.
-          Y.applyUpdate(this.doc, payload, this)
-          
-          // Mark as synced and flush any pending local updates.
+        if (subType === SYNC_STEP2) {
+          // Empty step2 means the server has nothing we are missing.
+          if (payload.length > 0) {
+            Y.applyUpdate(this.doc, payload, this)
+          }
           if (!this.synced) {
             this.synced = true
             this.onSynced?.(true)

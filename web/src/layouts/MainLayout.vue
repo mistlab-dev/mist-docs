@@ -53,6 +53,18 @@
             <el-icon><Monitor /></el-icon>
             <template #title>{{ t('mainLayout.storage') }}</template>
           </el-menu-item>
+          <el-menu-item index="/admin/folders">
+            <el-icon><FolderOpened /></el-icon>
+            <template #title>{{ t('mainLayout.teamFolders') }}</template>
+          </el-menu-item>
+          <el-menu-item index="/admin/permissions">
+            <el-icon><Lock /></el-icon>
+            <template #title>{{ t('mainLayout.permissions') }}</template>
+          </el-menu-item>
+          <el-menu-item index="/admin/webhooks">
+            <el-icon><Link /></el-icon>
+            <template #title>{{ t('mainLayout.webhooks') }}</template>
+          </el-menu-item>
         </template>
       </el-menu>
       <div class="sidebar-bottom">
@@ -86,6 +98,26 @@
             {{ t('mainLayout.openPortal') }}
           </a>
 
+          <div v-if="currentTeamName" class="team-chip">
+            <el-dropdown v-if="teamChoices.length > 1" trigger="click" @command="switchTeam">
+              <span class="team-switch">
+                {{ currentTeamName }}
+                <el-icon><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item
+                    v-for="tm in teamChoices"
+                    :key="tm.team_id"
+                    :command="tm.team_id"
+                    :disabled="tm.team_id === auth.currentTeamId"
+                  >{{ tm.team_name || tm.team_id }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <span v-else class="team-switch">{{ currentTeamName }}</span>
+          </div>
+
           <!-- 语言切换 -->
           <LangSwitch />
 
@@ -114,7 +146,7 @@
         </div>
       </el-header>
       <el-main>
-        <router-view />
+        <router-view :key="auth.currentTeamId" />
       </el-main>
     </el-container>
 
@@ -188,7 +220,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { Sunny, Moon, Folder, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled, Calendar } from '@element-plus/icons-vue'
+import { Sunny, Moon, Folder, FolderOpened, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled, Calendar, Lock, Link } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -202,6 +234,15 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const teamChoices = computed(() => auth.user?.teams || [])
+const currentTeamName = computed(() => teamChoices.value.find(tm => tm.team_id === auth.currentTeamId)?.team_name || '')
+
+function switchTeam(teamId: string) {
+  if (!teamId || teamId === auth.currentTeamId) return
+  auth.setTeam(teamId)
+  if (route.path !== '/docs') router.push('/docs')
+  loadNotifications()
+}
 const isDark = ref(false)
 const collapsed = ref(false)
 const mobileMenu = ref(false)
@@ -222,6 +263,7 @@ const breadcrumbTail = computed(() => {
     Audits: t('mainLayout.audits'),
     Storage: t('mainLayout.storage'),
     Permissions: t('mainLayout.permissions'),
+    Webhooks: t('mainLayout.webhooks'),
   }
   const name = String(route.name || '')
   if (!name) return ''
@@ -399,6 +441,13 @@ onMounted(() => {
 .portal-link:hover { color: var(--md-accent-text, #818cf8); }
 .portal-link-mark { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
 .user-area { display: flex; align-items: center; gap: 16px; }
+.team-chip { max-width: 180px; }
+.team-switch {
+  display: inline-flex; align-items: center; gap: 4px;
+  max-width: 180px; padding: 4px 10px; border-radius: 999px;
+  background: #f0f5ff; color: #3b4cca; font-size: 13px; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .user-name {
   cursor: pointer;
   display: flex;

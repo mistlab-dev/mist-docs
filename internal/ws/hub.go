@@ -50,15 +50,15 @@ const (
 
 // Limits
 const (
-	maxSendBufferSize    = 512                      // per-client send channel size
-	maxConnsPerDoc       = 50                       // max concurrent connections per document
-	maxConnsGlobal       = 500                      // max total WebSocket connections
-	sendBackoffTime      = 100 * time.Millisecond   // wait time when send buffer is full
-	writeDeadline        = 10 * time.Second
-	readDeadline         = 60 * time.Second
-	pingIntervalDefault  = 30 // seconds
-	maxMessageSizeDefault = 2 * 1024 * 1024 // 2MB
-	permCheckInterval    = 60 * time.Second // periodic permission check interval
+	maxSendBufferSize     = 512                    // per-client send channel size
+	maxConnsPerDoc        = 50                     // max concurrent connections per document
+	maxConnsGlobal        = 500                    // max total WebSocket connections
+	sendBackoffTime       = 100 * time.Millisecond // wait time when send buffer is full
+	writeDeadline         = 10 * time.Second
+	readDeadline          = 60 * time.Second
+	pingIntervalDefault   = 30               // seconds
+	maxMessageSizeDefault = 2 * 1024 * 1024  // 2MB
+	permCheckInterval     = 60 * time.Second // periodic permission check interval
 )
 
 var upgrader = websocket.Upgrader{
@@ -81,11 +81,14 @@ type Client struct {
 	Conn      *websocket.Conn
 	Send      chan []byte
 	DocID     string
+	TeamID    string
 	UserID    string
 	Name      string
 	Color     string
-	Role      string // user role for permission checks
+	Role      string // legacy label; permission checks use TeamRole
+	TeamRole  string
 	DeptID    string // user department ID for permission checks
+	canWrite  atomic.Bool
 	mu        sync.Mutex
 	closeOnce sync.Once
 }
@@ -99,9 +102,26 @@ type Room struct {
 }
 
 type Message struct {
-	DocID string
-	Data  []byte
-	From  string
+	DocID    string
+	Data     []byte
+	From     string
+	CanWrite bool
+}
+
+// shouldPersistSync reports whether a client message may change the shared Yjs state.
+// Read-only members can request step1 (catch up) and send awareness, but not updates.
+func shouldPersistSync(canWrite bool, data []byte) bool {
+	if len(data) < 2 || data[0] != MsgSync {
+		return true
+	}
+	switch data[1] {
+	case SyncStep1:
+		return true
+	case SyncStep2, SyncUpdate:
+		return canWrite
+	default:
+		return canWrite
+	}
 }
 
 type Hub struct {
@@ -264,16 +284,20 @@ func (h *Hub) handleBroadcast(msg *Message) {
 			room.mu.RLock()
 			updates := room.Updates
 			room.mu.RUnlock()
+			var merged []byte
 			if len(updates) > 0 {
-				merged := mergeBytes(updates)
-				reply := make([]byte, 2+len(merged))
-				reply[0] = MsgSync
-				reply[1] = SyncStep2
-				copy(reply[2:], merged)
-				h.sendToClient(msg.DocID, msg.From, reply)
+				merged = mergeBytes(updates)
 			}
+			reply := make([]byte, 2+len(merged))
+			reply[0] = MsgSync
+			reply[1] = SyncStep2
+			copy(reply[2:], merged)
+			h.sendToClient(msg.DocID, msg.From, reply)
 
 		case SyncStep2, SyncUpdate:
+			if !shouldPersistSync(msg.CanWrite, msg.Data) {
+				return
+			}
 			// Client sends state or update → store + broadcast to others
 			payload := make([]byte, len(msg.Data)-2)
 			copy(payload, msg.Data[2:])
@@ -454,11 +478,20 @@ func ServeWS(hub *Hub, c *gin.Context) {
 	}
 
 	// Look up user from shared users table
-	var username string
+	var username, displayName string
 	var isAdmin bool
 	database.DB.QueryRow(
-		`SELECT username, is_admin FROM users WHERE id = ?`, userID,
-	).Scan(&username, &isAdmin)
+		`SELECT username, IFNULL(display_name,''), is_admin FROM users WHERE id = ?`, userID,
+	).Scan(&username, &displayName, &isAdmin)
+	if displayName == "" {
+		displayName = username
+	}
+
+	if !service.HasTeamPermission(c.Request.Context(), userID, teamID, role, "document", docID, "read") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+		return
+	}
+	canWrite := service.HasTeamPermission(c.Request.Context(), userID, teamID, role, "document", docID, "write")
 
 	// Global connection limit check before upgrade
 	if atomic.LoadInt64(&globalConnCount) >= int64(maxConnsGlobal) {
@@ -483,12 +516,20 @@ func ServeWS(hub *Hub, c *gin.Context) {
 		Conn:   conn,
 		Send:   make(chan []byte, maxSendBufferSize),
 		DocID:  docID,
+		TeamID: teamID,
 		UserID: userID,
-		Name:   username,
+		Name:   displayName,
 		Color:  colors[colorIdx%len(colors)],
-		Role:   func() string { if isAdmin { return "admin" }; return "member" }(),
-		DeptID: "", // deprecated, teams replace departments
+		Role: func() string {
+			if isAdmin {
+				return "admin"
+			}
+			return "member"
+		}(),
+		TeamRole: role,
+		DeptID:   "", // deprecated, teams replace departments
 	}
+	client.canWrite.Store(canWrite)
 
 	hub.register <- client
 
@@ -520,15 +561,13 @@ func (c *Client) readPump() {
 	// Channel to signal permission check results
 	go func() {
 		for range permTicker.C {
-			if c.Role == "super_admin" {
-				continue // super_admin always has access
-			}
-			perm, err := service.CheckPermissionSimple(context.Background(), c.UserID, c.DeptID, c.DocID)
-			if err != nil || perm == "none" {
+			perm := service.CheckTeamPermission(context.Background(), c.UserID, c.TeamID, c.TeamRole, "document", c.DocID)
+			if perm == "none" || perm == "" {
 				log.Printf("[WS] perm revoked: user=%s doc=%s — disconnecting", c.UserID, c.DocID)
 				c.Conn.Close()
 				return
 			}
+			c.canWrite.Store(service.PermAtLeast(perm, "write"))
 		}
 	}()
 
@@ -542,9 +581,10 @@ func (c *Client) readPump() {
 		}
 
 		c.Hub.broadcast <- &Message{
-			DocID: c.DocID,
-			Data:  data,
-			From:  c.UserID,
+			DocID:    c.DocID,
+			Data:     data,
+			From:     c.UserID,
+			CanWrite: c.canWrite.Load(),
 		}
 	}
 }
