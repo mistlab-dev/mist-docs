@@ -58,7 +58,7 @@
         </el-table-column>
         <el-table-column :label="t('trash.columnDeleteTime')" width="160">
           <template #default="{ row }">
-            <span class="time-text">{{ formatTime(row.updated_at) }}</span>
+            <span class="time-text">{{ formatTime(row.deleted_at || row.updated_at) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="" width="180" fixed="right" align="center">

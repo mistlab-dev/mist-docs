@@ -4,13 +4,15 @@
     <div class="sidebar-overlay" :class="{ open: mobileMenu }" @click="mobileMenu = false"></div>
 
     <!-- 侧边栏 -->
-    <el-aside v-show="!sidebarHidden" :width="collapsed ? '64px' : '220px'" class="sidebar" :class="{ open: mobileMenu }">
+    <el-aside v-show="!sidebarHidden" :width="collapsed ? '64px' : '220px'" class="sidebar" :class="{ open: mobileMenu, collapsed }">
       <div class="sidebar-top">
-        <div class="logo" @click="collapsed = !collapsed">
-          <span v-if="!collapsed" class="logo-text">MistDocs</span>
-          <svg v-else class="logo-svg" viewBox="0 0 24 24" fill="#4f6ef7" stroke="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8" fill="#fff" stroke="none"/></svg>
-        </div>
-        <button class="sidebar-hide-btn" @click="sidebarHidden = true" :title="t('mainLayout.hideSidebar')">«</button>
+        <button type="button" class="brand" @click="collapsed = !collapsed" :title="collapsed ? 'MistDocs' : ''">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#6366f1"/><path d="M9 8h14v4H13v4h8v4h-8v4H9V8z" fill="#fff"/></svg>
+          </span>
+          <span v-if="!collapsed" class="brand-name">MistDocs</span>
+        </button>
+        <button v-if="!collapsed" type="button" class="sidebar-hide-btn" @click="sidebarHidden = true" :title="t('mainLayout.hideSidebar')">«</button>
       </div>
       <el-menu
         :default-active="route.path"
@@ -385,24 +387,66 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.main-layout { height: calc(var(--vh, 1vh) * 100); }
+.main-layout { height: 100%; min-height: 0; }
 .sidebar {
   background: #1d1e2c;
-  transition: width 0.3s, margin-left 0.3s;
-  overflow-y: auto;
+  transition: width 0.3s;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 .sidebar :deep(.el-menu) {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   border-right: none;
 }
-.sidebar-top { display: flex; align-items: center; border-bottom: 1px solid #2a2b3d; height: 56px; }
-.sidebar-top .logo { flex: 1; height: 56px; }
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: 56px;
+  padding: 0 10px 0 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #2a2b3d;
+}
+.sidebar.collapsed .sidebar-top { padding: 0; justify-content: center; }
+.brand {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #f8fafc;
+  cursor: pointer;
+}
+.sidebar.collapsed .brand { flex: none; }
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: block;
+}
+.brand-mark svg { width: 28px; height: 28px; display: block; }
+.brand-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #f8fafc;
+  white-space: nowrap;
+}
 .sidebar-hide-btn {
   width: 24px; height: 24px; border: none; background: transparent;
   color: #a0a4b8; font-size: 14px; cursor: pointer; border-radius: 4px;
-  margin-right: 8px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
 }
 .sidebar-hide-btn:hover { background: #2a2b3d; color: #fff; }
 .sidebar-bottom {
@@ -418,9 +462,7 @@ onMounted(() => {
 }
 .help-btn:hover { background: #2a2b3d; color: #fff; }
 .help-btn .el-icon { font-size: 18px; }
-.logo-text { letter-spacing: 2px; }
-.logo-icon { font-size: 24px; }
-.logo-svg { width: 28px; height: 28px; }
+.sidebar.collapsed .help-btn { justify-content: center; padding: 10px 0; }
 .topbar {
   display: flex;
   align-items: center;

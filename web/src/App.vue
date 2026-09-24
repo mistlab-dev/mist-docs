@@ -23,8 +23,14 @@ const epLocale = computed(() => {
 :root {
   --vh: 1vh;
 }
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
 body {
   font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f5f7fa;
 }
 
 /* Dark theme overrides are centralized in src/styles/dark.css */

@@ -225,8 +225,9 @@ func TeamListDocuments(c *gin.Context) {
 
 	query := `SELECT d.id, d.team_id, d.folder_id, d.title, d.type, d.file_size, d.version,
 		d.locked_by, d.locked_at, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at,
-		IFNULL(u1.display_name, '') as creator_name,
-		IFNULL(u2.display_name, '') as updater_name
+		COALESCE(NULLIF(u1.display_name, ''), NULLIF(u1.username, ''), '') as creator_name,
+		COALESCE(NULLIF(u2.display_name, ''), NULLIF(u2.username, ''), '') as updater_name,
+		IFNULL(d.content_text, '')
 		FROM md_documents d
 		LEFT JOIN users u1 ON d.created_by COLLATE utf8mb4_unicode_ci = u1.id
 		LEFT JOIN users u2 ON d.updated_by COLLATE utf8mb4_unicode_ci = u2.id ` + where +
@@ -241,37 +242,54 @@ func TeamListDocuments(c *gin.Context) {
 	defer rows.Close()
 
 	type Doc struct {
-		ID          string `json:"id"`
-		TeamID      string `json:"team_id"`
-		FolderID    string `json:"folder_id"`
-		Title       string `json:"title"`
-		Type        string `json:"type"`
-		FileSize    int64  `json:"file_size"`
-		Version     int    `json:"version"`
-		LockedBy    string `json:"locked_by"`
-		LockedAt    string `json:"locked_at,omitempty"`
-		Status      int    `json:"status"`
-		CreatedBy   string `json:"created_by"`
-		UpdatedBy   string `json:"updated_by"`
-		CreatedAt   string `json:"created_at"`
-		UpdatedAt   string `json:"updated_at"`
-		CreatorName string `json:"creator_name"`
-		UpdaterName string `json:"updater_name"`
+		ID            string       `json:"id"`
+		TeamID        string       `json:"team_id"`
+		FolderID      string       `json:"folder_id"`
+		Title         string       `json:"title"`
+		Type          string       `json:"type"`
+		FileSize      int64        `json:"file_size"`
+		Version       int          `json:"version"`
+		LockedBy      string       `json:"locked_by"`
+		LockedAt      string       `json:"locked_at,omitempty"`
+		Status        int          `json:"status"`
+		CreatedBy     string       `json:"created_by"`
+		UpdatedBy     string       `json:"updated_by"`
+		CreatedAt     string       `json:"created_at"`
+		UpdatedAt     string       `json:"updated_at"`
+		CreatedByName string       `json:"created_by_name"`
+		CreatorName   string       `json:"creator_name"`
+		UpdatedByName string       `json:"updated_by_name"`
+		Excerpt       string       `json:"excerpt"`
+		Tags          []docTagJSON `json:"tags"`
 	}
 	var docs []Doc
+	var ids []string
 	for rows.Next() {
 		var d Doc
 		var folderID, lockedBy, lockedAt sql.NullString
+		var contentText string
 		rows.Scan(&d.ID, &d.TeamID, &folderID, &d.Title, &d.Type, &d.FileSize, &d.Version,
 			&lockedBy, &lockedAt, &d.Status, &d.CreatedBy, &d.UpdatedBy, &d.CreatedAt, &d.UpdatedAt,
-			&d.CreatorName, &d.UpdaterName)
+			&d.CreatedByName, &d.UpdatedByName, &contentText)
+		d.CreatorName = d.CreatedByName
 		d.FolderID = folderID.String
 		d.LockedBy = lockedBy.String
 		d.LockedAt = lockedAt.String
+		if d.Type != "sheet" {
+			d.Excerpt = previewExcerpt(contentText)
+		}
+		d.Tags = []docTagJSON{}
 		docs = append(docs, d)
+		ids = append(ids, d.ID)
 	}
 	if docs == nil {
 		docs = []Doc{}
+	}
+	tagMap := tagsByDocument(ids)
+	for i := range docs {
+		if tags, ok := tagMap[docs[i].ID]; ok {
+			docs[i].Tags = tags
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"data": docs, "total": total, "page": page, "page_size": pageSize})
 }
@@ -396,7 +414,7 @@ func TeamSearchDocuments(c *gin.Context) {
 
 	query := `SELECT d.id, d.team_id, d.folder_id, d.title, d.type, d.file_size, d.version,
 		d.locked_by, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at,
-		IFNULL(u1.display_name, '') as creator_name
+		COALESCE(NULLIF(u1.display_name, ''), NULLIF(u1.username, ''), '') as creator_name
 		FROM md_documents d
 		LEFT JOIN users u1 ON d.created_by COLLATE utf8mb4_unicode_ci = u1.id ` + where +
 		" ORDER BY d.updated_at DESC LIMIT ? OFFSET ?"
@@ -410,26 +428,30 @@ func TeamSearchDocuments(c *gin.Context) {
 	defer rows.Close()
 
 	type SearchResult struct {
-		ID          string `json:"id"`
-		TeamID      string `json:"team_id"`
-		FolderID    string `json:"folder_id"`
-		Title       string `json:"title"`
-		Type        string `json:"type"`
-		FileSize    int64  `json:"file_size"`
-		Version     int    `json:"version"`
-		CreatedBy   string `json:"created_by"`
-		UpdatedBy   string `json:"updated_by"`
-		CreatedAt   string `json:"created_at"`
-		UpdatedAt   string `json:"updated_at"`
-		CreatorName string `json:"creator_name"`
-		Snippet     string `json:"snippet"`
+		ID            string `json:"id"`
+		TeamID        string `json:"team_id"`
+		FolderID      string `json:"folder_id"`
+		Title         string `json:"title"`
+		Type          string `json:"type"`
+		FileSize      int64  `json:"file_size"`
+		Version       int    `json:"version"`
+		CreatedBy     string `json:"created_by"`
+		UpdatedBy     string `json:"updated_by"`
+		CreatedAt     string `json:"created_at"`
+		UpdatedAt     string `json:"updated_at"`
+		CreatorName   string `json:"creator_name"`
+		CreatedByName string `json:"created_by_name"`
+		Snippet       string `json:"snippet"`
 	}
 	var results []SearchResult
 	for rows.Next() {
 		var r SearchResult
+		var lockedBy sql.NullString
+		var status int
 		rows.Scan(&r.ID, &r.TeamID, &r.FolderID, &r.Title, &r.Type, &r.FileSize, &r.Version,
-			&r.CreatedBy, &r.UpdatedBy, &r.CreatedAt, &r.UpdatedAt,
+			&lockedBy, &status, &r.CreatedBy, &r.UpdatedBy, &r.CreatedAt, &r.UpdatedAt,
 			&r.CreatorName)
+		r.CreatedByName = r.CreatorName
 		results = append(results, r)
 	}
 	if results == nil {
@@ -753,8 +775,11 @@ func TeamListTrash(c *gin.Context) {
 	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents WHERE team_id=? AND status=0", teamID).Scan(&total)
 
 	rows, err := database.DB.Query(
-		`SELECT id, title, type, file_size, deleted_at, created_by
-		 FROM md_documents WHERE team_id=? AND status=0 ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+		`SELECT d.id, d.title, d.type, d.file_size, IFNULL(d.deleted_at, d.updated_at), d.created_by,
+		 COALESCE(NULLIF(u.display_name, ''), NULLIF(u.username, ''), '')
+		 FROM md_documents d
+		 LEFT JOIN users u ON d.created_by COLLATE utf8mb4_unicode_ci = u.id
+		 WHERE d.team_id=? AND d.status=0 ORDER BY d.updated_at DESC LIMIT ? OFFSET ?`,
 		teamID, pageSize, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -764,13 +789,14 @@ func TeamListTrash(c *gin.Context) {
 
 	var docs []map[string]interface{}
 	for rows.Next() {
-		var id, title, docType, createdBy string
+		var id, title, docType, createdBy, createdByName string
 		var fileSize int64
 		var deletedAt string
-		rows.Scan(&id, &title, &docType, &fileSize, &deletedAt, &createdBy)
+		rows.Scan(&id, &title, &docType, &fileSize, &deletedAt, &createdBy, &createdByName)
 		docs = append(docs, map[string]interface{}{
 			"id": id, "title": title, "type": docType,
-			"file_size": fileSize, "deleted_at": deletedAt, "created_by": createdBy,
+			"file_size": fileSize, "deleted_at": deletedAt, "updated_at": deletedAt,
+			"created_by": createdBy, "created_by_name": createdByName,
 		})
 	}
 	if docs == nil {
@@ -1001,7 +1027,7 @@ func TeamListVersions(c *gin.Context) {
 	}
 	rows, err := database.DB.Query(
 		`SELECT v.id, v.version, v.file_size, v.created_by, v.created_at,
-		 IFNULL(u.display_name,'') as user_name
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), '') as user_name
 		 FROM md_versions v LEFT JOIN users u ON v.created_by COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE v.document_id=? ORDER BY v.version DESC`, docID)
 	if err != nil {
@@ -1017,7 +1043,8 @@ func TeamListVersions(c *gin.Context) {
 		rows.Scan(&id, &version, &fileSize, &createdBy, &createdAt, &userName)
 		versions = append(versions, map[string]interface{}{
 			"id": id, "version": version, "file_size": fileSize,
-			"created_by": createdBy, "created_at": createdAt, "user_name": userName,
+			"created_by": createdBy, "created_at": createdAt,
+			"user_name": userName, "created_by_name": userName,
 		})
 	}
 	if versions == nil {
@@ -1224,7 +1251,7 @@ func TeamListCollaborators(c *gin.Context) {
 	}
 	rows, err := database.DB.Query(
 		`SELECT p.id, p.target_type, p.target_id, p.permission, p.created_by,
-		 IFNULL(u.display_name, '') as user_name
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), '') as user_name
 		 FROM md_permissions p
 		 LEFT JOIN users u ON p.target_type='user' AND p.target_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE p.resource_type='document' AND p.resource_id=?`, docID)
@@ -1306,7 +1333,7 @@ func TeamListComments(c *gin.Context) {
 	}
 	rows, err := database.DB.Query(
 		`SELECT c.id, c.content, c.user_id, IFNULL(c.parent_id,''), c.created_at, c.updated_at,
-		 COALESCE(NULLIF(u.display_name,''), NULLIF(c.user_name,''), '未知用户') as user_name
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), NULLIF(c.user_name,''), '') as user_name
 		 FROM md_comments c LEFT JOIN users u ON c.user_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE c.document_id=? ORDER BY c.created_at`, docID)
 	if err != nil {
@@ -1346,10 +1373,7 @@ func TeamCreateComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	userName, _ := c.Get("username")
-	if userName == nil || userName == "" {
-		userName = "未知用户"
-	}
+	userName := firstNonEmpty(c.GetString("display_name"), c.GetString("username"))
 	id := uuid.New().String()
 	now := time.Now()
 	_, err := database.DB.Exec(
@@ -2558,7 +2582,8 @@ func TeamDashboardStats(c *gin.Context) {
 
 	// Recent activities
 	auditRows, _ := database.DB.Query(
-		`SELECT a.action, a.resource_name, a.created_at, IFNULL(u.display_name, '未知') as user_name
+		`SELECT a.action, a.resource_name, a.created_at,
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), NULLIF(a.user_name,''), '') as user_name
 		 FROM md_audits a
 		 LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE a.team_id=? ORDER BY a.created_at DESC LIMIT 10`, teamID)
