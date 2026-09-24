@@ -15,21 +15,9 @@ docker compose up -d
 docker compose logs -f app
 
 # 4. 访问
-# http://your-server:8900
+# 容器端口 8900 只供本机或反代。登录走 mistlab.dev Portal。
+# POST /api/auth/login 已废弃，没有 /api/users 或 /api/auth/register。
 ```
-
-## 默认账号
-
-首次启动后通过 API 创建管理员：
-
-```bash
-# 注册管理员
-curl -X POST http://localhost:8900/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"Admin@2026","name":"管理员"}'
-```
-
-或直接在数据库插入后修改密码。
 
 ## 数据持久化
 

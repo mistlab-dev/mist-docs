@@ -15,15 +15,10 @@ import (
 )
 
 // ExportDocument exports a document in the specified format.
-// GET /docs/documents/:id/export?format=markdown|html|txt
+// GET /docs/documents/:id/export?format=markdown|html|txt|pdf
+// Word (.docx) is not produced; requesting it returns 400.
 func ExportDocument(c *gin.Context) {
-	// PDF export requires Team plan
 	format := c.DefaultQuery("format", "html")
-	if format == "pdf" {
-		if !service.RequirePlanFeature(c, "pdf_export") {
-			return
-		}
-	}
 
 	docID := c.Param("id")
 
@@ -49,47 +44,83 @@ func ExportDocument(c *gin.Context) {
 		return
 	}
 
-	htmlContent := string(content)
-	fileName := sanitizeFilename(title)
+	if !serveDocumentExport(c, title, string(content), format) {
+		return
+	}
+
+	userName, _ := c.Get("username")
+	audit(c, "export", "document", docID, title, fmt.Sprintf("%s 导出文档 (%s, %s)", userName, format, docType))
+}
+
+// serveDocumentExport writes one of markdown, html, txt, or pdf.
+// The download extension matches the body. docx is rejected: this server
+// does not build a Word file.
+func serveDocumentExport(c *gin.Context, title, htmlContent, format string) bool {
+	format = strings.ToLower(strings.TrimSpace(format))
+	if format == "" {
+		format = "html"
+	}
+	fileBase := exportBaseName(title)
 
 	switch format {
 	case "markdown", "md":
 		markdown := htmlToMarkdown(htmlContent)
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.md"`, fileName))
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.md"`, fileBase))
 		c.Data(http.StatusOK, "text/markdown; charset=utf-8", []byte(markdown))
 
 	case "html":
 		fullHTML := wrapHTML(title, htmlContent)
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.html"`, fileName))
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.html"`, fileBase))
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(fullHTML))
 
-	case "txt":
+	case "txt", "text":
 		text := htmlToText(htmlContent)
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.txt"`, fileName))
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.txt"`, fileBase))
 		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(text))
 
 	case "pdf":
+		if !service.RequirePlanFeature(c, "pdf_export") {
+			return false
+		}
 		pdf, err := htmlToPDF(title, htmlContent)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "PDF 生成失败: " + err.Error()})
-			return
+			return false
 		}
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.pdf"`, fileName))
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.pdf"`, fileBase))
 		c.Data(http.StatusOK, "application/pdf", pdf)
 
-	case "docx":
-		// Word-compatible HTML (Office opens .doc HTML natively)
-		wordHTML := wrapWordHTML(title, htmlContent)
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.doc"`, fileName))
-		c.Data(http.StatusOK, "application/msword", []byte(wordHTML))
-
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的格式，可选: markdown, html, txt, pdf, docx"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的格式，可选: markdown, html, txt, pdf"})
+		return false
 	}
+	return true
+}
 
-	// Audit
-	userName, _ := c.Get("username")
-	audit(c, "export", "document", docID, title, fmt.Sprintf("%s 导出文档 (%s)", userName, format))
+// exportBaseName keeps a readable title and strips characters that break
+// Content-Disposition. The caller appends the real extension.
+func exportBaseName(name string) string {
+	s := strings.TrimSpace(name)
+	if s == "" {
+		return "export"
+	}
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case '/', '\\', '"', '\n', '\r', ':', '*', '?', '<', '>', '|':
+			return '_'
+		default:
+			return r
+		}
+	}, s)
+	runes := []rune(s)
+	if len(runes) > 80 {
+		s = string(runes[:80])
+	}
+	s = strings.Trim(s, " .")
+	if s == "" {
+		return "export"
+	}
+	return s
 }
 
 // ==================== Markdown Conversion (Improved) ====================

@@ -22,7 +22,7 @@
 ### 1. 获取代码
 
 ```bash
-git clone https://github.com/c-wind/mist-docs.git
+git clone https://github.com/mistlab-dev/mist-docs.git
 cd mist-docs
 ```
 
@@ -58,23 +58,9 @@ docker compose logs -f app
 
 ### 5. 访问
 
-浏览器打开 `http://your-server:8900`
+Docker 把进程映射到本机 8900。这不是公网入口。生产站点是 https://docs.mistlab.dev ，nginx 反代到 `127.0.0.1:8900`。
 
-### 6. 创建管理员
-
-首次启动需要创建管理员账户：
-
-```bash
-# 方式一：通过 API
-curl -X POST http://localhost:8900/api/users \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{
-    "username": "admin",
-    "password": "YourStrongPassword!",
-    "name": "管理员"
-  }'
-```
+登录在 MistLab Portal（https://mistlab.dev ）。`POST /api/auth/login` 返回 410。不要调用 `POST /api/users`，这条路由没有注册。
 
 ### 自定义配置文件
 
@@ -112,7 +98,7 @@ docker compose up -d --build
 ### 1. 编译后端
 
 ```bash
-git clone https://github.com/c-wind/mist-docs.git
+git clone https://github.com/mistlab-dev/mist-docs.git
 cd mist-docs
 go build -o mist-docs ./cmd/server/
 ```
@@ -145,9 +131,9 @@ mysql -u mist_docs -p mist_docs < docker/init-db.sql
 ### 4. 配置
 
 ```bash
-mkdir -p /etc/mist-docs
-cp configs/config.yaml /etc/mist-docs/config.yaml
-vim /etc/mist-docs/config.yaml
+mkdir -p /etc/mistdocs
+cp configs/config.yaml /etc/mistdocs/config.yaml
+vim /etc/mistdocs/config.yaml
 ```
 
 修改数据库连接、JWT 密钥等。
@@ -178,7 +164,7 @@ After=network.target mysql.service
 Type=simple
 User=root
 WorkingDirectory=/var/www/mistdocs
-ExecStart=/usr/local/bin/mist-docs -c /etc/mist-docs/config.yaml
+ExecStart=/usr/local/bin/mist-docs -c /etc/mistdocs/config.yaml
 Restart=always
 RestartSec=5
 
@@ -195,8 +181,12 @@ systemctl start mist-docs
 
 ```bash
 systemctl status mist-docs
-curl http://localhost:8900/api/auth/me
+curl -fsS http://127.0.0.1:8900/healthz
 ```
+
+探活 JSON 只在本机 8900。`https://docs.mistlab.dev/healthz` 返回的是前端页面，不是这个接口。
+
+生产更新用仓库里的 `scripts/deploy.sh`：同步前端到 `/var/www/mistdocs/web/`，替换 `/usr/local/bin/mist-docs` 并重启。脚本不会覆盖 `/etc/mistdocs/config.yaml` 和 master key。
 
 ---
 
@@ -381,17 +371,9 @@ client_max_body_size 50M;
 
 确保 Nginx 配置了 WebSocket 代理（见上方 Nginx 配置）。
 
-### Q: 忘记管理员密码
+### Q: 忘记密码
 
-```bash
-# Docker
-docker compose exec mysql mysql -u root -p
-# 手动
-mysql -u root -p
-
-# 重置密码（密码会被重新哈希）
-UPDATE md_users SET password='$2a$10$new_hash' WHERE username='admin';
-```
+到 MistLab Portal（https://mistlab.dev）重置。不要改 `md_users.password`：Portal 登录读的是共享 `users` 表，MistDocs 里没有可用的管理员创建接口。
 
 ### Q: 如何切换数据库
 

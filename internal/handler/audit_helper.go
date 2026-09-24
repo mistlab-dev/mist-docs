@@ -20,14 +20,15 @@ func audit(c *gin.Context, action, resourceType, resourceID, resourceName, detai
 		c.ClientIP(),
 	)
 
-	// Fire webhook for important events
+	// Fire webhook for important events. edit_doc is what document save records;
+	// the payload uses the names the webhook API advertises.
 	webhookEvents := map[string]bool{
-		"create_doc": true, "update_doc": true, "delete_doc": true,
+		"create_doc": true, "edit_doc": true, "update_doc": true, "delete_doc": true,
 		"create_share": true, "create_comment": true,
 		"import_doc": true, "lock_doc": true, "unlock_doc": true,
-		"restore": true,
+		"restore": true, "restore_doc": true,
 	}
 	if webhookEvents[action] {
-		fireWebhooks(action, resourceType, resourceID, resourceName, detail)
+		fireWebhooks(c.GetString("current_team_id"), canonicalWebhookEvent(action), resourceType, resourceID, resourceName, detail)
 	}
 }

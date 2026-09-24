@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 // ==================== htmlToMarkdown 黑盒测试 ====================
@@ -214,6 +217,56 @@ func TestWrapHTML_Structure(t *testing.T) {
 	}
 	if !strings.Contains(html, "<style>") {
 		t.Error("missing style")
+	}
+}
+
+func TestServeDocumentExportFormats(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cases := []struct {
+		format string
+		ext    string
+		ctype  string
+	}{
+		{"markdown", ".md", "text/markdown"},
+		{"html", ".html", "text/html"},
+		{"txt", ".txt", "text/plain"},
+	}
+	for _, tc := range cases {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/export?format="+tc.format, nil)
+		if !serveDocumentExport(c, "周报", "<p>Hi</p>", tc.format) {
+			t.Fatalf("%s: export returned false, body=%s", tc.format, w.Body.String())
+		}
+		if w.Code != 200 {
+			t.Fatalf("%s: status %d", tc.format, w.Code)
+		}
+		cd := w.Header().Get("Content-Disposition")
+		if !strings.Contains(cd, tc.ext) {
+			t.Fatalf("%s: disposition %s", tc.format, cd)
+		}
+		if strings.Contains(cd, ".docx") || strings.Contains(cd, ".doc\"") {
+			t.Fatalf("%s: advertised word extension %s", tc.format, cd)
+		}
+		if !strings.Contains(w.Header().Get("Content-Type"), tc.ctype) {
+			t.Fatalf("%s: content-type %s", tc.format, w.Header().Get("Content-Type"))
+		}
+	}
+}
+
+func TestServeDocumentExportRejectsDocx(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/export?format=docx", nil)
+	if serveDocumentExport(c, "周报", "<p>Hi</p>", "docx") {
+		t.Fatal("docx should be rejected")
+	}
+	if w.Code != 400 {
+		t.Fatalf("status %d body %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Header().Get("Content-Disposition"), "doc") {
+		t.Fatal("docx rejection must not set a download name")
 	}
 }
 

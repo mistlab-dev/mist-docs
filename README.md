@@ -2,15 +2,15 @@
 
 企业文档协同服务 —— MistLab 生态的独立文档模块。
 
-> 生产部署：`docs.mistlab.dev`（服务端 `85.137.247.166`，端口 8900，systemd 单元 `mist-docs`）
+> 生产站点：https://docs.mistlab.dev 。进程在本机 `127.0.0.1:8900`，由 nginx 反代；公网不开放 8900。systemd 单元 `mist-docs`。发布用 [`scripts/deploy.sh`](scripts/deploy.sh)。
 
 ## 定位
 
 - 独立部署、独立运行的文档服务
 - **统一认证**：复用 Portal（`mist-team-server`）签发的 JWT，按 `team_id` 做团队级隔离
-- 实时协同编辑（文档 + 表格）
+- 富文本文档在登录后通过 Yjs 实时同步；表格是保存后再刷新，不走 Yjs
 - 与 MistTerm 团队片段双向联动（文档 ↔ 片段、段落级检索）
-- 内网友好，无公网依赖
+- 文档和文件在自己的 MySQL / 磁盘上。托管版的登录和网页字体走公网。完全内网需要自备 Portal，并自行提供字体
 
 ## 技术栈
 
@@ -19,8 +19,8 @@
 | 后端 | Go + Gin + MySQL |
 | WebSocket | Go (gorilla/websocket) |
 | 文档编辑器 | TipTap (ProseMirror) + Yjs |
-| 表格编辑器 | Univer |
-| 协同同步 | Yjs CRDT |
+| 表格编辑器 | 自研 `SheetEditor.vue`（公式、图表、数据透视） |
+| 协同同步 | 仅富文本文档使用 Yjs CRDT |
 | 前端 | Vue 3 + Element Plus |
 | 加密 | AES-256-GCM（`MISTDOCS_MASTER_FILE` 主密钥） |
 
@@ -55,11 +55,11 @@ go build -o mist-docs ./cmd/server
 ./mist-docs -c configs/config.yaml
 ```
 
-前端构建与部署（生产流程）：
+生产发布以 `scripts/deploy.sh` 为准：同步 `web/dist/` 到 `/var/www/mistdocs/web/`，原子替换 `/usr/local/bin/mist-docs`，`systemctl restart mist-docs`，并用本机 `http://127.0.0.1:8900/healthz` 决定是否回滚。脚本不覆盖 `/etc/mistdocs/config.yaml` 和生产 master key。登录在 Portal，不要在 MistDocs 里建管理员。
 
 ```bash
-cd web && npm run build
-rsync -az --delete web/dist/ root@85.137.247.166:/var/www/mistdocs/web/
+# 需先在本机编出前端 dist 和 mist-docs-linux，再执行
+./scripts/deploy.sh
 ```
 
 ## API 概览
@@ -67,7 +67,7 @@ rsync -az --delete web/dist/ root@85.137.247.166:/var/www/mistdocs/web/
 | 分组 | 路径前缀 | 鉴权 |
 |------|----------|------|
 | 探活 | `/healthz`、`/health` | 公开 |
-| 登录 | `POST /api/auth/login` | 公开 |
+| 登录 | `POST /api/auth/login` | 已废弃，返回 410，请走 Portal |
 | 当前用户 | `GET /api/auth/me`、`PUT /api/auth/password`、`POST /api/auth/logout` | JWT |
 | 公开分享 | `GET /api/s/:token`、`/api/s/:token/info` | 公开 |
 | 团队级 | `/api/teams/:team_id/**` | JWT + 团队成员 |
@@ -87,6 +87,17 @@ rsync -az --delete web/dist/ root@85.137.247.166:/var/www/mistdocs/web/
   非成员返回 `403 {"error":"不是该团队成员"}`。
 - MistTerm 可将批量执行记录一键沉淀为 MistDocs 文档（服务端 `mist-team-server` 的
   `POST /v1/teams/:team_id/batch-exec/records/:id/export-doc`）。
+
+## 套餐上限
+
+仓库里的 `configs/config.yaml` 没有 `billing` 段，默认关闭。关闭时本服务不套文档篇数和存储上限。
+
+计费打开、Portal 又没有返回套餐时，回退值是 10 篇文档、500MB。这时：
+
+- 创建文档会检查篇数（`CheckDocumentLimit`）
+- 媒体上传会检查存储（`CheckStorageLimit`）。超出返回 `402 plan_limit`
+- 保存文档正文不按 500MB 拦截
+- 团队数和成员数不在 MistDocs 里检查，由 Portal 管理
 
 ## 相关文档
 

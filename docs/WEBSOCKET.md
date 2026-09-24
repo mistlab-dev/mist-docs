@@ -2,8 +2,12 @@
 
 ## 连接
 
+富文本文档使用这条连接。表格不走 Yjs。
+
+`token` 是登录后存在 `localStorage` 键 `mist-docs-token` 里的 Portal JWT。8900 只在本机；浏览器连的是当前站点的 `/ws/...`。
+
 ```
-ws://host:8900/ws/docs/:doc_id?token=<jwt_token>
+ws(s)://<host>/ws/teams/:team_id/docs/:doc_id?token=<portal_jwt>
 ```
 
 ## 消息类型
@@ -47,12 +51,8 @@ const wsProvider = new WebsocketProvider(
   { WebSocketPolyfill: ... }
 )
 
-// 绑定 TipTap
-import { ySyncPlugin } from 'y-prosemirror'
-// ... TipTap 编辑器配置
-
-// 绑定 Univer
-// Univer 需要自定义 WebSocket 同步，通过 Y.Doc + yjs adapter
+// 富文本使用 web/src/utils/collab.ts 里的 MistWSProvider。
+// 表格编辑器不连接这条 WebSocket。
 ```
 
 ## 注意事项
@@ -66,23 +66,25 @@ import { ySyncPlugin } from 'y-prosemirror'
 
 ## 完整前端示例（TipTap + Yjs）
 
+实际连接在 `web/src/views/DocEditor.vue`：只在文档类型为 `doc` 且 `mist-docs-token` 非空时创建 `MistWSProvider`。
+
+```typescript
+import * as Y from 'yjs'
+import { MistWSProvider } from '@/utils/collab'
+
+const ydoc = new Y.Doc()
+const token = localStorage.getItem('mist-docs-token')
+const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/teams/${teamId}/docs/${docId}?token=${token}`
+const provider = new MistWSProvider(wsUrl, ydoc)
+```
+
+下面是 TipTap 绑定的形状（与编辑器里的 Collaboration 扩展一致）：
+
 ```typescript
 import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import * as Y from 'yjs'
-import { WebsocketProvider } from 'y-websocket'
-
-// 1. 创建 Yjs 文档
-const ydoc = new Y.Doc()
-
-// 2. 连接 WebSocket
-const provider = new WebsocketProvider(
-  `ws://${location.host}/ws`,
-  `docs/${docId}?token=${token}`,
-  ydoc
-)
 
 // 3. 创建 TipTap 编辑器
 const editor = new Editor({
@@ -103,32 +105,12 @@ const editor = new Editor({
   ],
 })
 
-// 4. 监听同步状态
-provider.on('sync', (isSynced: boolean) => {
-  console.log('Synced:', isSynced)
-})
-
-// 5. 监听在线用户
-provider.awareness.on('change', () => {
-  const states = provider.awareness.getStates()
-  // 更新在线用户列表 UI
-})
+// MistWSProvider 用回调，不是 y-websocket 的 awareness API。
+provider.onStatus = (status) => { /* connecting | connected | disconnected */ }
+provider.onSynced = (synced) => { /* 首次同步完成 */ }
+provider.onClients = (users) => { /* 当前在线用户 */ }
 ```
 
-## 完整前端示例（Univer + Yjs）
+## 表格
 
-```typescript
-import { Univer, UniverInstanceType } from '@univerjs/core'
-import { defaultTheme } from '@univerjs/design'
-import { UniverSheetsPlugin } from '@univerjs/sheets'
-
-// Univer 暂不原生支持 Yjs，需要自定义同步层
-// 方案：通过 WebSocket 广播单元格变更
-
-// 1. 连接 WebSocket（复用上面的连接）
-// 2. 监听 Univer 命令执行
-// 3. 将变更序列化发送
-// 4. 接收远端变更并应用到本地
-
-// 详细实现待前端开发时补充
-```
+表格使用 `web/src/components/SheetEditor.vue`。它不连接 Yjs。改完保存，其他人刷新后看到新内容。

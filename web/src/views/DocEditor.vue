@@ -513,13 +513,6 @@
             <div class="export-desc">{{ t("docEditor.exportTxtDesc") }}</div>
           </div>
         </div>
-        <div class="export-option" @click="handleExport('docx'); showExportDialog = false">
-          <div class="export-icon">📘</div>
-          <div class="export-info">
-            <div class="export-name">Word</div>
-            <div class="export-desc">{{ t("docEditor.exportDocxDesc") }}</div>
-          </div>
-        </div>
         <div class="export-option" @click="handleExport('txt'); showExportDialog = false">
           <div class="export-icon">📃</div>
           <div class="export-info">
@@ -1080,8 +1073,12 @@ async function loadDiff() {
   diffLoading.value = false
 }
 
+function authToken(): string {
+  return auth.token || localStorage.getItem('mist-docs-token') || ''
+}
+
 function authHeader(): Record<string, string> {
-  const token = localStorage.getItem('token')
+  const token = authToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -1267,9 +1264,9 @@ async function loadVersions() {
 }
 
 function initEditor(initialContent: string) {
-  // Try to use Yjs collaboration
-  const token = localStorage.getItem('token')
+  // Yjs only for rich-text docs. The login token lives in mist-docs-token.
   const auth = useAuthStore()
+  const token = auth.token || localStorage.getItem('mist-docs-token') || ''
   const teamId = auth.currentTeamId
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const wsUrl = `${wsProtocol}//${window.location.host}/ws/teams/${teamId}/docs/${docId}?token=${token}`
@@ -1747,14 +1744,18 @@ function toggleLinkShare(val: boolean) {
 
 async function createShare() {
   const { data } = await teamApi.post(`/documents/${docId}/share`, shareForm)
-  shareResult.value = data
+  const payload = data.data || data
+  const path = payload.share_url || (payload.token ? `/s/${payload.token}` : '')
+  const shareURL = path.startsWith('http') ? path : `${window.location.origin}${path}`
+  shareResult.value = { ...payload, share_url: shareURL }
   ElMessage.success(t('docEditor.shareLinkGenerated'))
   loadCollaborators()
 }
 
 function copyShareUrl() {
-  if (!shareResult.value) return
-  const url = `${window.location.origin}${shareResult.value.share_url}`
+  if (!shareResult.value?.share_url) return
+  const raw = shareResult.value.share_url
+  const url = raw.startsWith('http') ? raw : `${window.location.origin}${raw}`
   navigator.clipboard.writeText(url)
   ElMessage.success(t('docEditor.copiedToClipboard'))
 }
@@ -1823,7 +1824,7 @@ async function handleExport(format: string) {
       ElMessage.success(t('docEditor.pdfExportSuccess'))
       return
     }
-    const token = localStorage.getItem('token')
+    const token = authToken()
     const resp = await fetch(`/api/teams/${auth.currentTeamId}/documents/${docId}/export?format=${format}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })

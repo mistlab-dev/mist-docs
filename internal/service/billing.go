@@ -114,7 +114,13 @@ func fetchPlanFromPortal(userID string) PlanLimits {
 	return result.Limits
 }
 
-// defaultLimits returns Free plan limits as fallback.
+// defaultLimits returns Free plan limits as fallback when billing is on
+// and Portal does not return a plan.
+//
+// MistDocs enforces MaxDocuments on document create and MaxStorageMB on
+// team media upload. MaxTeams and MaxMembers are not checked here; Portal
+// owns team and member limits. A zero MaxStorageMB or MaxDocuments means
+// unlimited. When billing is disabled, GetPlanLimits does not use this fallback.
 func defaultLimits() PlanLimits {
 	return PlanLimits{
 		MaxTeams: 1, MaxFragments: -1, MaxMembers: 3,
