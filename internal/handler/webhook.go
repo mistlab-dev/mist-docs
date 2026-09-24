@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
@@ -21,7 +22,7 @@ type WebhookConfig struct {
 	Name      string `json:"name"`
 	URL       string `json:"url"`
 	Secret    string `json:"secret,omitempty"`
-	Events    string `json:"events"`    // comma-separated: create,update,delete,share,comment
+	Events    string `json:"events"` // comma-separated: create,update,delete,share,comment
 	CreatedBy string `json:"created_by"`
 	CreatedAt string `json:"created_at"`
 	Enabled   bool   `json:"enabled"`
@@ -56,14 +57,14 @@ func CreateWebhook(c *gin.Context) {
 		Name   string `json:"name" binding:"required"`
 		URL    string `json:"url" binding:"required"`
 		Secret string `json:"secret"`
-		Events string `json:"events"` // default: "create,update,delete"
+		Events string `json:"events"` // default: document.created,document.updated
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
 	if req.Events == "" {
-		req.Events = "create,update,delete"
+		req.Events = `["document.created","document.updated"]`
 	}
 
 	id := uuid.New().String()
@@ -113,11 +114,18 @@ type webhookPayload struct {
 	Detail    string `json:"detail,omitempty"`
 }
 
-// fireWebhooks checks all enabled webhooks and sends POST for matching events
-func fireWebhooks(event, resourceType, resourceID, title, detail string) {
+// fireWebhooks checks enabled webhooks for the team and POSTs matching events.
+// event should be the name the API advertises (document.created / document.updated).
+// Subscriptions may use that name or an audit alias such as create_doc / edit_doc.
+func fireWebhooks(teamID, event, resourceType, resourceID, title, detail string) {
 	go func() {
-		rows, err := database.DB.Query(`
-			SELECT id, url, secret, events FROM md_webhooks WHERE enabled = 1`)
+		query := `SELECT id, url, secret, events FROM md_webhooks WHERE enabled = 1`
+		args := []interface{}{}
+		if teamID != "" {
+			query += ` AND team_id = ?`
+			args = append(args, teamID)
+		}
+		rows, err := database.DB.Query(query, args...)
 		if err != nil {
 			return
 		}
@@ -136,15 +144,7 @@ func fireWebhooks(event, resourceType, resourceID, title, detail string) {
 			var id, url, secret, events string
 			rows.Scan(&id, &url, &secret, &events)
 
-			// Check if event matches
-			found := false
-			for _, e := range splitCSV(events) {
-				if e == event || e == "*" {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if !webhookSubscribed(events, event) {
 				continue
 			}
 
@@ -175,15 +175,88 @@ func fireWebhooks(event, resourceType, resourceID, title, detail string) {
 	}()
 }
 
-func splitCSV(s string) []string {
+// parseWebhookEvents accepts a JSON array or a comma-separated list.
+func parseWebhookEvents(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	if strings.HasPrefix(s, "[") {
+		var arr []string
+		if err := json.Unmarshal([]byte(s), &arr); err == nil {
+			out := make([]string, 0, len(arr))
+			for _, e := range arr {
+				e = strings.TrimSpace(e)
+				if e != "" {
+					out = append(out, e)
+				}
+			}
+			return out
+		}
+	}
 	var result []string
-	for _, v := range bytes.FieldsFunc([]byte(s), func(r rune) bool { return r == ',' }) {
-		v = bytes.TrimSpace(v)
-		if len(v) > 0 {
-			result = append(result, string(v))
+	for _, part := range strings.Split(s, ",") {
+		e := strings.TrimSpace(part)
+		e = strings.Trim(e, `[]"'`)
+		e = strings.TrimSpace(e)
+		if e != "" {
+			result = append(result, e)
 		}
 	}
 	return result
+}
+
+// canonicalWebhookEvent maps audit actions onto the event names the API advertises.
+func canonicalWebhookEvent(action string) string {
+	switch action {
+	case "create_doc", "create", "document.created":
+		return "document.created"
+	case "edit_doc", "update_doc", "update", "document.updated":
+		return "document.updated"
+	case "delete_doc", "delete", "document.deleted":
+		return "document.deleted"
+	default:
+		return action
+	}
+}
+
+func webhookAliases(event string) map[string]struct{} {
+	groups := [][]string{
+		{"document.created", "create_doc", "create"},
+		{"document.updated", "edit_doc", "update_doc", "update"},
+		{"document.deleted", "delete_doc", "delete"},
+		{"create_share", "document.shared", "share"},
+		{"create_comment", "comment.created", "comment"},
+		{"import_doc", "document.imported", "import"},
+		{"lock_doc", "document.locked", "lock"},
+		{"unlock_doc", "document.unlocked", "unlock"},
+		{"restore", "restore_doc", "document.restored"},
+	}
+	for _, g := range groups {
+		for _, e := range g {
+			if e == event {
+				m := make(map[string]struct{}, len(g))
+				for _, x := range g {
+					m[x] = struct{}{}
+				}
+				return m
+			}
+		}
+	}
+	return map[string]struct{}{event: {}}
+}
+
+func webhookSubscribed(eventsField, fired string) bool {
+	aliases := webhookAliases(fired)
+	for _, e := range parseWebhookEvents(eventsField) {
+		if e == "*" {
+			return true
+		}
+		if _, ok := aliases[e]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ListWebhookLogs GET /admin/webhooks/:id/logs

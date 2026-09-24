@@ -1037,6 +1037,8 @@ func TeamCreateShare(c *gin.Context) {
 	var req struct {
 		Permission string `json:"permission"`
 		Expires    string `json:"expires"`
+		ExpiresIn  int    `json:"expiresIn"`  // hours; the editor sends this
+		ExpiresIn2 int    `json:"expires_in"` // same meaning, snake_case
 		Password   string `json:"password"`
 	}
 	c.ShouldBindJSON(&req)
@@ -1044,26 +1046,39 @@ func TeamCreateShare(c *gin.Context) {
 		req.Permission = "read"
 	}
 
+	hours := req.ExpiresIn
+	if hours == 0 {
+		hours = req.ExpiresIn2
+	}
+
 	token := uuid.New().String()
 	id := uuid.New().String()
+	shareURL := "/s/" + token
 	var err error
-	if req.Expires == "" {
-		_, err = database.DB.Exec(
-			`INSERT INTO md_shares (id, document_id, team_id, token, permission, password, expires_at, created_by)
-			 VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
-			id, docID, teamID, token, req.Permission, req.Password, userID)
-	} else {
+	switch {
+	case req.Expires != "":
 		_, err = database.DB.Exec(
 			`INSERT INTO md_shares (id, document_id, team_id, token, permission, password, expires_at, created_by)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			id, docID, teamID, token, req.Permission, req.Password, req.Expires, userID)
+	case hours > 0:
+		expiresAt := time.Now().Add(time.Duration(hours) * time.Hour)
+		_, err = database.DB.Exec(
+			`INSERT INTO md_shares (id, document_id, team_id, token, permission, password, expires_at, created_by)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, docID, teamID, token, req.Permission, req.Password, expiresAt, userID)
+	default:
+		_, err = database.DB.Exec(
+			`INSERT INTO md_shares (id, document_id, team_id, token, permission, password, expires_at, created_by)
+			 VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
+			id, docID, teamID, token, req.Permission, req.Password, userID)
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
-		"id": id, "token": token, "permission": req.Permission,
+		"id": id, "token": token, "permission": req.Permission, "share_url": shareURL,
 	}})
 }
 
@@ -1210,12 +1225,19 @@ func TeamCreateComment(c *gin.Context) {
 
 func TeamExportDocument(c *gin.Context) {
 	docID := c.Param("id")
+	format := c.DefaultQuery("format", "html")
 	var title, docType string
-	database.DB.QueryRow(`SELECT title, type FROM md_documents WHERE id=?`, docID).Scan(&title, &docType)
+	err := database.DB.QueryRow(`SELECT title, type FROM md_documents WHERE id=? AND status=1`, docID).Scan(&title, &docType)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "文档不存在"})
+		return
+	}
 	content := readDocContent(docID)
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.html\"", title))
-	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+	if !serveDocumentExport(c, title, string(content), format) {
+		return
+	}
+	userName, _ := c.Get("username")
+	audit(c, "export", "document", docID, title, fmt.Sprintf("%s 导出文档 (%s, %s)", userName, format, docType))
 }
 
 // ==================== 审计 ====================
@@ -1776,6 +1798,35 @@ func writeDocContent(docID string, content []byte) {
 	}
 }
 
+// teamStorageBytes matches the storage page: active documents, extra versions, and media files.
+// Trash is excluded, same as TeamStorageStatus.
+func teamStorageBytes(teamID string) int64 {
+	var activeSize, versionAll, mediaSize int64
+	database.DB.QueryRow(
+		`SELECT COALESCE(SUM(file_size), 0) FROM md_documents WHERE team_id=? AND status=1`,
+		teamID).Scan(&activeSize)
+	database.DB.QueryRow(
+		`SELECT COALESCE(SUM(v.file_size), 0) FROM md_versions v
+		 JOIN md_documents d ON v.document_id = d.id WHERE d.team_id=? AND d.status IN (0,1)`,
+		teamID).Scan(&versionAll)
+	versionExtra := versionAll - activeSize
+	if versionExtra < 0 {
+		versionExtra = 0
+	}
+	mediaDir := fmt.Sprintf("%s/%s/media", store.RootPath(), teamID)
+	if entries, err := os.ReadDir(mediaDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			if info, err := e.Info(); err == nil {
+				mediaSize += info.Size()
+			}
+		}
+	}
+	return activeSize + versionExtra + mediaSize
+}
+
 func readDocContent(docID string) []byte {
 	var teamID, deptID string
 	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
@@ -1813,6 +1864,10 @@ func TeamUploadFile(c *gin.Context) {
 		return
 	}
 	defer file.Close()
+
+	if !service.CheckStorageLimit(c, teamStorageBytes(teamID), header.Size) {
+		return
+	}
 
 	// Generate unique filename
 	ext := ""

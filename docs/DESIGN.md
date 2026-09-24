@@ -7,7 +7,7 @@
   │
   ├── 文件浏览器（部门树 + 文件列表）
   ├── 文档编辑器（TipTap + Yjs 协同）
-  └── 表格编辑器（Univer + Yjs 协同）
+  └── 表格编辑器（自研 SheetEditor，保存后刷新，不走 Yjs）
   │
   ├── HTTP ──→ MistDocs 服务端（Go + Gin + MySQL）
   │              ├── 用户/部门管理
@@ -334,18 +334,18 @@ TipTap (ProseMirror)
   ├── y-websocket (连接 WS Hub)
   ├── 协同光标插件（显示其他用户位置）
   ├── 扩展：标题、列表、表格、图片、代码块、链接
-  └── 导出：HTML / .docx
+  └── 导出：HTML / Markdown / 纯文本 / PDF（无 .docx）
 ```
 
-**表格编辑器（Univer）**：
+**表格编辑器（SheetEditor.vue）**：
 
 ```
-Univer
-  ├── 自定义 WebSocket 同步（监听单元格变更）
-  ├── 公式引擎
-  ├── 图表
-  ├── 多 Sheet
-  └── 导出：.xlsx
+SheetEditor
+  ├── 本地编辑，保存后其他人刷新可见
+  ├── evalFormula（无 SUMIF / COUNTIF / IFS / SWITCH）
+  ├── canvas 图表
+  ├── 数据透视
+  └── 导出 CSV
 ```
 
 ### 5.3 权限管理界面
@@ -422,7 +422,7 @@ After=network.target mysql.service
 Type=simple
 User=mist-docs
 WorkingDirectory=/opt/mist-docs
-ExecStart=/opt/mist-docs/mist-docs -c /etc/mist-docs/config.yaml
+ExecStart=/usr/local/bin/mist-docs -c /etc/mistdocs/config.yaml
 Restart=always
 
 [Install]
@@ -470,7 +470,7 @@ server {
 | Phase 7 | WebSocket Hub + Yjs 持久化 | 3 天 |
 | Phase 8 | 前端骨架 + 文件浏览器 | 3 天 |
 | Phase 9 | TipTap 文档编辑器集成 | 3 天 |
-| Phase 10 | Univer 表格编辑器集成 | 4 天 |
+| Phase 10 | 自研 SheetEditor | 4 天 |
 | Phase 11 | 管理后台（用户/权限/审计） | 3 天 |
 | Phase 12 | 测试 + 部署 + 文档 | 2 天 |
 | **总计** | | **约 33 天（7 周）** |
