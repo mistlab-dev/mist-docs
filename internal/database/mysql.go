@@ -30,6 +30,13 @@ func Init(cfg config.DatabaseConfig) error {
 		return fmt.Errorf("ping db: %w", err)
 	}
 
+	return Migrate()
+}
+
+// Migrate applies additive schema updates. It only adds missing columns and
+// tables; existing rows are left in place, except soft-deleted documents whose
+// deleted_at is still NULL (those are backfilled from updated_at).
+func Migrate() error {
 	// Auto-migrate: ensure content_text column exists for full-text search
 	var colExists int
 	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_documents' AND COLUMN_NAME='content_text'`).Scan(&colExists)
@@ -104,6 +111,14 @@ func Init(cfg config.DatabaseConfig) error {
 	ensureColumn("md_webhooks", "team_id", "team_id VARCHAR(64) DEFAULT ''")
 	ensureColumn("md_webhooks", "updated_at", "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
 	ensureColumn("md_templates", "team_id", "team_id VARCHAR(64) DEFAULT ''")
+	// Share links store a permission, but neither init-db nor the team migration added the column.
+	ensureColumn("md_shares", "permission", "permission VARCHAR(20) NULL DEFAULT NULL")
+	ensureColumn("md_documents", "deleted_at", "deleted_at DATETIME NULL DEFAULT NULL")
+	// Rows already in the trash (status=0) predate the column. Stamp them from updated_at
+	// so the list has a delete time. Active documents stay NULL.
+	if _, err := DB.Exec(`UPDATE md_documents SET deleted_at = updated_at WHERE status = 0 AND deleted_at IS NULL`); err != nil {
+		fmt.Printf("backfill md_documents.deleted_at: %v\n", err)
+	}
 
 	return migrateDeadlines()
 }

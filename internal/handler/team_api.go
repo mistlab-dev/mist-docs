@@ -656,7 +656,7 @@ func TeamDeleteDocument(c *gin.Context) {
 		return
 	}
 	teamID := getTeamID(c)
-	_, err := database.DB.Exec(`UPDATE md_documents SET status=0 WHERE id=? AND team_id=?`, docID, teamID)
+	_, err := database.DB.Exec(`UPDATE md_documents SET status=0, deleted_at=NOW() WHERE id=? AND team_id=?`, docID, teamID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -779,7 +779,8 @@ func TeamListTrash(c *gin.Context) {
 		 COALESCE(NULLIF(u.display_name, ''), NULLIF(u.username, ''), '')
 		 FROM md_documents d
 		 LEFT JOIN users u ON d.created_by COLLATE utf8mb4_unicode_ci = u.id
-		 WHERE d.team_id=? AND d.status=0 ORDER BY d.updated_at DESC LIMIT ? OFFSET ?`,
+		 WHERE d.team_id=? AND d.status=0
+		 ORDER BY IFNULL(d.deleted_at, d.updated_at) DESC LIMIT ? OFFSET ?`,
 		teamID, pageSize, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -810,7 +811,7 @@ func TeamRestoreFromTrash(c *gin.Context) {
 	if !requireTrashDoc(c, docID) {
 		return
 	}
-	_, err := database.DB.Exec(`UPDATE md_documents SET status=1 WHERE id=? AND team_id=? AND status=0`, docID, getTeamID(c))
+	_, err := database.DB.Exec(`UPDATE md_documents SET status=1, deleted_at=NULL WHERE id=? AND team_id=? AND status=0`, docID, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1210,7 +1211,7 @@ func TeamListShares(c *gin.Context) {
 		return
 	}
 	rows, err := database.DB.Query(
-		`SELECT id, token, password, permission, expires_at, created_by, created_at, access_count
+		`SELECT id, token, password, IFNULL(permission,''), expires_at, created_by, created_at, access_count
 		 FROM md_shares WHERE document_id=? AND status=1 ORDER BY created_at DESC`, docID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -90,6 +91,24 @@ func TestMain(m *testing.M) {
 	}
 	defer database.Close()
 
+	// Production startup is database.Migrate (additive ADD COLUMN). The shared
+	// test database has been altered by hand, so a column can exist here and
+	// still be missing in prod. Drop the columns this release is responsible
+	// for, then run the same migration production runs on boot.
+	dropColumnIfExists("md_documents", "deleted_at")
+	dropColumnIfExists("md_shares", "permission")
+	if err := database.Migrate(); err != nil {
+		panic(err)
+	}
+	for _, col := range []struct{ table, column string }{
+		{"md_documents", "deleted_at"},
+		{"md_shares", "permission"},
+	} {
+		if !columnExists(col.table, col.column) {
+			panic(fmt.Sprintf("startup migration did not add %s.%s", col.table, col.column))
+		}
+	}
+
 	store.Init()
 
 	cleanTestData()
@@ -107,6 +126,26 @@ func TestMain(m *testing.M) {
 	os.RemoveAll(testStorageRoot)
 
 	os.Exit(code)
+}
+
+func dropColumnIfExists(table, column string) {
+	if !columnExists(table, column) {
+		return
+	}
+	if _, err := database.DB.Exec(fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", table, column)); err != nil {
+		panic(err)
+	}
+}
+
+func columnExists(table, column string) bool {
+	var n int
+	if err := database.DB.QueryRow(
+		`SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?`,
+		table, column,
+	).Scan(&n); err != nil {
+		panic(err)
+	}
+	return n > 0
 }
 
 func cleanTestData() {
@@ -998,24 +1037,99 @@ func TestTrashAndRestore(t *testing.T) {
 	// 删除（进入回收站）
 	w := request("DELETE", teamPath("/documents/"+docID), nil, adminToken)
 	if w.Code != 200 {
-		t.Fatalf("delete failed: %d", w.Code)
+		t.Fatalf("delete failed: %d %s", w.Code, w.Body.String())
 	}
 
-	// 查看回收站
+	var status int
+	var deletedAt sql.NullTime
+	if err := database.DB.QueryRow(`SELECT status, deleted_at FROM md_documents WHERE id=?`, docID).Scan(&status, &deletedAt); err != nil {
+		t.Fatal(err)
+	}
+	if status != 0 || !deletedAt.Valid {
+		t.Fatalf("soft delete should set status=0 and deleted_at, got status=%d deleted_at valid=%v", status, deletedAt.Valid)
+	}
+
+	// 查看回收站：按删除时间列出，deleted_at 为空时退回 updated_at
 	w = request("GET", teamPath("/trash"), nil, adminToken)
 	if w.Code != 200 {
-		t.Errorf("list trash failed: %d", w.Code)
+		t.Fatalf("list trash failed: %d %s", w.Code, w.Body.String())
 	}
 	resp := parseJSON(t, w)
 	total := getFloat(resp["total"])
 	if total < 1 {
-		t.Errorf("should have at least 1 item in trash, got %v", total)
+		t.Fatalf("should have at least 1 item in trash, got %v", total)
+	}
+	found := false
+	for _, item := range resp["data"].([]interface{}) {
+		row := item.(map[string]interface{})
+		if getString(row["id"]) != docID {
+			continue
+		}
+		found = true
+		if getString(row["deleted_at"]) == "" {
+			t.Fatal("trash row missing deleted_at")
+		}
+	}
+	if !found {
+		t.Fatal("deleted document not in trash list")
 	}
 
-	// 恢复
+	// 旧数据 deleted_at 为空时列表仍可用，并按 updated_at 兜底
+	if _, err := database.DB.Exec(`UPDATE md_documents SET deleted_at=NULL WHERE id=?`, docID); err != nil {
+		t.Fatal(err)
+	}
+	w = request("GET", teamPath("/trash"), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("list trash with null deleted_at: %d %s", w.Code, w.Body.String())
+	}
+	resp = parseJSON(t, w)
+	found = false
+	for _, item := range resp["data"].([]interface{}) {
+		row := item.(map[string]interface{})
+		if getString(row["id"]) == docID {
+			found = true
+			if getString(row["deleted_at"]) == "" {
+				t.Fatal("null deleted_at should fall back to updated_at in the list")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("document with null deleted_at dropped out of trash")
+	}
+
+	// 启动迁移把已删除且 deleted_at 为空的行补上
+	if err := database.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.DB.QueryRow(`SELECT deleted_at FROM md_documents WHERE id=?`, docID).Scan(&deletedAt); err != nil {
+		t.Fatal(err)
+	}
+	if !deletedAt.Valid {
+		t.Fatal("backfill should set deleted_at from updated_at for status=0 rows")
+	}
+
+	// 恢复后清掉删除时间，文档重新可读
 	w = request("POST", teamPath("/trash/restore/"+docID), nil, adminToken)
 	if w.Code != 200 {
-		t.Errorf("restore from trash failed: %d", w.Code)
+		t.Fatalf("restore from trash failed: %d %s", w.Code, w.Body.String())
+	}
+	if err := database.DB.QueryRow(`SELECT status, deleted_at FROM md_documents WHERE id=?`, docID).Scan(&status, &deletedAt); err != nil {
+		t.Fatal(err)
+	}
+	if status != 1 || deletedAt.Valid {
+		t.Fatalf("restore should set status=1 and clear deleted_at, got status=%d valid=%v", status, deletedAt.Valid)
+	}
+	w = request("GET", teamPath("/documents/"+docID), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("restored document should be readable: %d %s", w.Code, w.Body.String())
+	}
+	w = request("GET", teamPath("/trash"), nil, adminToken)
+	resp = parseJSON(t, w)
+	for _, item := range resp["data"].([]interface{}) {
+		row := item.(map[string]interface{})
+		if getString(row["id"]) == docID {
+			t.Fatal("restored document still listed in trash")
+		}
 	}
 }
 
