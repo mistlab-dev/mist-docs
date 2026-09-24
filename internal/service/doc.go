@@ -335,7 +335,7 @@ func DeleteDocument(ctx context.Context, id string) error {
 
 	// Soft delete
 	_, err = database.DB.ExecContext(ctx,
-		`UPDATE md_documents SET status=0, updated_at=NOW() WHERE id=?`, id)
+		`UPDATE md_documents SET status=0, deleted_at=NOW(), updated_at=NOW() WHERE id=?`, id)
 	return err
 }
 
@@ -350,7 +350,7 @@ func RestoreDocument(ctx context.Context, id string) error {
 	}
 
 	_, err = database.DB.ExecContext(ctx,
-		`UPDATE md_documents SET status=1, updated_at=NOW() WHERE id=?`, id)
+		`UPDATE md_documents SET status=1, deleted_at=NULL, updated_at=NOW() WHERE id=?`, id)
 	return err
 }
 
@@ -471,7 +471,7 @@ func ListTrash(ctx context.Context, deptID string, page, pageSize int) ([]*model
 	offset := (page - 1) * pageSize
 	listSQL := `SELECT d.id, IFNULL(d.folder_id,''), d.department_id, d.title, d.type, d.file_size, d.version,
 	            IFNULL(d.created_by,''), IFNULL(d.updated_by,''), d.created_at, d.updated_at
-	            FROM md_documents d ` + where + " ORDER BY d.updated_at DESC LIMIT ? OFFSET ?"
+	            FROM md_documents d ` + where + " ORDER BY IFNULL(d.deleted_at, d.updated_at) DESC LIMIT ? OFFSET ?"
 	args = append(args, pageSize, offset)
 
 	rows, err := database.DB.QueryContext(ctx, listSQL, args...)
