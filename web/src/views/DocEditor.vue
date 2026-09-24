@@ -6,9 +6,10 @@
         <el-button @click="router.push('/docs')" text size="small">
           <el-icon><ArrowLeft /></el-icon> {{ t("docEditor.back") }}
         </el-button>
-        <el-input v-model="title" class="title-input" @blur="saveTitle" />
+        <el-input v-model="title" class="title-input" :disabled="!!doc && !canEdit" @blur="saveTitle" />
         <div class="doc-badges">
           <el-tag size="small" effect="plain" round>{{ doc?.type === 'sheet' ? t('common.sheet') : t('common.doc') }}</el-tag>
+          <el-tag v-if="doc && !canEdit" size="small" effect="plain" round type="warning">{{ t('docEditor.readOnly') }}</el-tag>
           <el-tag size="small" effect="plain" round type="info">v{{ doc?.version || 1 }}</el-tag>
           <el-tag v-if="collabUsers.length" size="small" effect="plain" round type="success">
             <svg class="tag-icon" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="8" r="3"/><circle cx="12" cy="8" r="3" opacity="0.5"/></svg>
@@ -26,15 +27,15 @@
         <span v-else-if="saveStatus === 'saved'" class="save-indicator saved">{{ t('docEditor.saved') }}</span>
         <span v-else-if="saveStatus === 'error'" class="save-indicator error">{{ t('docEditor.saveFailed') }}</span>
 
-        <el-button v-if="doc?.locked_by && doc?.locked_by !== currentUserId" size="small" type="warning" disabled>
+        <el-button v-if="canEdit && doc?.locked_by && doc?.locked_by !== currentUserId" size="small" type="warning" disabled>
           <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg>
           {{ t("docEditor.locked") }}
         </el-button>
-        <el-button v-else-if="doc?.locked_by === currentUserId" size="small" type="warning" @click="unlockDoc">
+        <el-button v-else-if="canEdit && doc?.locked_by === currentUserId" size="small" type="warning" @click="unlockDoc">
           <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2zm-2 4a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1z"/></svg>
           {{ t("docEditor.unlockBtn") }}
         </el-button>
-        <el-button v-else size="small" @click="lockDoc">
+        <el-button v-else-if="canEdit" size="small" @click="lockDoc">
           <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M5 8V6a5 5 0 0110 0v2h1a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1h1zm2-2a3 3 0 016 0v2H7V6z"/></svg>
           <span class="btn-label">{{ t('docEditor.lockBtn') }}</span>
         </el-button>
@@ -205,7 +206,20 @@
 
     <!-- 文档编辑器 -->
     <div v-if="doc?.type === 'doc' && editor" class="editor-body with-outline">
-      <editor-content :editor="editor as any" class="tiptap-editor" @click="handleEditorClick" />
+      <div ref="editorScrollEl" class="editor-scroll" @scroll="onEditorScroll">
+        <editor-content :editor="editor as any" class="tiptap-editor" @click="handleEditorClick" />
+        <div class="remote-cursors">
+          <div
+            v-for="c in cursorFlags"
+            :key="c.userId"
+            class="collab-cursor-flag"
+            :style="{ left: c.left + 'px', top: c.top + 'px' }"
+          >
+            <div class="flag-name" :style="{ background: c.color }">{{ c.userName }}</div>
+            <div class="flag-line" :style="{ background: c.color }"></div>
+          </div>
+        </div>
+      </div>
       <!-- 大纲导航 -->
       <div class="outline-panel" :class="{ collapsed: outlineCollapsed }">
         <div class="outline-header" @click="outlineCollapsed = !outlineCollapsed">
@@ -226,7 +240,7 @@
 
     <!-- 表格编辑器 -->
     <div v-else-if="doc?.type === 'sheet'" class="editor-body sheet-body">
-      <SheetEditor ref="sheetRef" :initial-data="sheetData" @change="onSheetChange" />
+      <SheetEditor ref="sheetRef" :initial-data="sheetData" :readonly="!canEdit" @change="onSheetChange" />
     </div>
 
     <!-- 水印层 -->
@@ -244,7 +258,7 @@
           placement="top"
         >
           <div style="display:flex;align-items:center;gap:8px">
-            <span> {{ t('docEditor.versionLabel', [v.version]) }} v.version }}</span>
+            <span>{{ t('docEditor.versionLabel', [v.version]) }}</span>
             <span v-if="v.version === doc?.version" style="color:#409eff;font-size:12px">{{ t('common.current') }}</span>
             <el-button v-if="v.version !== doc?.version" size="small" text type="primary" @click="previewVersion(v.version)">{{ t('docEditor.previewBtn') }}</el-button>
             <el-button v-if="v.version !== doc?.version" size="small" text type="primary" @click="openDiff(v.version)">{{ t('docEditor.diffBtn') }}</el-button>
@@ -550,6 +564,7 @@
         </el-autocomplete>
         <el-select v-model="newRole" style="width:120px">
           <el-option :label="t('docEditor.sharePermViewer')" value="viewer" />
+          <el-option :label="t('docEditor.sharePermCommenter')" value="commenter" />
           <el-option :label="t('docEditor.sharePermEditor')" value="editor" />
         </el-select>
         <el-button type="primary" @click="addCollaborator" :disabled="!selectedTarget">{{ t('docEditor.addPeopleBtn') }}</el-button>
@@ -583,6 +598,7 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="viewer" :class="{ active: c.role === 'viewer' }">{{ t('docEditor.sharePermViewer') }}</el-dropdown-item>
+                  <el-dropdown-item command="commenter" :class="{ active: c.role === 'commenter' }">{{ t('docEditor.sharePermCommenter') }}</el-dropdown-item>
                   <el-dropdown-item command="editor" :class="{ active: c.role === 'editor' }">{{ t('docEditor.sharePermEditor') }}</el-dropdown-item>
                   <el-dropdown-item command="admin" :class="{ active: c.role === 'admin' }">{{ t('docEditor.sharePermAdmin') }}</el-dropdown-item>
                   <el-dropdown-item divided command="remove" style="color:#f56c6c">{{ t('common.remove') }}</el-dropdown-item>
@@ -624,7 +640,7 @@
             <span class="share-link-token"><svg style="width:14px;height:14px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M12.586 4.586a2 2 0 112.828 2.828l-3.879 3.879a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3.879-3.879a4 4 0 00-5.656-5.656L8.12 5.464a1 1 0 001.414 1.414l3.052-3.292z"/></svg> {{ s.token }}</span>
             <span v-if="s.has_password" class="share-link-badge"><svg style="width:14px;height:14px;vertical-align:-2px" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg></span>
             <span v-if="s.expired" class="share-link-badge expired">{{ t('docEditor.shareExpired') }}</span>
-            <span class="share-link-count">{{ s.access_count }}  {{ t('docEditor.shareAccessCount', [s.access_count]) }}</span>
+            <span class="share-link-count">{{ t('docEditor.shareAccessCount', [s.access_count || 0]) }}</span>
             <el-button link type="danger" size="small" @click="deleteShare(s.id)">{{ t('common.delete') }}</el-button>
           </div>
         </div>
@@ -637,7 +653,7 @@
 
     <!-- 评论面板 -->
     <el-drawer v-model="showComments" :title="t('docEditor.commentsTitle')" size="400px">
-      <div class="comment-input">
+      <div v-if="canComment" class="comment-input">
         <div style="position:relative">
           <el-input v-model="newComment" type="textarea" :rows="3" :placeholder="t('docEditor.commentPlaceholder')" @input="onCommentInput" />
           <div v-if="mentionList.length" class="mention-dropdown">
@@ -648,6 +664,7 @@
         </div>
         <el-button type="primary" size="small" @click="submitComment" :disabled="!newComment.trim()" style="margin-top:8px">{{ t('docEditor.sendBtn') }}</el-button>
       </div>
+      <div v-else class="no-data">{{ t('docEditor.readOnly') }}</div>
       <div class="comment-list">
         <div v-for="c in comments" :key="c.id" class="comment-item">
           <div class="comment-header">
@@ -656,7 +673,7 @@
           </div>
           <div class="comment-content">{{ c.content }}</div>
           <div class="comment-actions">
-            <el-button link size="small" @click="replyTo(c)">{{ t('docEditor.replyBtn') }}</el-button>
+            <el-button v-if="canComment" link size="small" @click="replyTo(c)">{{ t('docEditor.replyBtn') }}</el-button>
             <el-button v-if="c.user_id === currentUserId" link type="danger" size="small" @click="deleteComment(c.id)">{{ t('common.delete') }}</el-button>
           </div>
           <!-- 回复 -->
@@ -738,7 +755,7 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Collaboration from '@tiptap/extension-collaboration'
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
+import { ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { common, createLowlight } from 'lowlight'
 import 'highlight.js/styles/github-dark.min.css'
 import * as Y from 'yjs'
@@ -772,6 +789,15 @@ let dataLoaded = false // 防止加载数据前自动保存空内容
 const showShareDialog = ref(false)
 const _watermarkToggle = ref(false)
 const isAdmin = computed(() => auth.isAdmin)
+const canEdit = computed(() => {
+  const p = doc.value?.permission as string | undefined
+  return p === 'write' || p === 'admin'
+})
+const canComment = computed(() => {
+  const p = doc.value?.permission as string | undefined
+  return p === 'comment' || p === 'write' || p === 'admin'
+})
+const rolePerm: Record<string, string> = { viewer: 'read', commenter: 'comment', editor: 'write', admin: 'admin' }
 // 普通用户强制水印，管理员可手动开关
 const watermarkOn = computed(() => !isAdmin.value || _watermarkToggle.value)
 function toggleWatermark() { _watermarkToggle.value = !_watermarkToggle.value }
@@ -798,8 +824,12 @@ const allUsers = ref<any[]>([])
 async function loadMentionUsers() {
   if (allUsers.value.length) return
   try {
-    const { data } = await teamApi.get('/search-targets', { params: { q: '' } })
-    allUsers.value = data.data || []
+    const { data } = await teamApi.get('/members')
+    allUsers.value = (data.data || []).map((u: any) => ({
+      id: u.id,
+      name: u.display_name || u.username,
+      username: u.username || u.email || '',
+    }))
   } catch {}
 }
 
@@ -842,8 +872,9 @@ function updateOutline() {
 
 // 滚动时高亮当前标题
 function onEditorScroll() {
+  refreshCursors()
   if (!outlineItems.value.length) return
-  const container = document.querySelector('.tiptap-editor')
+  const container = editorScrollEl.value || document.querySelector('.editor-scroll')
   if (!container) return
   const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6')
   let activeId = ''
@@ -871,6 +902,36 @@ const currentUser = ref('')
 const collabStatus = ref<'connecting' | 'connected' | 'disconnected'>('disconnected')
 const collabUsers = ref<CollabUser[]>([])
 const remoteCursors = ref<any[]>([])
+const editorScrollEl = ref<HTMLElement | null>(null)
+const cursorFlags = ref<{ userId: string; userName: string; color: string; left: number; top: number }[]>([])
+
+function refreshCursors() {
+  const ed = editor.value
+  const root = editorScrollEl.value
+  if (!ed || !root) {
+    cursorFlags.value = []
+    return
+  }
+  const box = root.getBoundingClientRect()
+  const size = ed.state.doc.content.size
+  const next: { userId: string; userName: string; color: string; left: number; top: number }[] = []
+  for (const c of remoteCursors.value) {
+    const raw = c?.cursor?.from
+    if (typeof raw !== 'number' || !c.userId) continue
+    const pos = Math.min(Math.max(raw, 0), size)
+    try {
+      const coords = ed.view.coordsAtPos(pos)
+      next.push({
+        userId: c.userId,
+        userName: c.userName || t('docEditor.collabAnonymous'),
+        color: c.color || '#409eff',
+        left: coords.left - box.left + root.scrollLeft,
+        top: coords.top - box.top + root.scrollTop,
+      })
+    } catch { /* position left the document */ }
+  }
+  cursorFlags.value = next
+}
 let ydoc: Y.Doc | null = null
 let wsProvider: MistWSProvider | null = null
 
@@ -1295,6 +1356,7 @@ function initEditor(initialContent: string) {
           } else {
             remoteCursors.value.push(data)
           }
+          nextTick(refreshCursors)
         }
       }
       wsProvider.onClients = (users) => { collabUsers.value = users.filter((u: CollabUser) => u.id !== currentUserId.value) }
@@ -1304,6 +1366,7 @@ function initEditor(initialContent: string) {
       const userColorIdx = currentUserId.value.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % userColors.length
 
       editor.value = new Editor({
+        editable: canEdit.value,
         extensions: [
           StarterKit.configure({
             codeBlock: false,
@@ -1321,14 +1384,6 @@ function initEditor(initialContent: string) {
           CodeBlockLowlight.configure({ lowlight }),
           Collaboration.configure({
             document: ydoc,
-          }),
-          CollaborationCursor.configure({
-            provider: { awareness: null } as any,
-            user: {
-              name: auth.user?.display_name || auth.user?.username || t('docEditor.collabAnonymous'),
-              color: userColors[userColorIdx],
-              fallbackColor: userColors[userColorIdx],
-            },
           }),
         ],
         editorProps: {
@@ -1387,9 +1442,9 @@ function initEditor(initialContent: string) {
           const yXmlFragment = ydoc!.getXmlFragment('default')
           // Check if Yjs is truly empty — just check length
           if (yXmlFragment.length === 0 && initialContent && initialContent !== '{}') {
-            console.log('[Collab] Yjs empty after sync, seeding with HTML content')
             editor.value?.commands.setContent(initialContent)
           }
+          updateOutline()
           wsProvider!.onSynced = null
         })
       }
@@ -1440,6 +1495,7 @@ function initEditor(initialContent: string) {
 
 function createLocalEditor(content: string) {
   editor.value = new Editor({
+    editable: canEdit.value,
     content: content || '',
     extensions: [
       StarterKit.configure({ codeBlock: false }),
@@ -1566,13 +1622,13 @@ function confirmCodeLang() {
 
 // 保存
 function scheduleAutoSave() {
-  if (!dataLoaded) return // 数据未加载完不保存
+  if (!dataLoaded || !canEdit.value) return // 数据未加载完，或只有查看权限，不保存
   clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(doSave, 1500)
 }
 
 async function doSave() {
-  if (!dataLoaded) { console.warn('[SAVE] blocked: dataLoaded=false'); return }
+  if (!dataLoaded || !canEdit.value) return
   let content = ''
   if (doc.value?.type === 'sheet') {
     const refVal = sheetRef.value
@@ -1605,7 +1661,7 @@ async function manualSave() {
 }
 
 async function saveTitle() {
-  if (!title.value || title.value === doc.value?.title) return
+  if (!canEdit.value || !title.value || title.value === doc.value?.title) return
   await teamApi.put(`/documents/${docId}`, { title: title.value })
   doc.value.title = title.value
 }
@@ -1672,9 +1728,14 @@ function selectRestoreVersion(ver: number) {
 function onSheetChange() { console.log('[SAVE] onSheetChange triggered, dataLoaded:', dataLoaded); scheduleAutoSave() }
 
 // === 分享 & 协作 ===
-const permRoleMap: any = { read: 'viewer', write: 'editor', admin: t('docEditor.permRoleMap.admin') }
 function roleLabel(role: string) {
-  const m: any = { viewer: t('docEditor.permRoleMap.viewer'), editor: t('docEditor.permRoleMap.editor'), admin: t('docEditor.permRoleMap.admin'), owner: t('docEditor.permRoleMap.owner') }
+  const m: any = {
+    viewer: t('docEditor.permRoleMap.viewer'),
+    commenter: t('docEditor.permRoleMap.commenter'),
+    editor: t('docEditor.permRoleMap.editor'),
+    admin: t('docEditor.permRoleMap.admin'),
+    owner: t('docEditor.permRoleMap.owner'),
+  }
   return m[role] || role
 }
 
@@ -1707,15 +1768,20 @@ function onTargetSelect(item: any) {
 
 async function addCollaborator() {
   if (!selectedTarget.value) return
-  await teamApi.post(`/documents/${docId}/collaborators`, {
-    target_type: selectedTarget.value.type,
-    target_id: selectedTarget.value.id,
-    role: newRole.value,
-  })
-  ElMessage.success(t('docEditor.collabAdded'))
-  selectedTarget.value = null
-  targetSearch.value = ''
-  loadCollaborators()
+  try {
+    await teamApi.post(`/documents/${docId}/collaborators`, {
+      target_type: selectedTarget.value.type || 'user',
+      target_id: selectedTarget.value.id,
+      role: newRole.value,
+      permission: rolePerm[newRole.value] || 'read',
+    })
+    ElMessage.success(t('docEditor.collabAdded'))
+    selectedTarget.value = null
+    targetSearch.value = ''
+    loadCollaborators()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || t('common.failed'))
+  }
 }
 
 async function updateCollaborator(id: string, role: string) {
@@ -1724,7 +1790,7 @@ async function updateCollaborator(id: string, role: string) {
     await teamApi.delete(`/collaborators/${id}`)
     ElMessage.success(t('docEditor.collabRemoved'))
   } else {
-    await teamApi.put(`/collaborators/${id}`, { role })
+    await teamApi.put(`/collaborators/${id}`, { role, permission: rolePerm[role] || role })
     ElMessage.success(t('docEditor.collabUpdated'))
   }
   loadCollaborators()
@@ -1890,10 +1956,6 @@ onMounted(async () => {
     initEditor(content === '{}' ? '' : content)
   }
   // Attach scroll listener for outline tracking
-  nextTick(() => {
-    const container = document.querySelector('.tiptap-editor')
-    if (container) container.addEventListener('scroll', onEditorScroll, { passive: true })
-  })
 })
 
 onUnmounted(() => {
@@ -1904,8 +1966,6 @@ onUnmounted(() => {
   ydoc?.destroy()
   editor.value?.destroy()
   document.removeEventListener('keydown', handleGlobalKeydown)
-  const container = document.querySelector('.tiptap-editor')
-  if (container) container.removeEventListener('scroll', onEditorScroll)
 })
 
 function handleGlobalKeydown(e: KeyboardEvent) {
@@ -1992,8 +2052,10 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .editor-body { flex: 1; display: flex; overflow: hidden; }
 .editor-body.with-outline { gap: 0; }
 .sheet-body { flex: 1; }
+.editor-scroll { flex: 1; overflow-y: auto; position: relative; }
 
-.tiptap-editor { flex: 1; padding: 24px 32px; overflow-y: auto; }
+.tiptap-editor { padding: 24px 32px; }
+.remote-cursors { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .tiptap-editor :deep(.tiptap) { outline: none; max-width: 800px; margin: 0 auto; min-height: 300px; }
 .tiptap-editor :deep(.tiptap p.is-editor-empty:first-child::before) {
   content: attr(data-placeholder); color: #adb5bd; pointer-events: none;

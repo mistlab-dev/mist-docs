@@ -1,5 +1,5 @@
 <template>
-  <div class="sheet-container" tabindex="0" ref="containerRef" @keydown="onGlobalKeydown">
+  <div class="sheet-container" :class="{ 'sheet-readonly': readonly }" tabindex="0" ref="containerRef" @keydown="onGlobalKeydown">
     <!-- 工具栏（Excel Ribbon 布局） -->
     <div class="ribbon">
       <!-- 第一行：公式栏 | 撤销 | 字体 | 对齐 -->
@@ -692,7 +692,7 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 
 
-const props = defineProps<{ initialData?: string }>()
+const props = defineProps<{ initialData?: string; readonly?: boolean }>()
 const emit = defineEmits<{ (e: 'change', data: string): void }>()
 
 interface CellMeta {
@@ -1138,6 +1138,7 @@ function moveNext() { if (!selection.value) return; const nc = selection.value.s
 
 // Editing
 function startEdit(r: number, c: number, initialChar?: string) {
+  if (props.readonly) return
   if (editingCell.value?.row === r && editingCell.value?.col === c) return
   if (sheet.value.protected && getCellMeta(r, c).locked) return
   finishEdit(); editingCell.value = { row: r, col: c }
@@ -2418,7 +2419,7 @@ const _origGetCellTextStyle = getCellTextStyle
 // We'll handle indent in the template display directly
 
 // Emit
-function emitChange() { if (!isLoadingData) emit('change', getData()) }
+function emitChange() { if (props.readonly || isLoadingData) return; emit('change', getData()) }
 function getData(): string {
   // 序列化时 Set → Array
   const data = sheets.value.map(s => ({
@@ -2450,6 +2451,7 @@ defineExpose({ getData })
 <style scoped>
 /* ── Layout ── */
 .sheet-container { display: flex; flex-direction: column; height: 100%; background: #fff; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; color: #333; outline: none; }
+.sheet-readonly .ribbon { pointer-events: none; opacity: 0.55; }
 
 /* ── Formula (inside ribbon) ── */
 .ribbon-formula-section { display: flex; flex-direction: column; align-items: center; padding: 2px 6px 0; min-width: 0; }

@@ -184,9 +184,9 @@ func GetDocumentByID(ctx context.Context, id string) (*model.Document, error) {
 	var folderID sql.NullString
 	var lockedAt sql.NullTime
 	err := database.DB.QueryRowContext(ctx,
-		`SELECT id, folder_id, department_id, title, type, file_path, file_size, version, locked_by, locked_at, status, created_by, updated_by, created_at, updated_at
+		`SELECT id, folder_id, department_id, IFNULL(team_id,''), title, type, file_path, file_size, version, locked_by, locked_at, status, created_by, updated_by, created_at, updated_at
 		 FROM md_documents WHERE id = ?`, id,
-	).Scan(&doc.ID, &folderID, &doc.DepartmentID, &doc.Title, &doc.Type, &doc.FilePath, &doc.FileSize,
+	).Scan(&doc.ID, &folderID, &doc.DepartmentID, &doc.TeamID, &doc.Title, &doc.Type, &doc.FilePath, &doc.FileSize,
 		&doc.Version, &doc.LockedBy, &lockedAt, &doc.Status, &doc.CreatedBy, &doc.UpdatedBy, &doc.CreatedAt, &doc.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -197,7 +197,9 @@ func GetDocumentByID(ctx context.Context, id string) (*model.Document, error) {
 }
 
 func nt(t sql.NullTime) *time.Time {
-	if t.Valid { return &t.Time }
+	if t.Valid {
+		return &t.Time
+	}
 	return nil
 }
 
@@ -491,6 +493,12 @@ func ListTrash(ctx context.Context, deptID string, page, pageSize int) ([]*model
 }
 
 // ==================== helpers ====================
+
+// PruneDocumentVersions drops version files beyond the configured keep count.
+// Called after a team save so history does not grow without a bound.
+func PruneDocumentVersions(docID string) {
+	cleanOldVersions(docID, "")
+}
 
 func cleanOldVersions(docID, deptID string) {
 	keep := store.VersionKeep()

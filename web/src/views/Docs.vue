@@ -125,6 +125,11 @@
           <el-skeleton :rows="5" animated />
         </div>
 
+        <div v-else-if="loadError" class="empty-state">
+          <p>{{ t('docs.loadFailed') }}</p>
+          <el-button type="primary" @click="reloadCurrent">{{ t('common.refresh') }}</el-button>
+        </div>
+
         <!-- 空状态 -->
         <div v-else-if="!docs.length" class="empty-state">
           <div class="empty-icon"><svg viewBox="0 0 20 20" fill="currentColor" width="48" height="48"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg></div>
@@ -392,6 +397,7 @@ const sidebarTags = ref<any[]>([])
 const currentFolder = ref<string | null>(null)
 const viewMode = ref('all')
 const loading = ref(false)
+const loadError = ref(false)
 const search = ref('')
 const searchMode = ref(false)
 const searchTagId = ref('')
@@ -508,28 +514,46 @@ async function loadTree() {
 
 async function loadDocs(folderId?: string) {
   loading.value = true
+  loadError.value = false
   try {
     const params: any = {}
     if (folderId) params.folder_id = folderId
     const { data } = await teamApi.get('/documents', { params })
     setDocs(data.data || [])
+  } catch {
+    loadError.value = true
+    docs.value = []
   } finally { loading.value = false }
 }
 
 async function loadRecent() {
   loading.value = true
+  loadError.value = false
   try {
     const { data } = await teamApi.get('/documents/recent')
     setDocs(data.data || [])
+  } catch {
+    loadError.value = true
+    docs.value = []
   } finally { loading.value = false }
 }
 
 async function loadFavorites() {
   loading.value = true
+  loadError.value = false
   try {
     const { data } = await teamApi.get('/favorites')
     setDocs(data.data || [])
+  } catch {
+    loadError.value = true
+    docs.value = []
   } finally { loading.value = false }
+}
+
+function reloadCurrent() {
+  if (viewMode.value === 'recent') loadRecent()
+  else if (viewMode.value === 'favorites') loadFavorites()
+  else loadDocs(currentFolder.value || undefined)
 }
 
 async function loadFavoriteIds() {

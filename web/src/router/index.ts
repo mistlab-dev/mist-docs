@@ -30,6 +30,7 @@ const routes = [
       { path: 'admin/audits', name: 'Audits', component: () => import('@/views/admin/Audits.vue'), meta: { admin: true } },
       { path: 'admin/storage', name: 'Storage', component: () => import('@/views/admin/Storage.vue'), meta: { admin: true } },
       { path: 'admin/permissions', name: 'Permissions', component: () => import('@/views/admin/Permissions.vue'), meta: { admin: true } },
+      { path: 'admin/webhooks', name: 'Webhooks', component: () => import('@/views/admin/Webhooks.vue'), meta: { admin: true } },
     ],
   },
   {

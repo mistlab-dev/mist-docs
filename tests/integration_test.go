@@ -113,6 +113,11 @@ func cleanTestData() {
 	db := database.DB
 	ctx := context.Background()
 
+	// Webhook rows from earlier runs use UUID ids, so the test-% filter misses them
+	// and every later mutation keeps POSTing the leftovers.
+	db.ExecContext(ctx, "DELETE l FROM md_webhook_logs l INNER JOIN md_webhooks w ON l.webhook_id = w.id WHERE w.team_id LIKE 'test-%'")
+	db.ExecContext(ctx, "DELETE FROM md_webhooks WHERE team_id LIKE 'test-%'")
+
 	tables := []string{
 		"md_webhook_logs", "md_webhooks",
 		"md_notifications", "md_comments",
@@ -303,6 +308,7 @@ func buildRouter() *gin.Engine {
 
 				// Search Targets
 				teams.GET("/search-targets", handler.TeamSearchTargets)
+				teams.GET("/members", handler.TeamListMembers)
 
 				// Collaborator 管理
 				teams.PUT("/collaborators/:id", handler.TeamUpdateCollaborator)
@@ -2265,5 +2271,222 @@ func TestShareWithPassword(t *testing.T) {
 	w = request("GET", "/api/s/"+token, nil, "")
 	if w.Code == 200 {
 		t.Error("access without password should be denied")
+	}
+}
+
+func TestRenameKeepsFolder(t *testing.T) {
+	w := request("POST", teamPath("/folders"), map[string]string{"name": "保留文件夹"}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("create folder: %d %s", w.Code, w.Body.String())
+	}
+	folderID := getString(parseJSON(t, w)["data"].(map[string]interface{})["id"])
+
+	w = request("POST", teamPath("/documents"), map[string]interface{}{
+		"title": "原标题", "type": "doc", "folder_id": folderID, "content": "<p>x</p>",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("create doc: %d %s", w.Code, w.Body.String())
+	}
+	docID := getString(parseJSON(t, w)["data"].(map[string]interface{})["id"])
+
+	w = request("PUT", teamPath("/documents/"+docID), map[string]string{"title": "新标题"}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("rename: %d %s", w.Code, w.Body.String())
+	}
+	w = request("GET", teamPath("/documents/"+docID), nil, adminToken)
+	data := parseJSON(t, w)["data"].(map[string]interface{})
+	if getString(data["title"]) != "新标题" {
+		t.Errorf("title = %v", data["title"])
+	}
+	if getString(data["folder_id"]) != folderID {
+		t.Errorf("rename cleared folder_id: %v", data["folder_id"])
+	}
+}
+
+func TestMoveKeepsTitle(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "移动前标题")
+	w := request("POST", teamPath("/folders"), map[string]string{"name": "目标文件夹"}, adminToken)
+	folderID := getString(parseJSON(t, w)["data"].(map[string]interface{})["id"])
+
+	w = request("PUT", teamPath("/documents/"+docID), map[string]string{"folder_id": folderID}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("move: %d %s", w.Code, w.Body.String())
+	}
+	w = request("GET", teamPath("/documents/"+docID), nil, adminToken)
+	data := parseJSON(t, w)["data"].(map[string]interface{})
+	if getString(data["title"]) != "移动前标题" {
+		t.Errorf("move cleared title: %v", data["title"])
+	}
+	if getString(data["folder_id"]) != folderID {
+		t.Errorf("folder_id = %v", data["folder_id"])
+	}
+}
+
+func TestCrossTeamCannotReadDocument(t *testing.T) {
+	otherTeam := "test-team-beta"
+	ctx := context.Background()
+	if _, err := database.DB.ExecContext(ctx, `INSERT INTO teams (id, name, description) VALUES (?, ?, ?)`, otherTeam, "另一团队", ""); err != nil {
+		t.Fatalf("insert team: %v", err)
+	}
+	t.Cleanup(func() {
+		database.DB.ExecContext(ctx, `DELETE FROM md_documents WHERE team_id=?`, otherTeam)
+		database.DB.ExecContext(ctx, `DELETE FROM team_members WHERE team_id=?`, otherTeam)
+		database.DB.ExecContext(ctx, `DELETE FROM teams WHERE id=?`, otherTeam)
+	})
+	database.DB.ExecContext(ctx, `INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'admin')`, otherTeam, adminID)
+
+	w := request("POST", "/api/teams/"+otherTeam+"/documents", map[string]interface{}{
+		"title": "别人的文档", "type": "doc", "content": "<p>secret</p>",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("create other doc: %d %s", w.Code, w.Body.String())
+	}
+	docID := getString(parseJSON(t, w)["data"].(map[string]interface{})["id"])
+
+	w = request("GET", teamPath("/documents/"+docID+"/content"), nil, adminToken)
+	if w.Code != 404 {
+		t.Fatalf("cross-team read should be 404, got %d %s", w.Code, w.Body.String())
+	}
+	w = request("PUT", teamPath("/documents/"+docID+"/content"), map[string]string{"content": "<p>pwn</p>"}, adminToken)
+	if w.Code != 404 {
+		t.Fatalf("cross-team write should be 404, got %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAddCollaboratorByRole(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "角色字段协作者")
+	w := request("POST", teamPath("/documents/"+docID+"/collaborators"), map[string]interface{}{
+		"target_id": editorID,
+		"role":      "viewer",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("add by role: %d %s", w.Code, w.Body.String())
+	}
+
+	w = request("GET", teamPath("/documents/"+docID+"/collaborators"), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("list collabs: %d %s", w.Code, w.Body.String())
+	}
+	found := false
+	for _, item := range parseJSON(t, w)["data"].([]interface{}) {
+		row := item.(map[string]interface{})
+		if getString(row["target_id"]) != editorID {
+			continue
+		}
+		found = true
+		if getString(row["role"]) != "viewer" || getString(row["permission"]) != "read" {
+			t.Errorf("collab fields: %#v", row)
+		}
+		if getString(row["target_name"]) == "" {
+			t.Error("target_name should be filled")
+		}
+	}
+	if !found {
+		t.Fatal("editor collaborator missing")
+	}
+
+	w = request("PUT", teamPath("/documents/"+docID+"/content"), map[string]string{"content": "<p>no</p>"}, editorToken)
+	if w.Code != 403 {
+		t.Fatalf("explicit viewer should not save, got %d %s", w.Code, w.Body.String())
+	}
+	w = request("GET", teamPath("/documents/"+docID+"/content"), nil, editorToken)
+	if w.Code != 200 {
+		t.Fatalf("explicit viewer should still read, got %d", w.Code)
+	}
+	perm := getString(parseJSON(t, w)["data"].(map[string]interface{})["permission"])
+	if perm != "read" {
+		t.Errorf("content permission = %s", perm)
+	}
+}
+
+func TestListPermissionsByType(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "按类型列出的权限")
+	w := request("POST", teamPath("/permissions"), map[string]interface{}{
+		"resource_type": "document",
+		"resource_id":   docID,
+		"target_type":   "user",
+		"target_id":     viewerID,
+		"permission":    "comment",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("set comment permission: %d %s", w.Code, w.Body.String())
+	}
+	w = request("GET", teamPath("/permissions?resource_type=document"), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("list by type: %d %s", w.Code, w.Body.String())
+	}
+	found := false
+	for _, item := range parseJSON(t, w)["data"].([]interface{}) {
+		row := item.(map[string]interface{})
+		if getString(row["resource_id"]) != docID {
+			continue
+		}
+		found = true
+		if getString(row["resource_name"]) == "" || getString(row["user_name"]) == "" {
+			t.Errorf("names missing: %#v", row)
+		}
+		if getString(row["permission"]) != "comment" {
+			t.Errorf("permission = %v", row["permission"])
+		}
+	}
+	if !found {
+		t.Fatal("permission for the new document was not listed")
+	}
+
+	w = request("POST", teamPath("/documents/"+docID+"/comments"), map[string]string{"content": "只能评论"}, viewerToken)
+	if w.Code != 200 {
+		t.Fatalf("commenter should comment, got %d %s", w.Code, w.Body.String())
+	}
+	w = request("PUT", teamPath("/documents/"+docID+"/content"), map[string]string{"content": "<p>no</p>"}, viewerToken)
+	if w.Code != 403 {
+		t.Fatalf("commenter should not edit, got %d", w.Code)
+	}
+}
+
+func TestListMembers(t *testing.T) {
+	w := request("GET", teamPath("/members"), nil, editorToken)
+	if w.Code != 200 {
+		t.Fatalf("list members: %d %s", w.Code, w.Body.String())
+	}
+	found := false
+	for _, item := range parseJSON(t, w)["data"].([]interface{}) {
+		row := item.(map[string]interface{})
+		if getString(row["id"]) == viewerID && getString(row["display_name"]) != "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("viewer missing from team members")
+	}
+}
+
+func TestAuditActionFilter(t *testing.T) {
+	createTestDoc(t, adminToken, "审计筛选文档")
+	w := request("GET", teamPath("/audits?action=create_doc"), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("filtered audits: %d %s", w.Code, w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	if getFloat(resp["total"]) < 1 {
+		t.Fatalf("create_doc filter total = %v", resp["total"])
+	}
+	for _, item := range resp["data"].([]interface{}) {
+		row := item.(map[string]interface{})
+		if getString(row["action"]) != "create_doc" {
+			t.Errorf("unexpected action %v", row["action"])
+		}
+	}
+	w = request("GET", teamPath("/audits?action=not_a_real_action"), nil, adminToken)
+	if getFloat(parseJSON(t, w)["total"]) != 0 {
+		t.Fatalf("unknown action should be empty: %s", w.Body.String())
+	}
+}
+
+func TestWebhookRejectsBadURL(t *testing.T) {
+	w := request("POST", teamPath("/webhooks"), map[string]interface{}{
+		"name": "坏地址", "url": "javascript:alert(1)",
+	}, adminToken)
+	if w.Code != 400 {
+		t.Fatalf("bad webhook url should be 400, got %d %s", w.Code, w.Body.String())
 	}
 }

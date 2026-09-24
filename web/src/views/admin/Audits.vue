@@ -11,11 +11,17 @@
     <div class="filter-bar">
       <div class="filter-left">
         <el-select v-model="filter.action" clearable :placeholder="t('admin.audits.actionType')" size="default" class="filter-select">
-          <el-option :label="t('admin.audits.login')" value="login" />
           <el-option :label="t('admin.audits.create')" value="create_doc" />
-          <el-option :label="t('admin.audits.editAction')" value="edit" />
-          <el-option :label="t('admin.audits.delete')" value="delete" />
+          <el-option :label="t('admin.audits.editAction')" value="edit_doc" />
+          <el-option :label="t('admin.audits.delete')" value="delete_doc" />
+          <el-option :label="t('admin.audits.view')" value="view" />
+          <el-option :label="t('admin.audits.move')" value="move" />
+          <el-option :label="t('admin.audits.restore')" value="restore_doc" />
+          <el-option :label="t('admin.audits.exportAction')" value="export" />
+          <el-option :label="t('admin.audits.share')" value="create_share" />
+          <el-option :label="t('admin.audits.comment')" value="create_comment" />
           <el-option :label="t('admin.audits.permissionChange')" value="set_permission" />
+          <el-option :label="t('admin.audits.removePermission')" value="remove_permission" />
         </el-select>
         <el-input v-model="filter.user_name" clearable :placeholder="t('admin.audits.userName')" size="default" class="filter-user" />
         <el-date-picker v-model="filter.start_date" type="date" value-format="YYYY-MM-DD" :placeholder="t('admin.audits.startDate')" size="default" class="filter-date" />
@@ -87,13 +93,14 @@
     <div class="pagination-wrap">
       <el-pagination
         v-model:current-page="page"
-        :page-size="pageSize"
+        v-model:page-size="pageSize"
         :total="total"
         layout="total, sizes, prev, pager, next"
         :page-sizes="[20, 50, 100]"
         background
         small
         @current-change="load"
+        @size-change="load"
       />
     </div>
 
@@ -112,13 +119,27 @@ import teamApi from '@/utils/team-api'
 
 const { t } = useI18n()
 
-const actionMap: any = { login: t('admin.audits.login'), logout: t('admin.audits.logout'), create_doc: t('admin.audits.create'), edit: t('admin.audits.editAction'), delete: t('admin.audits.delete'), view: t('admin.audits.view'), set_permission: t('admin.audits.permissionChange') }
-const actionColor: any = { login: 'success', logout: 'info', create_doc: 'primary', edit: 'warning', delete: 'danger', set_permission: 'warning' }
+const actionMap: any = {
+  login: t('admin.audits.login'), logout: t('admin.audits.logout'),
+  create_doc: t('admin.audits.create'), edit_doc: t('admin.audits.editAction'), edit: t('admin.audits.editAction'),
+  delete_doc: t('admin.audits.delete'), delete: t('admin.audits.delete'),
+  view: t('admin.audits.view'), move: t('admin.audits.move'),
+  restore_doc: t('admin.audits.restore'), restore: t('admin.audits.restore'),
+  export: t('admin.audits.exportAction'), create_share: t('admin.audits.share'),
+  create_comment: t('admin.audits.comment'), set_permission: t('admin.audits.permissionChange'),
+  remove_permission: t('admin.audits.removePermission'),
+}
+const actionColor: any = {
+  login: 'success', logout: 'info', create_doc: 'primary',
+  edit_doc: 'warning', edit: 'warning', delete_doc: 'danger', delete: 'danger',
+  view: 'info', move: '', restore_doc: 'success', export: 'info',
+  set_permission: 'warning', remove_permission: 'danger',
+}
 const resourceMap: any = { document: t('common.doc'), folder: t('common.folder'), user: t('common.user'), department: t('common.department') }
 
 const audits = ref<any[]>([])
 const page = ref(1)
-const pageSize = 20
+const pageSize = ref(20)
 const total = ref(0)
 const filter = ref({ action: '', user_name: '', start_date: '', end_date: '' })
 const showDetailDialog = ref(false)
@@ -136,10 +157,10 @@ function formatDetail(raw: string) {
 }
 
 async function load() {
-  const params = { page: page.value, page_size: pageSize, ...filter.value }
+  const params = { page: page.value, page_size: pageSize.value, ...filter.value }
   const { data } = await teamApi.get('/audits', { params })
   audits.value = data.data || []
-  total.value = audits.value.length < pageSize ? (page.value - 1) * pageSize + audits.value.length : page.value * pageSize + 1
+  total.value = typeof data.total === 'number' ? data.total : audits.value.length
 }
 
 async function exportCSV() {

@@ -2,12 +2,14 @@ package handler
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -133,6 +135,11 @@ func UpdateTeamFolder(c *gin.Context) {
 	}
 
 	id := c.Param("id")
+	teamID := getTeamID(c)
+	if !folderInTeam(teamID, id) {
+		denyNotFound(c, "文件夹不存在")
+		return
+	}
 	var req struct {
 		Name      string `json:"name"`
 		ParentID  string `json:"parent_id"`
@@ -142,10 +149,14 @@ func UpdateTeamFolder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
+	if req.ParentID != "" && !folderInTeam(teamID, req.ParentID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "上级文件夹不存在"})
+		return
+	}
 
 	_, err := database.DB.Exec(
-		`UPDATE md_team_folders SET name=?, parent_id=?, sort_order=? WHERE id=?`,
-		req.Name, req.ParentID, req.SortOrder, id)
+		`UPDATE md_team_folders SET name=?, parent_id=?, sort_order=? WHERE id=? AND team_id=?`,
+		req.Name, req.ParentID, req.SortOrder, id, teamID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -162,11 +173,16 @@ func DeleteTeamFolder(c *gin.Context) {
 	}
 
 	id := c.Param("id")
+	teamID := getTeamID(c)
+	if !folderInTeam(teamID, id) {
+		denyNotFound(c, "文件夹不存在")
+		return
+	}
 	// Move documents in this folder to team root
-	database.DB.Exec(`UPDATE md_documents SET folder_id='' WHERE folder_id=?`, id)
+	database.DB.Exec(`UPDATE md_documents SET folder_id='' WHERE folder_id=? AND team_id=?`, id, teamID)
 	// Move sub-folders to root
-	database.DB.Exec(`UPDATE md_team_folders SET parent_id='' WHERE parent_id=?`, id)
-	_, err := database.DB.Exec(`DELETE FROM md_team_folders WHERE id=?`, id)
+	database.DB.Exec(`UPDATE md_team_folders SET parent_id='' WHERE parent_id=? AND team_id=?`, id, teamID)
+	_, err := database.DB.Exec(`DELETE FROM md_team_folders WHERE id=? AND team_id=?`, id, teamID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -487,6 +503,19 @@ func TeamCreateDocument(c *gin.Context) {
 	if req.Type == "" {
 		req.Type = "doc"
 	}
+	req.Title = strings.TrimSpace(req.Title)
+	if req.Title == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "标题不能为空"})
+		return
+	}
+	if len([]rune(req.Title)) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "标题过长"})
+		return
+	}
+	if req.FolderID != "" && !folderInTeam(teamID, req.FolderID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件夹不存在"})
+		return
+	}
 	userID := c.GetString("user_id")
 	docID := uuid.New().String()
 
@@ -536,46 +565,76 @@ func TeamGetDocument(c *gin.Context) {
 		"title": title, "type": docType, "file_size": fileSize,
 		"version": version, "created_by": createdBy, "updated_by": updatedBy,
 		"created_at": createdAt, "updated_at": updatedAt,
+		"permission": docPermission(c, docID),
 	}})
 }
 
 // TeamUpdateDocument PUT /teams/:team_id/documents/:id
+// Only fields present in the JSON are written. A move that sends folder_id
+// alone must not blank the title, and a rename must not pull the doc to root.
 func TeamUpdateDocument(c *gin.Context) {
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	docID := c.Param("id")
+	if !requireDoc(c, docID, "write", true) {
 		return
 	}
-	docID := c.Param("id")
 	var req struct {
-		Title    string `json:"title"`
-		FolderID string `json:"folder_id"`
+		Title    *string `json:"title"`
+		FolderID *string `json:"folder_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
+	if req.Title == nil && req.FolderID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
 
 	userID := c.GetString("user_id")
-	_, err := database.DB.Exec(
-		`UPDATE md_documents SET title=?, folder_id=?, updated_by=? WHERE id=?`,
-		req.Title, req.FolderID, userID, docID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	teamID := getTeamID(c)
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if title == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "标题不能为空"})
+			return
+		}
+		if len([]rune(title)) > 200 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "标题过长"})
+			return
+		}
+		if _, err := database.DB.Exec(
+			`UPDATE md_documents SET title=?, updated_by=? WHERE id=? AND team_id=?`,
+			title, userID, docID, teamID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	if req.FolderID != nil {
+		if *req.FolderID != "" && !folderInTeam(teamID, *req.FolderID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "文件夹不存在"})
+			return
+		}
+		if _, err := database.DB.Exec(
+			`UPDATE md_documents SET folder_id=?, updated_by=? WHERE id=? AND team_id=?`,
+			*req.FolderID, userID, docID, teamID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		var title string
+		database.DB.QueryRow(`SELECT title FROM md_documents WHERE id=? AND team_id=?`, docID, teamID).Scan(&title)
+		audit(c, "move", "document", docID, title, fmt.Sprintf(`{"folder_id":"%s"}`, *req.FolderID))
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "已更新"})
 }
 
 // TeamDeleteDocument DELETE /teams/:team_id/documents/:id
 func TeamDeleteDocument(c *gin.Context) {
-	role := getTeamRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可删除文档"})
+	docID := c.Param("id")
+	if !requireDoc(c, docID, "admin", true) {
 		return
 	}
-	docID := c.Param("id")
-	_, err := database.DB.Exec(`UPDATE md_documents SET status=0 WHERE id=?`, docID)
+	teamID := getTeamID(c)
+	_, err := database.DB.Exec(`UPDATE md_documents SET status=0 WHERE id=? AND team_id=?`, docID, teamID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -587,6 +646,9 @@ func TeamDeleteDocument(c *gin.Context) {
 // TeamGetDocumentContent GET /teams/:team_id/documents/:id/content
 func TeamGetDocumentContent(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "read", true) {
+		return
+	}
 	var title, docType string
 	var version int
 	var updatedAt string
@@ -604,17 +666,16 @@ func TeamGetDocumentContent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"content": string(content), "version": version,
 		"title": title, "type": docType, "updated_at": updatedAt,
+		"permission": docPermission(c, docID),
 	}})
 }
 
 // TeamSaveDocumentContent PUT /teams/:team_id/documents/:id/content
 func TeamSaveDocumentContent(c *gin.Context) {
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	docID := c.Param("id")
+	if !requireDoc(c, docID, "write", true) {
 		return
 	}
-	docID := c.Param("id")
 	userID := c.GetString("user_id")
 
 	// Resolve storage bucket
@@ -628,8 +689,8 @@ func TeamSaveDocumentContent(c *gin.Context) {
 	// Check lock
 	var lockedBy string
 	database.DB.QueryRow("SELECT locked_by FROM md_documents WHERE id=?", docID).Scan(&lockedBy)
-	role = getTeamRole(c)
-	if lockedBy != "" && lockedBy != userID && role != "admin" {
+	role := getTeamRole(c)
+	if lockedBy != "" && lockedBy != userID && role != "admin" && role != "owner" {
 		c.JSON(http.StatusConflict, gin.H{"error": "文档已被锁定"})
 		return
 	}
@@ -655,8 +716,8 @@ func TeamSaveDocumentContent(c *gin.Context) {
 	version++
 
 	_, err = database.DB.Exec(
-		`UPDATE md_documents SET content_text=?, version=?, updated_by=?, updated_at=NOW() WHERE id=?`,
-		string(contentBody), version, userID, docID)
+		`UPDATE md_documents SET content_text=?, version=?, updated_by=?, updated_at=NOW() WHERE id=? AND team_id=?`,
+		string(contentBody), version, userID, docID, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -668,6 +729,7 @@ func TeamSaveDocumentContent(c *gin.Context) {
 	versionPath := store.VersionPath(bucket, docID, version)
 	database.DB.Exec(`INSERT INTO md_versions (id, document_id, version, file_path, file_size, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
 		uuid.New().String(), docID, version, versionPath, int64(len(contentBody)), userID)
+	service.PruneDocumentVersions(docID)
 
 	audit(c, "edit_doc", "document", docID, "", fmt.Sprintf(`{"version":%d}`, version))
 	c.JSON(http.StatusOK, gin.H{"message": "已保存", "version": version})
@@ -719,7 +781,10 @@ func TeamListTrash(c *gin.Context) {
 
 func TeamRestoreFromTrash(c *gin.Context) {
 	docID := c.Param("id")
-	_, err := database.DB.Exec(`UPDATE md_documents SET status=1 WHERE id=?`, docID)
+	if !requireTrashDoc(c, docID) {
+		return
+	}
+	_, err := database.DB.Exec(`UPDATE md_documents SET status=1 WHERE id=? AND team_id=? AND status=0`, docID, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -730,7 +795,10 @@ func TeamRestoreFromTrash(c *gin.Context) {
 
 func TeamPurgeFromTrash(c *gin.Context) {
 	docID := c.Param("id")
-	_, err := database.DB.Exec(`DELETE FROM md_documents WHERE id=? AND status=0`, docID)
+	if !requireTrashDoc(c, docID) {
+		return
+	}
+	_, err := database.DB.Exec(`DELETE FROM md_documents WHERE id=? AND team_id=? AND status=0`, docID, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -740,6 +808,9 @@ func TeamPurgeFromTrash(c *gin.Context) {
 }
 
 func TeamEmptyTrash(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
 	teamID := getTeamID(c)
 	res, err := database.DB.Exec(`DELETE FROM md_documents WHERE team_id=? AND status=0`, teamID)
 	if err != nil {
@@ -784,6 +855,9 @@ func TeamListFavorites(c *gin.Context) {
 func TeamAddFavorite(c *gin.Context) {
 	userID := c.GetString("user_id")
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "read", true) {
+		return
+	}
 	_, err := database.DB.Exec(`INSERT IGNORE INTO md_favorites (user_id, document_id) VALUES (?, ?)`, userID, docID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -842,8 +916,8 @@ func TeamCreateTag(c *gin.Context) {
 		return
 	}
 	id := uuid.New().String()
-	_, err := database.DB.Exec(`INSERT INTO md_tags (id, team_id, name, color) VALUES (?, ?, ?, ?)`,
-		id, teamID, req.Name, req.Color)
+	_, err := database.DB.Exec(`INSERT INTO md_tags (id, team_id, user_id, name, color) VALUES (?, ?, ?, ?, ?)`,
+		id, teamID, c.GetString("user_id"), req.Name, req.Color)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -858,8 +932,15 @@ func TeamDeleteTag(c *gin.Context) {
 		return
 	}
 	id := c.Param("id")
+	teamID := getTeamID(c)
+	var n int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM md_tags WHERE id=? AND team_id=?`, id, teamID).Scan(&n)
+	if n == 0 {
+		denyNotFound(c, "标签不存在")
+		return
+	}
 	database.DB.Exec(`DELETE FROM md_doc_tags WHERE tag_id=?`, id)
-	_, err := database.DB.Exec(`DELETE FROM md_tags WHERE id=?`, id)
+	_, err := database.DB.Exec(`DELETE FROM md_tags WHERE id=? AND team_id=?`, id, teamID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -869,6 +950,9 @@ func TeamDeleteTag(c *gin.Context) {
 
 func TeamGetDocTags(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "read", true) {
+		return
+	}
 	rows, err := database.DB.Query(
 		`SELECT t.id, t.name, t.color FROM md_doc_tags dt JOIN md_tags t ON dt.tag_id=t.id WHERE dt.document_id=?`, docID)
 	if err != nil {
@@ -890,6 +974,9 @@ func TeamGetDocTags(c *gin.Context) {
 
 func TeamSetDocTags(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "write", true) {
+		return
+	}
 	var req struct {
 		TagIDs []string `json:"tag_ids"`
 	}
@@ -909,6 +996,9 @@ func TeamSetDocTags(c *gin.Context) {
 
 func TeamListVersions(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "read", true) {
+		return
+	}
 	rows, err := database.DB.Query(
 		`SELECT v.id, v.version, v.file_size, v.created_by, v.created_at,
 		 IFNULL(u.display_name,'') as user_name
@@ -938,6 +1028,9 @@ func TeamListVersions(c *gin.Context) {
 
 func TeamGetVersionContent(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "read", true) {
+		return
+	}
 	ver := c.Param("ver")
 	verNum, err := strconv.Atoi(ver)
 	if err != nil {
@@ -962,6 +1055,9 @@ func TeamGetVersionContent(c *gin.Context) {
 
 func TeamRestoreVersion(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "write", true) {
+		return
+	}
 	var req struct {
 		Version int `json:"version" binding:"required"`
 	}
@@ -988,8 +1084,8 @@ func TeamRestoreVersion(c *gin.Context) {
 	var version int
 	database.DB.QueryRow("SELECT version FROM md_documents WHERE id=?", docID).Scan(&version)
 	version++
-	database.DB.Exec(`UPDATE md_documents SET content_text=?, version=?, updated_by=?, updated_at=NOW() WHERE id=?`,
-		string(content), version, userID, docID)
+	database.DB.Exec(`UPDATE md_documents SET content_text=?, version=?, updated_by=?, updated_at=NOW() WHERE id=? AND team_id=?`,
+		string(content), version, userID, docID, getTeamID(c))
 	audit(c, "restore", "document", docID, "", fmt.Sprintf(`{"version":%d}`, req.Version))
 	c.JSON(http.StatusOK, gin.H{"message": "已恢复"})
 }
@@ -997,14 +1093,12 @@ func TeamRestoreVersion(c *gin.Context) {
 // ==================== 锁定 ====================
 
 func TeamLockDocument(c *gin.Context) {
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	docID := c.Param("id")
+	if !requireDoc(c, docID, "write", true) {
 		return
 	}
-	docID := c.Param("id")
 	userID := c.GetString("user_id")
-	_, err := database.DB.Exec(`UPDATE md_documents SET locked_by=?, locked_at=NOW() WHERE id=?`, userID, docID)
+	_, err := database.DB.Exec(`UPDATE md_documents SET locked_by=?, locked_at=NOW() WHERE id=? AND team_id=?`, userID, docID, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1013,13 +1107,11 @@ func TeamLockDocument(c *gin.Context) {
 }
 
 func TeamUnlockDocument(c *gin.Context) {
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	docID := c.Param("id")
+	if !requireDoc(c, docID, "write", true) {
 		return
 	}
-	docID := c.Param("id")
-	_, err := database.DB.Exec(`UPDATE md_documents SET locked_by='', locked_at=NULL WHERE id=?`, docID)
+	_, err := database.DB.Exec(`UPDATE md_documents SET locked_by='', locked_at=NULL WHERE id=? AND team_id=?`, docID, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1031,6 +1123,9 @@ func TeamUnlockDocument(c *gin.Context) {
 
 func TeamCreateShare(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "write", true) {
+		return
+	}
 	userID := c.GetString("user_id")
 	teamID := getTeamID(c)
 
@@ -1084,9 +1179,12 @@ func TeamCreateShare(c *gin.Context) {
 
 func TeamListShares(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "read", true) {
+		return
+	}
 	rows, err := database.DB.Query(
-		`SELECT id, token, permission, expires_at, created_by, created_at
-		 FROM md_shares WHERE document_id=?`, docID)
+		`SELECT id, token, password, permission, expires_at, created_by, created_at, access_count
+		 FROM md_shares WHERE document_id=? AND status=1 ORDER BY created_at DESC`, docID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1094,12 +1192,21 @@ func TeamListShares(c *gin.Context) {
 	defer rows.Close()
 	var shares []map[string]interface{}
 	for rows.Next() {
-		var id, token, perm, createdBy, createdAt string
-		var expires string
-		rows.Scan(&id, &token, &perm, &expires, &createdBy, &createdAt)
+		var id, token, perm, createdBy string
+		var createdAt time.Time
+		var password sql.NullString
+		var expiresAt sql.NullTime
+		var accessCount int
+		if rows.Scan(&id, &token, &password, &perm, &expiresAt, &createdBy, &createdAt, &accessCount) != nil {
+			continue
+		}
 		shares = append(shares, map[string]interface{}{
 			"id": id, "token": token, "permission": perm,
-			"expires_at": expires, "created_by": createdBy, "created_at": createdAt,
+			"has_password": password.Valid && password.String != "",
+			"expires_at":   expiresAt.Time,
+			"expired":      expiresAt.Valid && expiresAt.Time.Before(time.Now()),
+			"created_by":   createdBy, "created_at": createdAt,
+			"access_count": accessCount,
 		})
 	}
 	if shares == nil {
@@ -1112,8 +1219,11 @@ func TeamListShares(c *gin.Context) {
 
 func TeamListCollaborators(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "read", true) {
+		return
+	}
 	rows, err := database.DB.Query(
-		`SELECT p.id, p.target_id, p.permission, p.created_by,
+		`SELECT p.id, p.target_type, p.target_id, p.permission, p.created_by,
 		 IFNULL(u.display_name, '') as user_name
 		 FROM md_permissions p
 		 LEFT JOIN users u ON p.target_type='user' AND p.target_id COLLATE utf8mb4_unicode_ci = u.id
@@ -1125,11 +1235,15 @@ func TeamListCollaborators(c *gin.Context) {
 	defer rows.Close()
 	var collabs []map[string]interface{}
 	for rows.Next() {
-		var id, targetID, perm, createdBy, userName string
-		rows.Scan(&id, &targetID, &perm, &createdBy, &userName)
+		var id, targetType, targetID, perm, createdBy, userName string
+		if rows.Scan(&id, &targetType, &targetID, &perm, &createdBy, &userName) != nil {
+			continue
+		}
 		collabs = append(collabs, map[string]interface{}{
-			"id": id, "target_id": targetID, "permission": perm,
-			"created_by": createdBy, "user_name": userName,
+			"id": id, "target_type": targetType, "target_id": targetID,
+			"permission": perm, "role": service.FrontendRole(perm),
+			"target_name": userName, "user_name": userName,
+			"created_by": createdBy,
 		})
 	}
 	if collabs == nil {
@@ -1140,31 +1254,56 @@ func TeamListCollaborators(c *gin.Context) {
 
 func TeamAddCollaborator(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "write", true) {
+		return
+	}
 	userID := c.GetString("user_id")
 	var req struct {
-		TargetID string `json:"target_id" binding:"required"`
-		Perm     string `json:"permission" binding:"required"`
+		TargetID string `json:"target_id"`
+		Perm     string `json:"permission"`
+		Role     string `json:"role"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TargetID) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	perm, ok := resolveCollabPermission(req.Perm, req.Role)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的角色"})
+		return
+	}
+	var exists int
+	database.DB.QueryRow(`SELECT 1 FROM users WHERE id COLLATE utf8mb4_unicode_ci=?`, req.TargetID).Scan(&exists)
+	if exists == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户不存在"})
+		return
+	}
+	var member int
+	database.DB.QueryRow(`SELECT 1 FROM team_members WHERE team_id=? AND user_id=?`, getTeamID(c), req.TargetID).Scan(&member)
+	if member == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只能添加本团队成员"})
 		return
 	}
 	id := uuid.New().String()
 	_, err := database.DB.Exec(
 		`INSERT INTO md_permissions (id, resource_type, resource_id, target_type, target_id, permission, inherit, created_by)
-		 VALUES (?, 'document', ?, 'user', ?, ?, 0, ?)`,
-		id, docID, req.TargetID, req.Perm, userID)
+		 VALUES (?, 'document', ?, 'user', ?, ?, 0, ?)
+		 ON DUPLICATE KEY UPDATE permission=VALUES(permission)`,
+		id, docID, req.TargetID, perm, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "已添加"})
+	c.JSON(http.StatusOK, gin.H{"message": "已添加", "permission": perm, "role": service.FrontendRole(perm)})
 }
 
 // ==================== 评论 ====================
 
 func TeamListComments(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "read", true) {
+		return
+	}
 	rows, err := database.DB.Query(
 		`SELECT c.id, c.content, c.user_id, IFNULL(c.parent_id,''), c.created_at, c.updated_at,
 		 COALESCE(NULLIF(u.display_name,''), NULLIF(c.user_name,''), '未知用户') as user_name
@@ -1193,6 +1332,10 @@ func TeamListComments(c *gin.Context) {
 
 func TeamCreateComment(c *gin.Context) {
 	docID := c.Param("id")
+	// comment 及以上可以留言；只读成员不能。
+	if !requireDoc(c, docID, "comment", true) {
+		return
+	}
 	userID := c.GetString("user_id")
 	teamID := getTeamID(c)
 	var req struct {
@@ -1225,9 +1368,12 @@ func TeamCreateComment(c *gin.Context) {
 
 func TeamExportDocument(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "read", true) {
+		return
+	}
 	format := c.DefaultQuery("format", "html")
 	var title, docType string
-	err := database.DB.QueryRow(`SELECT title, type FROM md_documents WHERE id=? AND status=1`, docID).Scan(&title, &docType)
+	err := database.DB.QueryRow(`SELECT title, type FROM md_documents WHERE id=? AND team_id=? AND status=1`, docID, getTeamID(c)).Scan(&title, &docType)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "文档不存在"})
 		return
@@ -1242,16 +1388,60 @@ func TeamExportDocument(c *gin.Context) {
 
 // ==================== 审计 ====================
 
+// buildAuditFilter turns the audit page query into a SQL fragment.
+// Dates must be YYYY-MM-DD; anything else is ignored so a bad filter cannot error the query.
+func buildAuditFilter(action, userName, startDate, endDate string) (string, []interface{}) {
+	where := ""
+	args := []interface{}{}
+	if validAuditAction(action) {
+		where += " AND a.action=?"
+		args = append(args, action)
+	}
+	if name := strings.TrimSpace(userName); name != "" {
+		runes := []rune(name)
+		if len(runes) > 50 {
+			name = string(runes[:50])
+		}
+		name = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(name)
+		where += " AND (IFNULL(u.display_name,'') LIKE ? OR IFNULL(a.user_name,'') LIKE ?)"
+		pat := "%" + name + "%"
+		args = append(args, pat, pat)
+	}
+	if _, err := time.Parse("2006-01-02", startDate); err == nil {
+		where += " AND a.created_at>=?"
+		args = append(args, startDate+" 00:00:00")
+	}
+	if _, err := time.Parse("2006-01-02", endDate); err == nil {
+		where += " AND a.created_at<=?"
+		args = append(args, endDate+" 23:59:59")
+	}
+	return where, args
+}
+
+func validAuditAction(action string) bool {
+	if action == "" || len(action) > 30 {
+		return false
+	}
+	for _, r := range action {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+func auditFromClause() string {
+	return ` FROM md_audits a LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id WHERE a.team_id=?`
+}
+
 func TeamListAudits(c *gin.Context) {
 	if !service.RequirePlanFeature(c, "audit") {
 		return
 	}
-	teamID := getTeamID(c)
-	role := getTeamRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可查看审计日志"})
+	if !requireTeamAdmin(c) {
 		return
 	}
+	teamID := getTeamID(c)
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	if page < 1 {
@@ -1261,16 +1451,19 @@ func TeamListAudits(c *gin.Context) {
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
+	filter, filterArgs := buildAuditFilter(c.Query("action"), c.Query("user_name"), c.Query("start_date"), c.Query("end_date"))
 
 	var total int
-	database.DB.QueryRow("SELECT COUNT(*) FROM md_audits WHERE team_id=?", teamID).Scan(&total)
+	countArgs := append([]interface{}{teamID}, filterArgs...)
+	database.DB.QueryRow("SELECT COUNT(*)"+auditFromClause()+filter, countArgs...).Scan(&total)
 
+	listArgs := append([]interface{}{teamID}, filterArgs...)
+	listArgs = append(listArgs, pageSize, offset)
 	rows, err := database.DB.Query(
-		`SELECT a.id, a.user_id, a.action, a.resource_type, a.resource_id, a.resource_name, a.detail, a.created_at,
-		 IFNULL(u.display_name,'') as user_name
-		 FROM md_audits a LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id
-		 WHERE a.team_id=? ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
-		teamID, pageSize, offset)
+		`SELECT a.id, a.user_id, a.action, a.resource_type, a.resource_id, a.resource_name, a.detail, IFNULL(a.ip,''), a.created_at,
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(a.user_name,''), '') as user_name`+
+			auditFromClause()+filter+` ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
+		listArgs...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1279,59 +1472,61 @@ func TeamListAudits(c *gin.Context) {
 
 	var audits []map[string]interface{}
 	for rows.Next() {
-		var id, userID, action, resType, resID, resName, detail, createdAt, userName string
-		rows.Scan(&id, &userID, &action, &resType, &resID, &resName, &detail, &createdAt, &userName)
+		var id, userID, action, resType, resID, resName, detail, ip, createdAt, userName string
+		rows.Scan(&id, &userID, &action, &resType, &resID, &resName, &detail, &ip, &createdAt, &userName)
 		audits = append(audits, map[string]interface{}{
 			"id": id, "user_id": userID, "action": action,
 			"resource_type": resType, "resource_id": resID,
-			"resource_name": resName, "detail": detail,
+			"resource_name": resName, "detail": detail, "ip": ip,
 			"created_at": createdAt, "user_name": userName,
 		})
 	}
 	if audits == nil {
 		audits = []map[string]interface{}{}
 	}
-	c.JSON(http.StatusOK, gin.H{"data": audits, "total": total})
+	c.JSON(http.StatusOK, gin.H{"data": audits, "total": total, "page": page, "page_size": pageSize})
 }
 
 func TeamExportAudits(c *gin.Context) {
 	if !service.RequirePlanFeature(c, "audit") {
 		return
 	}
-	teamID := getTeamID(c)
-	role := getTeamRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可导出"})
+	if !requireTeamAdmin(c) {
 		return
 	}
-	c.Header("Content-Type", "text/csv; charset=utf-8")
-	c.Header("Content-Disposition", "attachment; filename=audits.csv")
-	c.Writer.Write([]byte("\xEF\xBB\xBF"))
-	// Simple CSV export
+	teamID := getTeamID(c)
+	filter, filterArgs := buildAuditFilter(c.Query("action"), c.Query("user_name"), c.Query("start_date"), c.Query("end_date"))
+	args := append([]interface{}{teamID}, filterArgs...)
 	rows, err := database.DB.Query(
-		`SELECT a.id, a.user_id, a.action, a.resource_type, a.resource_id, a.created_at,
-		 IFNULL(u.display_name,'')
-		 FROM md_audits a LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id
-		 WHERE a.team_id=? ORDER BY a.created_at DESC LIMIT 10000`, teamID)
+		`SELECT a.created_at, COALESCE(NULLIF(u.display_name,''), NULLIF(a.user_name,''), ''),
+		 a.action, a.resource_type, IFNULL(a.resource_name,''), IFNULL(a.detail,''), IFNULL(a.ip,'')`+
+			auditFromClause()+filter+` ORDER BY a.created_at DESC LIMIT 10000`, args...)
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	defer rows.Close()
-	c.Writer.Write([]byte("ID,用户,操作,资源类型,资源ID,时间\n"))
+
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=audits.csv")
+	c.Writer.Write([]byte("\xEF\xBB\xBF"))
+	w := csv.NewWriter(c.Writer)
+	_ = w.Write([]string{"时间", "用户", "操作", "资源类型", "资源名称", "详情", "IP"})
 	for rows.Next() {
-		var id, userID, action, resType, resID, createdAt, userName string
-		rows.Scan(&id, &userID, &action, &resType, &resID, &createdAt, &userName)
-		c.Writer.Write([]byte(fmt.Sprintf("%s,%s,%s,%s,%s,%s\n", id, userName, action, resType, resID, createdAt)))
+		var createdAt, userName, action, resType, resName, detail, ip string
+		if rows.Scan(&createdAt, &userName, &action, &resType, &resName, &detail, &ip) != nil {
+			continue
+		}
+		_ = w.Write([]string{createdAt, userName, action, resType, resName, detail, ip})
 	}
+	w.Flush()
 }
 
 func TeamAuditStats(c *gin.Context) {
-	teamID := getTeamID(c)
-	role := getTeamRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可查看"})
+	if !requireTeamAdmin(c) {
 		return
 	}
+	teamID := getTeamID(c)
 	var total int
 	database.DB.QueryRow("SELECT COUNT(*) FROM md_audits WHERE team_id=?", teamID).Scan(&total)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"total": total}})
@@ -1340,17 +1535,39 @@ func TeamAuditStats(c *gin.Context) {
 // ==================== 权限 ====================
 
 func TeamListPermissions(c *gin.Context) {
-	resType := c.Query("resource_type")
-	resID := c.Query("resource_id")
-	if resType == "" || resID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定 resource_type 和 resource_id"})
+	if !requireTeamAdmin(c) {
 		return
 	}
-	rows, err := database.DB.Query(
-		`SELECT p.id, p.target_type, p.target_id, p.permission, p.inherit, p.created_by,
-		 IFNULL(u.display_name,'') as user_name
-		 FROM md_permissions p LEFT JOIN users u ON p.target_type='user' AND p.target_id COLLATE utf8mb4_unicode_ci = u.id
-		 WHERE p.resource_type=? AND p.resource_id=?`, resType, resID)
+	teamID := getTeamID(c)
+	resType := c.Query("resource_type")
+	resID := c.Query("resource_id")
+	if resType != "document" && resType != "folder" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定 resource_type"})
+		return
+	}
+	if resID != "" && !resourceInTeam(teamID, resType, resID) {
+		denyNotFound(c, "资源不存在")
+		return
+	}
+	q := `SELECT p.id, p.resource_type, p.resource_id, p.target_type, p.target_id, p.permission, p.inherit, IFNULL(p.created_by,''),
+		 IFNULL(u.display_name,'') as user_name,
+		 CASE WHEN p.resource_type='document' THEN IFNULL(d.title,'') ELSE IFNULL(f.name,'') END as resource_name
+		 FROM md_permissions p
+		 LEFT JOIN users u ON p.target_type='user' AND p.target_id COLLATE utf8mb4_unicode_ci = u.id
+		 LEFT JOIN md_documents d ON p.resource_type='document' AND p.resource_id = d.id AND d.team_id=?
+		 LEFT JOIN md_team_folders f ON p.resource_type='folder' AND p.resource_id = f.id AND f.team_id=?
+		 WHERE p.resource_type=?`
+	args := []interface{}{teamID, teamID, resType}
+	if resID != "" {
+		q += ` AND p.resource_id=?`
+		args = append(args, resID)
+	} else if resType == "document" {
+		q += ` AND d.id IS NOT NULL`
+	} else {
+		q += ` AND f.id IS NOT NULL`
+	}
+	q += ` ORDER BY p.created_at DESC LIMIT 200`
+	rows, err := database.DB.Query(q, args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1358,13 +1575,15 @@ func TeamListPermissions(c *gin.Context) {
 	defer rows.Close()
 	var perms []map[string]interface{}
 	for rows.Next() {
-		var id, tType, tID, perm, createdBy, userName string
+		var id, rType, rID, tType, tID, perm, createdBy, userName, resourceName string
 		var inherit bool
-		rows.Scan(&id, &tType, &tID, &perm, &inherit, &createdBy, &userName)
+		rows.Scan(&id, &rType, &rID, &tType, &tID, &perm, &inherit, &createdBy, &userName, &resourceName)
 		perms = append(perms, map[string]interface{}{
-			"id": id, "target_type": tType, "target_id": tID,
+			"id": id, "resource_type": rType, "resource_id": rID,
+			"target_type": tType, "target_id": tID,
 			"permission": perm, "inherit": inherit,
 			"created_by": createdBy, "user_name": userName,
+			"resource_name": resourceName,
 		})
 	}
 	if perms == nil {
@@ -1374,9 +1593,7 @@ func TeamListPermissions(c *gin.Context) {
 }
 
 func TeamSetPermission(c *gin.Context) {
-	role := getTeamRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可设置权限"})
+	if !requireTeamAdmin(c) {
 		return
 	}
 	var req struct {
@@ -1391,30 +1608,70 @@ func TeamSetPermission(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
+	if req.TargetType != "user" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "目前只支持按成员授权"})
+		return
+	}
+	perm, ok := service.NormalizePermission(req.Permission)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的权限"})
+		return
+	}
+	teamID := getTeamID(c)
+	if !resourceInTeam(teamID, req.ResourceType, req.ResourceID) {
+		denyNotFound(c, "资源不存在")
+		return
+	}
+	var member int
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM team_members WHERE team_id=? AND user_id=?`, teamID, req.TargetID).Scan(&member); err != nil || member == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "该用户不在团队中"})
+		return
+	}
+	req.Permission = perm
 	id := uuid.New().String()
 	userID := c.GetString("user_id")
 	_, err := database.DB.Exec(
 		`INSERT INTO md_permissions (id, resource_type, resource_id, target_type, target_id, permission, inherit, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE permission=VALUES(permission), inherit=VALUES(inherit)`,
 		id, req.ResourceType, req.ResourceID, req.TargetType, req.TargetID, req.Permission, req.Inherit, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "set_permission", req.ResourceType, req.ResourceID, resourceTitle(teamID, req.ResourceType, req.ResourceID),
+		fmt.Sprintf(`{"target_id":"%s","permission":"%s"}`, req.TargetID, req.Permission))
 	c.JSON(http.StatusOK, gin.H{"data": req})
 }
 
+func resourceTitle(teamID, resType, resID string) string {
+	var name string
+	switch resType {
+	case "document":
+		database.DB.QueryRow(`SELECT title FROM md_documents WHERE id=? AND team_id=?`, resID, teamID).Scan(&name)
+	case "folder":
+		database.DB.QueryRow(`SELECT name FROM md_team_folders WHERE id=? AND team_id=?`, resID, teamID).Scan(&name)
+	}
+	return name
+}
+
 func TeamRemovePermission(c *gin.Context) {
-	role := getTeamRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可删除权限"})
+	if !requireTeamAdmin(c) {
 		return
 	}
-	_, err := database.DB.Exec(`DELETE FROM md_permissions WHERE id=?`, c.Param("id"))
+	id := c.Param("id")
+	resType, resID, ok := permissionResource(id)
+	if !ok || !resourceInTeam(getTeamID(c), resType, resID) {
+		denyNotFound(c, "权限不存在")
+		return
+	}
+	name := resourceTitle(getTeamID(c), resType, resID)
+	_, err := database.DB.Exec(`DELETE FROM md_permissions WHERE id=?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "remove_permission", resType, resID, name, "")
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
@@ -1427,21 +1684,11 @@ func TeamCheckPermission(c *gin.Context) {
 		return
 	}
 
-	// Team admin = full access
-	role := getTeamRole(c)
-	if role == "admin" {
-		c.JSON(http.StatusOK, gin.H{"permission": "admin"})
+	if !resourceInTeam(getTeamID(c), resType, resID) {
+		denyNotFound(c, "资源不存在")
 		return
 	}
-
-	// Check direct permission
-	var perm string
-	database.DB.QueryRow(
-		`SELECT permission FROM md_permissions WHERE resource_type=? AND resource_id=? AND target_type='user' AND target_id=?`,
-		resType, resID, userID).Scan(&perm)
-	if perm == "" {
-		perm = "read" // team member default = read
-	}
+	perm := service.CheckTeamPermission(c.Request.Context(), userID, getTeamID(c), getTeamRole(c), resType, resID)
 	c.JSON(http.StatusOK, gin.H{"permission": perm})
 }
 
@@ -1476,7 +1723,7 @@ func TeamListTemplates(c *gin.Context) {
 func TeamGetTemplate(c *gin.Context) {
 	id := c.Param("id")
 	var name, docType, content string
-	err := database.DB.QueryRow(`SELECT name, type, content FROM md_templates WHERE id=?`, id).Scan(&name, &docType, &content)
+	err := database.DB.QueryRow(`SELECT name, type, content FROM md_templates WHERE id=? AND team_id=?`, id, getTeamID(c)).Scan(&name, &docType, &content)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "模板不存在"})
 		return
@@ -1517,7 +1764,7 @@ func TeamUpdateTemplate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	_, err := database.DB.Exec(`UPDATE md_templates SET name=?, content=? WHERE id=?`, req.Name, req.Content, id)
+	_, err := database.DB.Exec(`UPDATE md_templates SET name=?, content=? WHERE id=? AND team_id=?`, req.Name, req.Content, id, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1527,7 +1774,7 @@ func TeamUpdateTemplate(c *gin.Context) {
 
 func TeamDeleteTemplate(c *gin.Context) {
 	id := c.Param("id")
-	_, err := database.DB.Exec(`DELETE FROM md_templates WHERE id=?`, id)
+	_, err := database.DB.Exec(`DELETE FROM md_templates WHERE id=? AND team_id=?`, id, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1655,6 +1902,9 @@ func TeamStorageStatus(c *gin.Context) {
 // ==================== Webhooks ====================
 
 func TeamListWebhooks(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
 	teamID := getTeamID(c)
 	rows, err := database.DB.Query(
 		`SELECT id, name, url, events, enabled, created_at, updated_at
@@ -1681,6 +1931,9 @@ func TeamListWebhooks(c *gin.Context) {
 }
 
 func TeamCreateWebhook(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 	var req struct {
@@ -1690,6 +1943,10 @@ func TeamCreateWebhook(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if !validWebhookURL(req.URL) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook 地址必须是 http 或 https"})
 		return
 	}
 	if req.Events == "" {
@@ -1707,8 +1964,17 @@ func TeamCreateWebhook(c *gin.Context) {
 }
 
 func TeamDeleteWebhook(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
 	id := c.Param("id")
-	_, err := database.DB.Exec(`DELETE FROM md_webhooks WHERE id=?`, id)
+	res, err := database.DB.Exec(`DELETE FROM md_webhooks WHERE id=? AND team_id=?`, id, getTeamID(c))
+	if err == nil {
+		if n, _ := res.RowsAffected(); n == 0 {
+			denyNotFound(c, "Webhook 不存在")
+			return
+		}
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1717,10 +1983,17 @@ func TeamDeleteWebhook(c *gin.Context) {
 }
 
 func TeamToggleWebhook(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
 	id := c.Param("id")
 	var enabled bool
-	database.DB.QueryRow("SELECT enabled FROM md_webhooks WHERE id=?", id).Scan(&enabled)
-	_, err := database.DB.Exec(`UPDATE md_webhooks SET enabled=? WHERE id=?`, !enabled, id)
+	err := database.DB.QueryRow("SELECT enabled FROM md_webhooks WHERE id=? AND team_id=?", id, getTeamID(c)).Scan(&enabled)
+	if err != nil {
+		denyNotFound(c, "Webhook 不存在")
+		return
+	}
+	_, err = database.DB.Exec(`UPDATE md_webhooks SET enabled=? WHERE id=? AND team_id=?`, !enabled, id, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1729,7 +2002,16 @@ func TeamToggleWebhook(c *gin.Context) {
 }
 
 func TeamListWebhookLogs(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
 	webhookID := c.Param("id")
+	var n int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM md_webhooks WHERE id=? AND team_id=?`, webhookID, getTeamID(c)).Scan(&n)
+	if n == 0 {
+		denyNotFound(c, "Webhook 不存在")
+		return
+	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	if page < 1 {
@@ -1770,9 +2052,12 @@ func TeamListWebhookLogs(c *gin.Context) {
 
 func TeamDocStats(c *gin.Context) {
 	docID := c.Param("id")
+	if !requireDoc(c, docID, "read", true) {
+		return
+	}
 	var version int
 	var fileSize int64
-	database.DB.QueryRow(`SELECT version, file_size FROM md_documents WHERE id=?`, docID).Scan(&version, &fileSize)
+	database.DB.QueryRow(`SELECT version, file_size FROM md_documents WHERE id=? AND team_id=?`, docID, getTeamID(c)).Scan(&version, &fileSize)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"version": version, "file_size": fileSize}})
 }
 
@@ -1925,16 +2210,24 @@ func TeamListMedia(c *gin.Context) {
 
 func TeamDeleteMedia(c *gin.Context) {
 	teamID := getTeamID(c)
-	filename := c.Param("filename")
-	path := fmt.Sprintf("%s/%s/media/%s", store.RootPath(), teamID, filename)
+	filename, ok := safeBaseName(c.Param("filename"))
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件名无效"})
+		return
+	}
+	path := filepath.Join(store.RootPath(), teamID, "media", filename)
 	os.Remove(path)
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
 func TeamGetMedia(c *gin.Context) {
 	teamID := getTeamID(c)
-	filename := c.Param("filename")
-	path := fmt.Sprintf("%s/%s/media/%s", store.RootPath(), teamID, filename)
+	filename, ok := safeBaseName(c.Param("filename"))
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件名无效"})
+		return
+	}
+	path := filepath.Join(store.RootPath(), teamID, "media", filename)
 	c.File(path)
 }
 
@@ -1983,7 +2276,18 @@ func TeamListNotifications(c *gin.Context) {
 
 func TeamMarkNotificationRead(c *gin.Context) {
 	id := c.Param("id")
-	database.DB.Exec(`UPDATE md_notifications SET is_read=1 WHERE id=?`, id)
+	userID := c.GetString("user_id")
+	teamID := getTeamID(c)
+	var n int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM md_notifications WHERE id=? AND user_id=? AND team_id=?`, id, userID, teamID).Scan(&n)
+	if n == 0 {
+		denyNotFound(c, "通知不存在")
+		return
+	}
+	if _, err := database.DB.Exec(`UPDATE md_notifications SET is_read=1 WHERE id=? AND user_id=? AND team_id=?`, id, userID, teamID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "已标记已读"})
 }
 
@@ -1996,7 +2300,15 @@ func TeamMarkAllNotificationsRead(c *gin.Context) {
 
 func TeamDeleteNotification(c *gin.Context) {
 	id := c.Param("id")
-	database.DB.Exec(`DELETE FROM md_notifications WHERE id=?`, id)
+	res, err := database.DB.Exec(`DELETE FROM md_notifications WHERE id=? AND user_id=? AND team_id=?`, id, c.GetString("user_id"), getTeamID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		denyNotFound(c, "通知不存在")
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
@@ -2012,7 +2324,18 @@ func TeamUnreadCount(c *gin.Context) {
 
 func TeamDeleteShare(c *gin.Context) {
 	id := c.Param("id")
-	_, err := database.DB.Exec(`DELETE FROM md_shares WHERE id=?`, id)
+	var docID string
+	err := database.DB.QueryRow(
+		`SELECT s.document_id FROM md_shares s JOIN md_documents d ON s.document_id=d.id WHERE s.id=? AND d.team_id=?`,
+		id, getTeamID(c)).Scan(&docID)
+	if err != nil {
+		denyNotFound(c, "分享不存在")
+		return
+	}
+	if !requireDoc(c, docID, "write", true) {
+		return
+	}
+	_, err = database.DB.Exec(`DELETE FROM md_shares WHERE id=?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -2024,14 +2347,28 @@ func TeamDeleteShare(c *gin.Context) {
 
 func TeamUpdateCollaborator(c *gin.Context) {
 	id := c.Param("id")
+	resType, resID, ok := permissionResource(id)
+	if !ok || resType != "document" || !documentInTeam(getTeamID(c), resID, true) {
+		denyNotFound(c, "协作者不存在")
+		return
+	}
+	if !requireDoc(c, resID, "write", true) {
+		return
+	}
 	var req struct {
-		Permission string `json:"permission" binding:"required"`
+		Permission string `json:"permission"`
+		Role       string `json:"role"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	_, err := database.DB.Exec(`UPDATE md_permissions SET permission=? WHERE id=?`, req.Permission, id)
+	perm, ok := resolveCollabPermission(req.Permission, req.Role)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的角色"})
+		return
+	}
+	_, err := database.DB.Exec(`UPDATE md_permissions SET permission=? WHERE id=?`, perm, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -2041,6 +2378,14 @@ func TeamUpdateCollaborator(c *gin.Context) {
 
 func TeamRemoveCollaborator(c *gin.Context) {
 	id := c.Param("id")
+	resType, resID, ok := permissionResource(id)
+	if !ok || resType != "document" || !documentInTeam(getTeamID(c), resID, true) {
+		denyNotFound(c, "协作者不存在")
+		return
+	}
+	if !requireDoc(c, resID, "write", true) {
+		return
+	}
 	_, err := database.DB.Exec(`DELETE FROM md_permissions WHERE id=?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -2053,6 +2398,9 @@ func TeamRemoveCollaborator(c *gin.Context) {
 
 func TeamUpdateComment(c *gin.Context) {
 	id := c.Param("id")
+	if !commentEditable(c, id) {
+		return
+	}
 	var req struct {
 		Content string `json:"content" binding:"required"`
 	}
@@ -2070,12 +2418,44 @@ func TeamUpdateComment(c *gin.Context) {
 
 func TeamDeleteComment(c *gin.Context) {
 	id := c.Param("id")
+	if !commentEditable(c, id) {
+		return
+	}
 	_, err := database.DB.Exec(`DELETE FROM md_comments WHERE id=?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+}
+
+// ==================== Team members ====================
+
+func TeamListMembers(c *gin.Context) {
+	rows, err := database.DB.Query(
+		`SELECT u.id, IFNULL(u.username,''), IFNULL(u.display_name,''), IFNULL(u.email,''), tm.role
+		 FROM team_members tm
+		 JOIN users u ON tm.user_id COLLATE utf8mb4_unicode_ci = u.id
+		 WHERE tm.team_id=?
+		 ORDER BY u.display_name
+		 LIMIT 200`, getTeamID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	var members []map[string]interface{}
+	for rows.Next() {
+		var id, username, name, email, role string
+		rows.Scan(&id, &username, &name, &email, &role)
+		members = append(members, map[string]interface{}{
+			"id": id, "username": username, "display_name": name, "email": email, "role": role,
+		})
+	}
+	if members == nil {
+		members = []map[string]interface{}{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": members})
 }
 
 // ==================== Search Targets ====================
@@ -2228,6 +2608,10 @@ func TeamSystemInfo(c *gin.Context) {
 // ==================== Import ====================
 
 func TeamImportDocument(c *gin.Context) {
+	if getTeamRole(c) == "viewer" {
+		denyForbidden(c)
+		return
+	}
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 

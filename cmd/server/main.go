@@ -248,8 +248,9 @@ func main() {
 				teams.PUT("/comments/:id", handler.TeamUpdateComment)
 				teams.DELETE("/comments/:id", handler.TeamDeleteComment)
 
-				// Search targets
+				// Search targets and members
 				teams.GET("/search-targets", handler.TeamSearchTargets)
+				teams.GET("/members", handler.TeamListMembers)
 
 				// Tags (documents by tag)
 				teams.GET("/tags/:id/documents", handler.TeamGetDocsByTag)
