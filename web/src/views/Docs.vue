@@ -151,10 +151,11 @@
               <el-checkbox :model-value="selectedDocs.includes(doc.id)" />
             </div>
             <div class="card-preview" :class="doc.type">
-              <el-icon :size="36">
-                <Document v-if="doc.type === 'doc'" />
-                <Grid v-else />
-              </el-icon>
+              <p v-if="doc.type === 'doc' && doc.excerpt" class="preview-text">{{ doc.excerpt }}</p>
+              <div v-else-if="doc.type !== 'doc'" class="preview-grid" aria-hidden="true">
+                <span v-for="n in 12" :key="n"></span>
+              </div>
+              <el-icon v-else :size="36"><Document /></el-icon>
             </div>
             <div class="card-body">
               <div class="card-title" v-html="doc.titleHtml || doc.title"></div>
@@ -164,9 +165,15 @@
                   {{ doc.type === 'doc' ? t('common.doc') : t('common.sheet') }}
                 </el-tag>
                 <span class="card-version">v{{ doc.version }}</span>
+                <span v-for="tag in (doc.tags || []).slice(0, 2)" :key="tag.id" class="card-tag">
+                  <i :style="{ background: tag.color || '#6366f1' }"></i>{{ tag.name }}
+                </span>
               </div>
               <div class="card-footer">
-                <span class="card-author">{{ doc.created_by_name || t('common.unknown') }}</span>
+                <span v-if="authorOf(doc)" class="card-author">
+                  <span class="author-avatar" :style="{ background: avatarColor(authorOf(doc)) }">{{ authorOf(doc).slice(0, 1) }}</span>
+                  {{ authorOf(doc) }}
+                </span>
                 <span class="card-time">{{ formatTime(doc.updated_at) }}</span>
               </div>
             </div>
@@ -225,7 +232,7 @@
             </el-table-column>
             <el-table-column :label="t('docs.docOwner')" width="100">
               <template #default="{ row }">
-                <span class="author-text">{{ row.created_by_name || '-' }}</span>
+                <span class="author-text">{{ authorOf(row) || '—' }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="version" :label="t('docs.docVersion')" width="70" align="center">
@@ -475,6 +482,17 @@ function sortDocs() {
   } else {
     docs.value.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
   }
+}
+
+function authorOf(doc: { created_by_name?: string; creator_name?: string }) {
+  return String(doc?.created_by_name || doc?.creator_name || '').trim()
+}
+
+function avatarColor(name: string) {
+  const palette = ['#6366f1', '#0f766e', '#b45309', '#be123c', '#1d4ed8', '#6d28d9']
+  let n = 0
+  for (const ch of name) n = (n + ch.charCodeAt(0)) % palette.length
+  return palette[n]
 }
 
 function highlightText(text: string, keyword: string): string {
@@ -973,10 +991,21 @@ async function filterByTag(tagId: string) {
 
 .card-preview {
   width: 100%; height: 80px; border-radius: 10px; margin-bottom: 12px;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: flex-start;
+  padding: 10px 12px; box-sizing: border-box; overflow: hidden;
 }
 .card-preview.doc { background: linear-gradient(135deg, #e8f0fe, #f0f5ff); color: #4f6ef7; }
 .card-preview:not(.doc) { background: linear-gradient(135deg, #e6f7f0, #f0fff7); color: #36b37e; }
+.preview-text {
+  margin: 0; font-size: 11px; line-height: 1.45; color: #4b5563; font-weight: 400;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.preview-grid {
+  width: 100%; height: 100%;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+}
+.preview-grid span { background: rgba(54, 179, 126, 0.16); border-radius: 2px; }
+.preview-grid span:nth-child(-n+4) { background: rgba(54, 179, 126, 0.4); }
 
 .card-body { min-width: 0; }
 .card-title {
@@ -984,11 +1013,22 @@ async function filterByTag(tagId: string) {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .card-snippet { font-size: 12px; color: #909399; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.5; }
-.card-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.card-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
 .card-version { color: #909399; font-size: 12px; }
-.card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
-.card-author { color: #909399; font-size: 12px; display: flex; align-items: center; gap: 4px; }
-.card-author::before { content: ''; display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: #e0e4ea; }
+.card-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  max-width: 72px; font-size: 11px; color: #606266;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-tag i { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.card-author { color: #606266; font-size: 12px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.card-author { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.author-avatar {
+  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 11px; font-weight: 600;
+}
 .card-time { color: #909399; font-size: 12px; }
 
 .card-actions {

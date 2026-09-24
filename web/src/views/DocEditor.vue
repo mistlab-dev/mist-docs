@@ -253,7 +253,7 @@
       <el-timeline style="max-height:400px;overflow-y:auto">
         <el-timeline-item
           v-for="v in versions" :key="v.version"
-          :timestamp="formatTime(v.created_at) + ' · ' + (v.created_by_name || t('common.unknown'))"
+          :timestamp="versionStamp(v)"
           :type="v.version === versionDialog.version ? 'primary' : ''"
           placement="top"
         >
@@ -1670,6 +1670,12 @@ function formatTime(t: string): string {
   if (!t) return ''
   const d = new Date(t)
   return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function versionStamp(v: { created_at?: string; created_by_name?: string; user_name?: string }) {
+  const when = formatTime(v.created_at || '')
+  const who = String(v.created_by_name || v.user_name || '').trim()
+  return who ? `${when} · ${who}` : when
 }
 
 function handleVersion(ver: number) {
