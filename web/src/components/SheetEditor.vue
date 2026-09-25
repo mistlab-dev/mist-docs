@@ -475,7 +475,7 @@
             <el-button size="small" @click="applyIconSet('flags')">{{ t('sheet.iconFlags') }}</el-button>
             <el-button size="small" @click="applyIconSet('traffic')">{{ t('sheet.iconTraffic') }}</el-button>
           </div>
-          <div style="color:#999;font-size:12px;margin-top:8px">{{ t('sheet.iconSetHint') }}</div>
+          <div style="color:var(--md-text-quiet);font-size:12px;margin-top:8px">{{ t('sheet.iconSetHint') }}</div>
         </el-tab-pane>
       </el-tabs>
     </el-dialog>
@@ -491,7 +491,7 @@
           <el-button @click="replaceAll" size="small">{{ t('sheet.replaceAllBtn') }}</el-button>
         </template>
       </el-input>
-      <div v-if="searchResult" style="color:#999;font-size:12px;margin-top:4px">{{ searchResult }}</div>
+      <div v-if="searchResult" style="color:var(--md-text-quiet);font-size:12px;margin-top:4px">{{ searchResult }}</div>
     </el-dialog>
 
     <!-- 批注编辑 -->
@@ -531,7 +531,7 @@
 
     <!-- 筛选面板 -->
     <div v-if="showFilterPanel" class="filter-panel" :style="{ left: '200px', top: '200px' }">
-      <div style="padding:6px 10px;border-bottom:1px solid #e8e8e8">
+      <div style="padding:6px 10px;border-bottom:1px solid var(--md-border-light)">
         <el-checkbox v-model="filterSelectAll" @change="toggleFilterAll">{{ t('sheet.filterPanelSelectAll') }}</el-checkbox>
       </div>
       <div style="max-height:180px;overflow-y:auto;padding:4px 10px">
@@ -539,7 +539,7 @@
           <el-checkbox :model-value="filterSelectedValues.has(val)" @change="(v: boolean) => toggleFilterValue(val, v)">{{ val || t('common.emptyValue') }}</el-checkbox>
         </div>
       </div>
-      <div style="padding:6px 10px;border-top:1px solid #e8e8e8;display:flex;gap:6px">
+      <div style="padding:6px 10px;border-top:1px solid var(--md-border-light);display:flex;gap:6px">
         <el-button size="small" @click="applyFilter(true)">{{ t('sheet.filterApply') }}</el-button>
         <el-button size="small" @click="applyFilter(false)">{{ t('sheet.filterCancel') }}</el-button>
       </div>
@@ -547,7 +547,7 @@
 
     <!-- 分列对话框 -->
     <el-dialog v-model="showSplitColDialog" :title="t('sheet.splitColTitle')" width="440px">
-      <div style="margin-bottom:12px;color:#666">{{ t('sheet.splitColDesc') }}</div>
+      <div style="margin-bottom:12px;color:var(--md-text-soft)">{{ t('sheet.splitColDesc') }}</div>
       <div style="margin-bottom:12px">
         <el-radio-group v-model="splitMode" size="small">
           <el-radio-button value="delimiter">{{ t('sheet.splitDelimiterMode') }}</el-radio-button>
@@ -572,18 +572,18 @@
           <span>{{ t('sheet.splitFixedPositions') }}</span>
         </div>
         <el-input v-model="splitFixedPositions" size="small" :placeholder="t('sheet.splitFixedPlaceholder')" />
-        <div style="color:#999;font-size:12px;margin-top:4px">{{ t('sheet.splitFixedHint') }}</div>
+        <div style="color:var(--md-text-quiet);font-size:12px;margin-top:4px">{{ t('sheet.splitFixedHint') }}</div>
       </div>
       <div v-if="splitPreview.length" style="margin-bottom:12px">
-        <div style="font-size:12px;color:#999;margin-bottom:4px">{{ t('sheet.splitPreview') }}</div>
+        <div style="font-size:12px;color:var(--md-text-quiet);margin-bottom:4px">{{ t('sheet.splitPreview') }}</div>
         <table style="border-collapse:collapse;font-size:12px;width:100%">
-          <tr v-for="(row, i) in splitPreview" :key="i" style="border-bottom:1px solid #eee">
-            <td v-for="(cell, j) in row" :key="j" style="padding:2px 8px;border:1px solid #ddd">{{ cell }}</td>
+          <tr v-for="(row, i) in splitPreview" :key="i" style="border-bottom:1px solid var(--md-border-light)">
+            <td v-for="(cell, j) in row" :key="j" style="padding:2px 8px;border:1px solid var(--md-sep-sheet)">{{ cell }}</td>
           </tr>
         </table>
-        <div style="font-size:11px;color:#999;margin-top:2px">{{ t('sheet.splitPreviewLimit') }}</div>
+        <div style="font-size:11px;color:var(--md-text-quiet);margin-top:2px">{{ t('sheet.splitPreviewLimit') }}</div>
       </div>
-      <div style="color:#999;font-size:12px">{{ t('sheet.splitSourceCol', [colName(splitCol)]) }}</div>
+      <div style="color:var(--md-text-quiet);font-size:12px">{{ t('sheet.splitSourceCol', [colName(splitCol)]) }}</div>
       <template #footer>
         <el-button size="small" @click="showSplitColDialog = false">{{ t('common.cancel') }}</el-button>
         <el-button size="small" type="primary" @click="doSplitCol" :disabled="!splitPreview.length">{{ t('common.confirm') }}</el-button>
@@ -613,13 +613,13 @@
     <el-dialog v-model="showPivotDialog" :title="t('sheet.pivotTitle')" width="500px">
       <div style="display:flex;gap:12px;margin-bottom:12px">
         <div style="flex:1">
-          <div style="font-size:12px;color:#999;margin-bottom:4px">{{ t('sheet.pivotGroupCol') }}</div>
+          <div style="font-size:12px;color:var(--md-text-quiet);margin-bottom:4px">{{ t('sheet.pivotGroupCol') }}</div>
           <el-select v-model="pivotGroupCol" size="small" style="width:100%">
             <el-option v-for="c in colCount" :key="c" :label="colName(c-1)" :value="c-1" />
           </el-select>
         </div>
         <div style="flex:1">
-          <div style="font-size:12px;color:#999;margin-bottom:4px">{{ t('sheet.pivotValueCol') }}</div>
+          <div style="font-size:12px;color:var(--md-text-quiet);margin-bottom:4px">{{ t('sheet.pivotValueCol') }}</div>
           <el-select v-model="pivotValueCol" size="small" style="width:100%">
             <el-option v-for="c in colCount" :key="c" :label="colName(c-1)" :value="c-1" />
           </el-select>
@@ -628,18 +628,18 @@
       <el-button size="small" type="primary" @click="doPivot" style="margin-bottom:12px">{{ t('sheet.pivotGenerate') }}</el-button>
       <div v-if="pivotResult.length" style="max-height:300px;overflow:auto">
         <table style="width:100%;border-collapse:collapse;font-size:13px">
-          <thead><tr style="background:#f0f0f0">
-            <th style="padding:6px;border:1px solid #ddd">{{ t('sheet.pivotGroup') }}</th>
-            <th style="padding:6px;border:1px solid #ddd">{{ t('common.summation') }}</th>
-            <th style="padding:6px;border:1px solid #ddd">{{ t('common.count') }}</th>
-            <th style="padding:6px;border:1px solid #ddd">{{ t('common.average') }}</th>
+          <thead><tr style="background:var(--md-locked)">
+            <th style="padding:6px;border:1px solid var(--md-sep-sheet)">{{ t('sheet.pivotGroup') }}</th>
+            <th style="padding:6px;border:1px solid var(--md-sep-sheet)">{{ t('common.summation') }}</th>
+            <th style="padding:6px;border:1px solid var(--md-sep-sheet)">{{ t('common.count') }}</th>
+            <th style="padding:6px;border:1px solid var(--md-sep-sheet)">{{ t('common.average') }}</th>
           </tr></thead>
           <tbody>
             <tr v-for="row in pivotResult" :key="row.group">
-              <td style="padding:6px;border:1px solid #ddd">{{ row.group }}</td>
-              <td style="padding:6px;border:1px solid #ddd">{{ row.sum }}</td>
-              <td style="padding:6px;border:1px solid #ddd">{{ row.count }}</td>
-              <td style="padding:6px;border:1px solid #ddd">{{ row.avg }}</td>
+              <td style="padding:6px;border:1px solid var(--md-sep-sheet)">{{ row.group }}</td>
+              <td style="padding:6px;border:1px solid var(--md-sep-sheet)">{{ row.sum }}</td>
+              <td style="padding:6px;border:1px solid var(--md-sep-sheet)">{{ row.count }}</td>
+              <td style="padding:6px;border:1px solid var(--md-sep-sheet)">{{ row.avg }}</td>
             </tr>
           </tbody>
         </table>
@@ -688,6 +688,8 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { isDark } from '@/composables/useTheme'
+import { toneSheetColor } from '@/utils/sheet-color'
 
 const { t } = useI18n()
 
@@ -1447,28 +1449,28 @@ function getCellTextStyle(r: number, c: number): Record<string, string> {
   if (m.bold) s.fontWeight = 'bold'; if (m.italic) s.fontStyle = 'italic'
   if (m.underline && m.strike) s.textDecoration = 'underline line-through'
   else if (m.underline) s.textDecoration = 'underline'; else if (m.strike) s.textDecoration = 'line-through'
-  if (m.color) s.color = m.color; if (m.fontFamily) s.fontFamily = m.fontFamily
+  if (m.color) s.color = toneSheetColor(m.color, isDark.value, 'fg'); if (m.fontFamily) s.fontFamily = m.fontFamily
   if (m.fontSize) s.fontSize = m.fontSize + 'px'; if (m.align) s.textAlign = m.align
   if (m.wrap) { s.whiteSpace = 'normal'; s.wordBreak = 'break-all' }
   // 边框样式
   if (m.border) {
-    const bStyle = '1px solid #333'
+    const bStyle = isDark.value ? '1px solid var(--md-border-strong)' : '1px solid #333'
     if (m.border.top) s.borderTop = bStyle; if (m.border.right) s.borderRight = bStyle
     if (m.border.bottom) s.borderBottom = bStyle; if (m.border.left) s.borderLeft = bStyle
   }
-  if (m.locked && sheet.value.protected) s.background = '#f0f0f0'
-  if (m.link) { s.color = '#1a73e8'; s.textDecoration = (s.textDecoration ? s.textDecoration + ' ' : '') + 'underline'; s.cursor = 'pointer' }
+  if (m.locked && sheet.value.protected) s.background = 'var(--md-locked)'
+  if (m.link) { s.color = 'var(--md-link-sheet)'; s.textDecoration = (s.textDecoration ? s.textDecoration + ' ' : '') + 'underline'; s.cursor = 'pointer' }
   if (m.rotate) { s.transform = `rotate(${m.rotate}deg)`; s.transformOrigin = 'center center' }
   if ((m as any).indent) s.paddingLeft = ((m as any).indent * 16) + 'px'
   return s
 }
 function getCellStyle(r: number, c: number): Record<string, string> {
   const m = getCellMeta(r, c); const s: Record<string, string> = {}
-  if (m.bgColor) s.background = m.bgColor
+  if (m.bgColor) s.background = toneSheetColor(m.bgColor, isDark.value, 'bg')
   if ((m as any).valign) s.verticalAlign = (m as any).valign as string
-  const b = m.border; const brd = '1px solid #333'
+  const b = m.border; const brd = isDark.value ? '1px solid var(--md-border-strong)' : '1px solid #333'
   if (b) { if (b.top) s.borderTop = brd; if (b.bottom) s.borderBottom = brd; if (b.left) s.borderLeft = brd; if (b.right) s.borderRight = brd }
-  for (const rule of condRules.value) { const v = rows.value[r]?.[c] || ''; if (testCond(v, rule)) { s.background = rule.bgColor; break } }
+  for (const rule of condRules.value) { const v = rows.value[r]?.[c] || ''; if (testCond(v, rule)) { s.background = toneSheetColor(rule.bgColor, isDark.value, 'bg'); break } }
   return s
 }
 function getColspan(r: number, c: number): number | undefined { const mg = sheet.value.merges.find(m => m.row === r && m.col === c); return mg?.colspan }
@@ -2450,63 +2452,63 @@ defineExpose({ getData })
 
 <style scoped>
 /* ── Layout ── */
-.sheet-container { display: flex; flex-direction: column; height: 100%; background: #fff; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; color: #333; outline: none; }
+.sheet-container { display: flex; flex-direction: column; height: 100%; background: var(--md-surface); font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; color: var(--md-text-body); outline: none; }
 .sheet-readonly .ribbon { pointer-events: none; opacity: 0.55; }
 
 /* ── Formula (inside ribbon) ── */
 .ribbon-formula-section { display: flex; flex-direction: column; align-items: center; padding: 2px 6px 0; min-width: 0; }
-.ribbon-formula-row { gap: 0 !important; border: 1px solid #d6d6d6; border-radius: 3px; overflow: hidden; height: 26px; }
-.cell-ref-sm { width: 52px; text-align: center; font-size: 11px; color: #444; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; justify-content: center; background: #fff; font-weight: 500; flex-shrink: 0; }
-.formula-fx-btn-sm { padding: 0 6px; color: #555; font-style: italic; font-weight: 600; border-right: 1px solid #d6d6d6; height: 100%; display: flex; align-items: center; background: #f3f3f3; font-size: 11px; cursor: pointer; border: none; }
-.formula-fx-btn-sm:hover { background: #e8e8e8; }
-.formula-fx-btn-sm.active { background: #e0ecf7; color: #409eff; }
+.ribbon-formula-row { gap: 0 !important; border: 1px solid var(--md-border-sheet); border-radius: 3px; overflow: hidden; height: 26px; }
+.cell-ref-sm { width: 52px; text-align: center; font-size: 11px; color: var(--md-text-muted); border-right: 1px solid var(--md-border-sheet); height: 100%; display: flex; align-items: center; justify-content: center; background: var(--md-surface); font-weight: 500; flex-shrink: 0; }
+.formula-fx-btn-sm { padding: 0 6px; color: var(--md-sheet-header-text); font-style: italic; font-weight: 600; border-right: 1px solid var(--md-border-sheet); height: 100%; display: flex; align-items: center; background: var(--md-chrome); font-size: 11px; cursor: pointer; border: none; }
+.formula-fx-btn-sm:hover { background: var(--md-sheet-tab-hover); }
+.formula-fx-btn-sm.active { background: var(--md-active-ep); color: var(--md-link-ep); }
 .formula-input-wrap-sm { position: relative; height: 100%; flex: 1; min-width: 120px; }
-.formula-input-sm { width: 100%; border: none; outline: none; padding: 0 6px; height: 100%; font-size: 12px; background: #fff; }
+.formula-input-sm { width: 100%; border: none; outline: none; padding: 0 6px; height: 100%; font-size: 12px; background: var(--md-sheet-input); color: var(--md-text-body); }
 
 /* 函数面板 */
 .fx-panel {
-  background: #fff; border: 1px solid #d6d6d6; border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12); width: 360px;
+  background: var(--md-surface); border: 1px solid var(--md-border-sheet); border-radius: 8px;
+  box-shadow: var(--md-shadow-pop); width: 360px;
   display: flex; flex-direction: column; max-height: 320px;
 }
-.fx-search { padding: 8px; border-bottom: 1px solid #eee; }
+.fx-search { padding: 8px; border-bottom: 1px solid var(--md-border-light); }
 .fx-search input {
-  width: 100%; border: 1px solid #ddd; border-radius: 4px; padding: 5px 8px;
-  font-size: 13px; outline: none;
+  width: 100%; border: 1px solid var(--md-sep-sheet); border-radius: 4px; padding: 5px 8px;
+  font-size: 13px; outline: none; background: var(--md-sheet-input); color: var(--md-text);
 }
-.fx-search input:focus { border-color: #409eff; }
+.fx-search input:focus { border-color: var(--md-link-ep); }
 .fx-list { overflow-y: auto; max-height: 180px; }
 .fx-item {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 12px; cursor: pointer; transition: background 0.1s;
 }
-.fx-item:hover, .fx-item.active { background: #ecf5ff; }
-.fx-name { font-weight: 600; font-size: 13px; color: #409eff; min-width: 100px; }
-.fx-desc { font-size: 12px; color: #999; }
-.fx-empty { padding: 16px; text-align: center; color: #c0c4cc; font-size: 13px; }
+.fx-item:hover, .fx-item.active { background: var(--md-active-ep); }
+.fx-name { font-weight: 600; font-size: 13px; color: var(--md-link-ep); min-width: 100px; }
+.fx-desc { font-size: 12px; color: var(--md-text-quiet); }
+.fx-empty { padding: 16px; text-align: center; color: var(--md-text-faint); font-size: 13px; }
 .fx-hint {
-  padding: 8px 12px; background: #f5f7fa; border-top: 1px solid #eee;
-  font-size: 12px; color: #666; border-radius: 0 0 8px 8px;
+  padding: 8px 12px; background: var(--md-bg); border-top: 1px solid var(--md-border-light);
+  font-size: 12px; color: var(--md-text-soft); border-radius: 0 0 8px 8px;
 }
-.fx-hint strong { color: #409eff; }
-.fx-hint p { margin: 4px 0 0; color: #999; }
+.fx-hint strong { color: var(--md-link-ep); }
+.fx-hint p { margin: 4px 0 0; color: var(--md-text-quiet); }
 
 /* ── Ribbon (Excel style) ── */
-.ribbon { border-bottom: 1px solid #c6c6c6; background: #f3f3f3; }
+.ribbon { border-bottom: 1px solid var(--md-border-ribbon); background: var(--md-chrome); }
 .ribbon-row { display: flex; align-items: stretch; padding: 2px 4px; gap: 0; min-height: 62px; overflow-x: auto; }
 .ribbon-section { display: flex; flex-direction: column; align-items: center; padding: 2px 6px 0; min-width: 0; }
 .ribbon-section-buttons { display: flex; align-items: center; gap: 1px; min-height: 26px; }
-.ribbon-section-label { font-size: 10px; color: #888; margin-top: auto; padding: 1px 0; white-space: nowrap; user-select: none; }
-.rb-sep { width: 1px; background: #d0d0d0; margin: 4px 2px; align-self: stretch; }
-.rb-vsep { width: 1px; height: 18px; background: #d0d0d0; margin: 0 3px; }
-.rb-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 24px; border: 1px solid transparent; border-radius: 2px; background: transparent; cursor: pointer; font-size: 13px; color: #333; padding: 0 4px; transition: all 0.08s; white-space: nowrap; }
-.rb-btn:hover:not(:disabled) { background: #c8ddf0; border-color: #90b4d8; }
-.rb-btn:active:not(:disabled) { background: #b0ccea; }
-.rb-btn.active { background: #c8ddf0; border-color: #6da0cc; color: #1565c0; }
+.ribbon-section-label { font-size: 10px; color: var(--md-text-quiet); margin-top: auto; padding: 1px 0; white-space: nowrap; user-select: none; }
+.rb-sep { width: 1px; background: var(--md-sep-sheet); margin: 4px 2px; align-self: stretch; }
+.rb-vsep { width: 1px; height: 18px; background: var(--md-sep-sheet); margin: 0 3px; }
+.rb-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 24px; border: 1px solid transparent; border-radius: 2px; background: transparent; cursor: pointer; font-size: 13px; color: var(--md-text-body); padding: 0 4px; transition: all 0.08s; white-space: nowrap; }
+.rb-btn:hover:not(:disabled) { background: var(--md-sheet-btn-hover); border-color: var(--md-sheet-btn-border); }
+.rb-btn:active:not(:disabled) { background: var(--md-sheet-btn-active-bg); }
+.rb-btn.active { background: var(--md-sheet-btn-hover); border-color: var(--md-sheet-btn-border); color: var(--md-sheet-btn-active); }
 .rb-btn:disabled { opacity: 0.35; cursor: default; }
 .rb-svg { width: 16px; height: 16px; display: inline-block; vertical-align: middle; }
-.rb-select :deep(.el-input__wrapper) { box-shadow: none !important; background: #fff; border: 1px solid #c0c0c0; border-radius: 2px; }
-.rb-select :deep(.el-input__wrapper:hover) { border-color: #90b4d8; }
+.rb-select :deep(.el-input__wrapper) { box-shadow: none !important; background: var(--md-surface); border: 1px solid var(--md-border-sheet-strong); border-radius: 2px; }
+.rb-select :deep(.el-input__wrapper:hover) { border-color: var(--md-sheet-btn-border); }
 
 /* Color picker integration */
 .color-btn-wrap { position: relative; display: inline-flex; }
@@ -2514,21 +2516,21 @@ defineExpose({ getData })
 .color-indicator { display: block; height: 3px; margin-top: 1px; border-radius: 1px; min-width: 14px; }
 
 /* ── Grid ── */
-.grid-area { flex: 1; overflow: auto; background: #fff; }
+.grid-area { flex: 1; overflow: auto; background: var(--md-surface); }
 .grid-table { border-collapse: collapse; table-layout: fixed; }
-.grid-table th, .grid-table td { border-right: 1px solid #e2e2e2; border-bottom: 1px solid #e2e2e2; }
+.grid-table th, .grid-table td { border-right: 1px solid var(--md-border-grid); border-bottom: 1px solid var(--md-border-grid); }
 
 /* Corner */
-.corner-cell { background: linear-gradient(135deg, #f0f0f0, #e8e8e8); width: 46px; position: sticky; top: 0; left: 0; z-index: 5; border-right: 1px solid #c0c0c0; border-bottom: 1px solid #c0c0c0; }
+.corner-cell { background: var(--md-sheet-corner); width: 46px; position: sticky; top: 0; left: 0; z-index: 5; border-right: 1px solid var(--md-border-sheet-strong); border-bottom: 1px solid var(--md-border-sheet-strong); }
 
 /* Column Headers */
-.col-hdr { background: linear-gradient(180deg, #fafafa, #eee); font-weight: 600; color: #555; text-align: center; position: sticky; top: 0; z-index: 4; cursor: pointer; user-select: none; height: 24px; font-size: 12px; border-bottom: 1px solid #c0c0c0; overflow: visible; }
-.col-hdr:hover { background: linear-gradient(180deg, #e8e8e8, #ddd); }
-.col-hdr.sel { background: linear-gradient(180deg, #d6e4f9, #c2d8f0); color: #1a73e8; }
-.col-hdr.sorted { color: #1a73e8; }
+.col-hdr { background: var(--md-sheet-header); font-weight: 600; color: var(--md-sheet-header-text); text-align: center; position: sticky; top: 0; z-index: 4; cursor: pointer; user-select: none; height: 24px; font-size: 12px; border-bottom: 1px solid var(--md-border-sheet-strong); overflow: visible; }
+.col-hdr:hover { background: var(--md-sheet-header-hover); }
+.col-hdr.sel { background: var(--md-sheet-header-sel); color: var(--md-link-sheet); }
+.col-hdr.sorted { color: var(--md-link-sheet); }
 .col-letter { font-size: 12px; }
-.sort-arrow { font-size: 9px; color: #1a73e8; margin-left: 2px; }
-.filter-dot { font-size: 8px; color: #e6a23c; margin-left: 2px; }
+.sort-arrow { font-size: 9px; color: var(--md-link-sheet); margin-left: 2px; }
+.filter-dot { font-size: 8px; color: var(--md-warning); margin-left: 2px; }
 .hdr-menu { cursor: pointer; font-size: 10px; margin-left: 1px; opacity: 0.4; }
 .hdr-menu:hover { opacity: 1; }
 .col-hdr-inner { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
@@ -2536,67 +2538,67 @@ defineExpose({ getData })
 .frozen-col-hdr { z-index: 6 !important; }
 
 /* Row Headers */
-.row-hdr { background: linear-gradient(90deg, #fafafa, #eee); text-align: center; color: #555; font-weight: 600; position: sticky; left: 0; z-index: 2; cursor: pointer; user-select: none; font-size: 12px; border-right: 1px solid #c0c0c0; min-width: 46px; overflow: visible; }
-.row-hdr:hover { background: linear-gradient(90deg, #e8e8e8, #ddd); }
-.row-hdr.sel { background: linear-gradient(90deg, #d6e4f9, #c2d8f0); color: #1a73e8; }
-.row-hdr.drag-over { border-top: 2px solid #1a73e8; }
+.row-hdr { background: var(--md-sheet-header-row); text-align: center; color: var(--md-sheet-header-text); font-weight: 600; position: sticky; left: 0; z-index: 2; cursor: pointer; user-select: none; font-size: 12px; border-right: 1px solid var(--md-border-sheet-strong); min-width: 46px; overflow: visible; }
+.row-hdr:hover { background: var(--md-sheet-header-hover-row); }
+.row-hdr.sel { background: var(--md-sheet-header-sel-row); color: var(--md-link-sheet); }
+.row-hdr.drag-over { border-top: 2px solid var(--md-link-sheet); }
 .row-hdr-inner { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 .row-resize { position: absolute; bottom: -2px; left: 0; right: 0; height: 5px; cursor: row-resize; z-index: 3; }
 
 /* ── Cells ── */
 .cell { padding: 0; cursor: cell; overflow: visible; position: relative; height: 26px; }
-.cell.sel { background: #e8f0fe !important; }
-.cell.sel-head { outline: 2px solid #1a73e8; outline-offset: -1px; z-index: 1; background: #fff !important; }
+.cell.sel { background: var(--md-sheet-sel) !important; }
+.cell.sel-head { outline: 2px solid var(--md-link-sheet); outline-offset: -1px; z-index: 1; background: var(--md-surface) !important; }
 .cell.editing { padding: 0; }
 .cell.has-comment .comment-flag { position: absolute; top: 0; right: 0; width: 0; height: 0; border-left: 6px solid transparent; border-top: 6px solid #e6a23c; z-index: 3; }
-.cell.frozen { background: #fafafa; }
+.cell.frozen { background: var(--md-sheet-frozen); }
 
 .cell-val { display: block; padding: 0 6px; line-height: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wrap-row { height: auto !important; }
 .wrap-row .cell-val { white-space: normal; word-break: break-all; line-height: 1.4; }
-.cell-input { width: 100%; height: 100%; border: none; outline: none; padding: 0 6px; font-size: 13px; font-family: inherit; background: #fff; }
-.ac-dropdown { position: absolute; top: 100%; left: 0; background: #fff; border: 1px solid #d0d0d0; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 100; max-height: 200px; overflow-y: auto; min-width: 120px; }
-.ac-item { padding: 4px 10px; font-size: 13px; cursor: pointer; color: #333; }
-.ac-item:hover, .ac-item.ac-active { background: #e8f0fe; color: #1a73e8; }
+.cell-input { width: 100%; height: 100%; border: none; outline: none; padding: 0 6px; font-size: 13px; font-family: inherit; background: var(--md-sheet-input); color: var(--md-text-body); }
+.ac-dropdown { position: absolute; top: 100%; left: 0; background: var(--md-surface); border: 1px solid var(--md-sep-sheet); border-radius: 4px; box-shadow: var(--md-shadow-pop); z-index: 100; max-height: 200px; overflow-y: auto; min-width: 120px; }
+.ac-item { padding: 4px 10px; font-size: 13px; cursor: pointer; color: var(--md-text-body); }
+.ac-item:hover, .ac-item.ac-active { background: var(--md-active); color: var(--md-link-sheet); }
 
 /* Fill & Move handles */
-.fill-h { position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px; background: #1a73e8; cursor: crosshair; z-index: 2; border-radius: 0; }
-.move-h { position: absolute; left: 50%; top: -4px; transform: translateX(-50%); width: 16px; height: 4px; background: #1a73e8; cursor: move; z-index: 2; border-radius: 2px; opacity: 0.7; }
+.fill-h { position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px; background: var(--md-link-sheet); cursor: crosshair; z-index: 2; border-radius: 0; }
+.move-h { position: absolute; left: 50%; top: -4px; transform: translateX(-50%); width: 16px; height: 4px; background: var(--md-link-sheet); cursor: move; z-index: 2; border-radius: 2px; opacity: 0.7; }
 .comment-flag { position: absolute; top: 0; right: 0; width: 0; height: 0; border-left: 6px solid transparent; border-top: 6px solid #e6a23c; z-index: 3; }
 
 /* ── Comment Popup ── */
-.comment-popup { position: fixed; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 4px; padding: 8px 12px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); z-index: 2000; max-width: 250px; white-space: pre-wrap; color: #333; }
+.comment-popup { position: fixed; background: var(--md-comment-note-bg); border: 1px solid var(--md-comment-note-border); border-radius: 4px; padding: 8px 12px; font-size: 12px; box-shadow: var(--md-shadow); z-index: 2000; max-width: 250px; white-space: pre-wrap; color: var(--md-text-body); }
 
 /* ── Context Menu ── */
-.ctx-menu { position: fixed; background: #fff; border: 1px solid #d0d0d0; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); z-index: 1000; min-width: 200px; padding: 4px 0; }
-.ctx-item { padding: 6px 28px 6px 12px; font-size: 13px; cursor: pointer; color: #333; display: flex; align-items: center; gap: 8px; }
-.ctx-item:hover { background: #e8f0fe; color: #1a73e8; }
+.ctx-menu { position: fixed; background: var(--md-surface); border: 1px solid var(--md-sep-sheet); border-radius: 6px; box-shadow: var(--md-shadow-pop); z-index: 1000; min-width: 200px; padding: 4px 0; }
+.ctx-item { padding: 6px 28px 6px 12px; font-size: 13px; cursor: pointer; color: var(--md-text-body); display: flex; align-items: center; gap: 8px; }
+.ctx-item:hover { background: var(--md-active); color: var(--md-link-sheet); }
 .ctx-icon { font-size: 14px; width: 18px; text-align: center; }
-.ctx-key { margin-left: auto; color: #aaa; font-size: 11px; }
-.ctx-sep { height: 1px; background: #e8e8e8; margin: 4px 0; }
+.ctx-key { margin-left: auto; color: var(--md-text-faint); font-size: 11px; }
+.ctx-sep { height: 1px; background: var(--md-sheet-tab-hover); margin: 4px 0; }
 
 /* ── Chart Panel ── */
-.chart-panel { border-top: 1px solid #d6d6d6; background: #fafafa; padding: 8px; }
+.chart-panel { border-top: 1px solid var(--md-border-sheet); background: var(--md-sheet-frozen); padding: 8px; }
 .chart-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.chart-title { border: 1px solid #d6d6d6; border-radius: 4px; padding: 2px 8px; font-size: 13px; width: 120px; outline: none; }
-.chart-title:focus { border-color: #1a73e8; }
+.chart-title { border: 1px solid var(--md-border-sheet); border-radius: 4px; padding: 2px 8px; font-size: 13px; width: 120px; outline: none; background: var(--md-sheet-input); color: var(--md-text); }
+.chart-title:focus { border-color: var(--md-link-sheet); }
 .chart-canvas-wrap { display: flex; justify-content: center; position: relative; }
-.chart-canvas-wrap canvas { border: 1px solid #e0e0e0; border-radius: 4px; background: #fff; }
-.chart-tip { position: absolute; background: rgba(0,0,0,0.78); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; }
+.chart-canvas-wrap canvas { border: 1px solid var(--md-sep); border-radius: 4px; background: #fff; }
+.chart-tip { position: absolute; background: rgba(0,0,0,0.78); color: var(--md-on-accent); padding: 4px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; }
 
 /* ── Filter Panel ── */
-.filter-panel { position: fixed; background: #fff; border: 1px solid #d0d0d0; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); z-index: 1001; width: 200px; }
+.filter-panel { position: fixed; background: var(--md-surface); border: 1px solid var(--md-sep-sheet); border-radius: 6px; box-shadow: var(--md-shadow-pop); z-index: 1001; width: 200px; }
 
 /* ── Sheet Tabs (Excel style) ── */
-.sheet-tabs { display: flex; align-items: center; height: 32px; border-top: 1px solid #d6d6d6; background: #f3f3f3; padding: 0 4px; flex-shrink: 0; }
+.sheet-tabs { display: flex; align-items: center; height: 32px; border-top: 1px solid var(--md-border-sheet); background: var(--md-chrome); padding: 0 4px; flex-shrink: 0; }
 .tabs-scroll { display: flex; align-items: center; gap: 0; flex: 1; overflow-x: auto; }
-.tab { display: inline-flex; align-items: center; gap: 4px; padding: 4px 14px; font-size: 12px; cursor: pointer; border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0; color: #555; user-select: none; background: transparent; height: 26px; transition: all 0.1s; white-space: nowrap; }
-.tab:hover { background: #e5e5e5; }
-.tab.active { background: #fff; border-color: #d6d6d6; color: #1a73e8; font-weight: 600; border-bottom: 1px solid #fff; margin-bottom: -1px; }
+.tab { display: inline-flex; align-items: center; gap: 4px; padding: 4px 14px; font-size: 12px; cursor: pointer; border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0; color: var(--md-sheet-header-text); user-select: none; background: transparent; height: 26px; transition: all 0.1s; white-space: nowrap; }
+.tab:hover { background: var(--md-sheet-tab-hover); }
+.tab.active { background: var(--md-surface); border-color: var(--md-border-sheet); color: var(--md-link-sheet); font-weight: 600; border-bottom: 1px solid var(--md-surface); margin-bottom: -1px; }
 .tab-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.tab-x { font-size: 14px; color: #999; margin-left: 2px; line-height: 1; }
+.tab-x { font-size: 14px; color: var(--md-text-quiet); margin-left: 2px; line-height: 1; }
 .tab-x:hover { color: #e53935; }
-.tab-add { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; font-size: 16px; color: #666; transition: all 0.1s; }
-.tab-add:hover { background: #e5e5e5; border-color: #d0d0d0; color: #1a73e8; }
-.tabs-info { font-size: 11px; color: #999; padding: 0 8px; white-space: nowrap; }
+.tab-add { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; font-size: 16px; color: var(--md-text-soft); transition: all 0.1s; }
+.tab-add:hover { background: var(--md-sheet-tab-hover); border-color: var(--md-sep-sheet); color: var(--md-link-sheet); }
+.tabs-info { font-size: 11px; color: var(--md-text-quiet); padding: 0 8px; white-space: nowrap; }
 </style>

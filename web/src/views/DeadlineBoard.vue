@@ -762,7 +762,7 @@ onMounted(loadAll)
   min-height: 100%;
   /* 与 docs-page / trash-page / admin-page 同为 #f5f7fa，
      之前是透明的，所以看板页是刺眼的纯白，与其它页并排切换时明显脱层。 */
-  background: #f5f7fa;
+  background: var(--md-bg);
   box-sizing: border-box;
 }
 
@@ -778,10 +778,10 @@ onMounted(loadAll)
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: var(--md-text);
 }
 .page-sub {
-  color: #94a3b8;
+  color: var(--md-text-slate-dim);
   font-size: 13px;
   margin-left: 10px;
 }
@@ -800,33 +800,33 @@ onMounted(loadAll)
 .stat-card {
   border-radius: 10px;
   padding: 14px 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--md-dl-surface);
+  border: 1px solid var(--md-dl-border);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .stat-card:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--md-stat-shadow);
 }
 .stat-card.plain {
   cursor: default;
 }
 .stat-card.overdue {
-  background: #fef2f2;
-  border-color: #fecaca;
+  background: var(--md-dl-overdue-bg);
+  border-color: var(--md-dl-overdue-border);
 }
 .stat-card.today {
-  background: #fff7ed;
-  border-color: #fed7aa;
+  background: var(--md-dl-today-bg);
+  border-color: var(--md-dl-today-border);
 }
 .stat-card.next3 {
-  background: #fefce8;
-  border-color: #fef08a;
+  background: var(--md-dl-next3-bg);
+  border-color: var(--md-dl-next3-border);
 }
 .stat-card.next7 {
-  background: #f0f9ff;
-  border-color: #bae6fd;
+  background: var(--md-dl-next7-bg);
+  border-color: var(--md-dl-next7-border);
 }
 .stat-num {
   font-size: 24px;
@@ -835,7 +835,7 @@ onMounted(loadAll)
 }
 .stat-label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--md-text-slate);
   margin-top: 2px;
 }
 
@@ -865,9 +865,9 @@ onMounted(loadAll)
   }
 }
 .column {
-  background: #f8fafc;
+  background: var(--md-dl-surface);
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--md-dl-border);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -880,23 +880,23 @@ onMounted(loadAll)
   padding: 10px 14px;
   font-weight: 600;
   font-size: 13px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--md-dl-border);
 }
 .column-head.overdue {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--md-dl-head-overdue-bg);
+  color: var(--md-dl-head-overdue-text);
 }
 .column-head.today {
-  background: #ffedd5;
-  color: #c2410c;
+  background: var(--md-dl-head-today-bg);
+  color: var(--md-dl-head-today-text);
 }
 .column-head.next3 {
-  background: #fef9c3;
-  color: #a16207;
+  background: var(--md-dl-head-next3-bg);
+  color: var(--md-dl-head-next3-text);
 }
 .column-head.next7 {
-  background: #e0f2fe;
-  color: #0369a1;
+  background: var(--md-dl-head-next7-bg);
+  color: var(--md-dl-head-next7-text);
 }
 .column-count {
   font-weight: 700;
@@ -911,40 +911,40 @@ onMounted(loadAll)
   overflow-y: auto;
 }
 .column-empty {
-  color: #94a3b8;
+  color: var(--md-text-slate-dim);
   font-size: 12px;
   text-align: center;
   padding: 18px 0;
   /* 空列不再是一块弱到像坏掉的空白：给个浅浅的占位框 */
-  border: 1px dashed #e2e8f0;
+  border: 1px dashed var(--md-dl-border);
   border-radius: 8px;
   margin: 2px 0;
 }
 
 /* 订单卡 */
 .deadline-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-left: 3px solid #cbd5e1;
+  background: var(--md-surface);
+  border: 1px solid var(--md-dl-border);
+  border-left: 3px solid var(--md-dl-card-accent);
   border-radius: 8px;
   padding: 10px 12px;
   cursor: pointer;
   transition: box-shadow 0.15s ease;
 }
 .deadline-card:hover {
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+  box-shadow: var(--md-card-shadow);
 }
 .deadline-card.overdue {
-  border-left-color: #dc2626;
+  border-left-color: var(--md-dl-overdue);
 }
 .deadline-card.critical {
-  border-left-color: #ea580c;
+  border-left-color: var(--md-dl-critical);
 }
 .deadline-card.warning {
-  border-left-color: #eab308;
+  border-left-color: var(--md-dl-warn-border);
 }
 .deadline-card.ok {
-  border-left-color: #22c55e;
+  border-left-color: var(--md-dl-ok-border);
 }
 .card-top {
   display: flex;
@@ -957,7 +957,7 @@ onMounted(loadAll)
 }
 .card-order {
   font-size: 12px;
-  color: #64748b;
+  color: var(--md-text-slate);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .card-title {
@@ -972,16 +972,16 @@ onMounted(loadAll)
   align-items: center;
   justify-content: space-between;
   font-size: 12px;
-  color: #64748b;
+  color: var(--md-text-slate);
 }
 .card-foot {
   margin-top: 4px;
   padding-top: 6px;
-  border-top: 1px dashed #e2e8f0;
+  border-top: 1px dashed var(--md-dl-border);
 }
 .cell-unassigned,
 .owner.unassigned {
-  color: #cbd5e1;
+  color: var(--md-dl-unassigned);
 }
 
 /* 列表底部：总数 + 分页 */
@@ -995,27 +995,27 @@ onMounted(loadAll)
 }
 .list-foot .total {
   font-size: 12px;
-  color: #64748b;
+  color: var(--md-text-slate);
 }
 
 /* 风险着色 */
 .days.overdue,
 .due-cell.overdue {
-  color: #dc2626;
+  color: var(--md-dl-overdue);
   font-weight: 600;
 }
 .days.critical,
 .due-cell.critical {
-  color: #ea580c;
+  color: var(--md-dl-critical);
   font-weight: 600;
 }
 .days.warning,
 .due-cell.warning {
-  color: #a16207;
+  color: var(--md-dl-head-next3-text);
 }
 .days.ok,
 .due-cell.ok {
-  color: #16a34a;
+  color: var(--md-dl-ok);
 }
 
 /* 筛选 */
@@ -1034,7 +1034,7 @@ onMounted(loadAll)
 }
 .hint {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--md-text-slate-dim);
   line-height: 1.5;
 }
 
@@ -1058,14 +1058,14 @@ onMounted(loadAll)
 .detail-grid label {
   display: inline-block;
   width: 78px;
-  color: #94a3b8;
+  color: var(--md-text-slate-dim);
   font-size: 13px;
 }
 .detail-grid span {
   font-size: 13px;
 }
 .muted {
-  color: #94a3b8;
+  color: var(--md-text-slate-dim);
   font-size: 13px;
 }
 .timeline {
@@ -1083,19 +1083,19 @@ onMounted(loadAll)
   flex-wrap: wrap;
 }
 .event-time {
-  color: #94a3b8;
+  color: var(--md-text-slate-dim);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .event-type {
-  background: #eef2ff;
-  color: #4f46e5;
+  background: var(--md-dl-event-bg);
+  color: var(--md-dl-event-text);
   border-radius: 4px;
   padding: 1px 6px;
 }
 .event-change {
-  color: #334155;
+  color: var(--md-dl-event-change);
 }
 .event-reason {
-  color: #0f766e;
+  color: var(--md-dl-event-reason);
 }
 </style>

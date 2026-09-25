@@ -1,178 +1,348 @@
 /* ============================================================
-   MistDocs — Dark Theme (single source of truth)
-   Palette: blue-violet dark, aligned with Element Plus dark
+   MistDocs theme tokens
+   Light values match the previous hardcoded palette so light
+   mode stays visually the same. html.dark overrides them.
    ============================================================ */
 
 :root {
   --md-brand: #6366f1;
   --md-brand-light: #818cf8;
   --md-brand-dim: rgba(99, 102, 241, 0.12);
+  --md-accent: #6366f1;
+  --md-accent-text: #818cf8;
+
+  --md-bg: #f5f7fa;
+  --md-surface: #ffffff;
+  --md-surface-2: #fafbfc;
+  --md-surface-3: #f8fafc;
+  --md-chrome: #f3f3f3;
+  --md-hover: #f0f5ff;
+  --md-hover-soft: #f9fbff;
+  --md-active: #e8f0fe;
+  --md-active-ep: #ecf5ff;
+
+  --md-border: #e8ecf0;
+  --md-border-light: #f0f0f0;
+  --md-border-muted: #ebeef5;
+  --md-border-strong: #dcdfe6;
+  --md-border-grid: #e2e2e2;
+  --md-border-sheet: #d6d6d6;
+  --md-border-sheet-strong: #c0c0c0;
+  --md-border-ribbon: #c6c6c6;
+  --md-sep: #e0e0e0;
+  --md-sep-sheet: #d0d0d0;
+
+  --md-text: #303133;
+  --md-text-title: #1a1a2e;
+  --md-text-body: #333333;
+  --md-text-muted: #606266;
+  --md-text-secondary: #5a5f6b;
+  --md-text-dim: #909399;
+  --md-text-faint: #c0c4cc;
+  --md-text-soft: #666666;
+  --md-text-quiet: #999999;
+  --md-text-slate: #64748b;
+  --md-text-slate-dim: #94a3b8;
+  --md-text-ink: #334155;
+
+  --md-link: #4f6ef7;
+  --md-link-ep: #409eff;
+  --md-link-sheet: #1a73e8;
+  --md-on-accent: #ffffff;
+
+  --md-code-bg: #f0f2f5;
+  --md-pre-bg: #1e1e2e;
+  --md-pre-text: #cdd6f4;
+  --md-code-accent: #e6a23c;
+
+  --md-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  --md-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.08);
+  --md-shadow-pop: 0 4px 16px rgba(0, 0, 0, 0.12);
+
+  --md-pill-bg: #f0f5ff;
+  --md-pill-text: #3b4cca;
+
+  --md-tint-doc: #e8f0fe;
+  --md-tint-doc-2: #f0f5ff;
+  --md-tint-sheet: #e6f7f0;
+  --md-tint-sheet-2: #f0fff7;
+  --md-tint-sheet-text: #36b37e;
+  --md-tint-folder: #fff7e6;
+  --md-folder: #fa8c16;
+  --md-preview-text: #4b5563;
+
+  --md-danger: #f56c6c;
+  --md-danger-soft: #fef0f0;
+  --md-success: #67c23a;
+  --md-success-soft: #f0f9eb;
+  --md-warning: #e6a23c;
+  --md-star: #f7ba2a;
+
+  --md-kbd-bg: #f5f5f5;
+  --md-notif-unread: #f0f7ff;
+  --md-search-hl: #fef08a;
+
+  --md-batch-bg: linear-gradient(135deg, #e6f7ff, #f0f5ff);
+  --md-batch-border: #91d5ff;
+  --md-batch-text: #1890ff;
+
+  --md-sheet-header: linear-gradient(180deg, #fafafa, #eeeeee);
+  --md-sheet-header-row: linear-gradient(90deg, #fafafa, #eeeeee);
+  --md-sheet-header-text: #555555;
+  --md-sheet-header-hover: linear-gradient(180deg, #e8e8e8, #dddddd);
+  --md-sheet-header-hover-row: linear-gradient(90deg, #e8e8e8, #dddddd);
+  --md-sheet-header-sel: linear-gradient(180deg, #d6e4f9, #c2d8f0);
+  --md-sheet-header-sel-row: linear-gradient(90deg, #d6e4f9, #c2d8f0);
+  --md-sheet-corner: linear-gradient(135deg, #f0f0f0, #e8e8e8);
+  --md-sheet-sel: #e8f0fe;
+  --md-sheet-frozen: #fafafa;
+  --md-sheet-btn-hover: #c8ddf0;
+  --md-sheet-btn-active-bg: #b0ccea;
+  --md-sheet-btn-active: #1565c0;
+  --md-sheet-btn-border: #90b4d8;
+  --md-sheet-tab-hover: #e5e5e5;
+  --md-sheet-fx: #f3f3f3;
+  --md-sheet-input: #ffffff;
+  --md-comment-note-bg: #fffbe6;
+  --md-comment-note-border: #ffe58f;
+  --md-chart-bg: #fafafa;
+  --md-locked: #f0f0f0;
+
+  --md-dl-surface: #f8fafc;
+  --md-dl-border: #e2e8f0;
+  --md-dl-overdue-bg: #fef2f2;
+  --md-dl-overdue-border: #fecaca;
+  --md-dl-today-bg: #fff7ed;
+  --md-dl-today-border: #fed7aa;
+  --md-dl-next3-bg: #fefce8;
+  --md-dl-next3-border: #fef08a;
+  --md-dl-next7-bg: #f0f9ff;
+  --md-dl-next7-border: #bae6fd;
+  --md-dl-head-overdue-bg: #fee2e2;
+  --md-dl-head-overdue-text: #b91c1c;
+  --md-dl-head-today-bg: #ffedd5;
+  --md-dl-head-today-text: #c2410c;
+  --md-dl-head-next3-bg: #fef9c3;
+  --md-dl-head-next3-text: #a16207;
+  --md-dl-head-next7-bg: #e0f2fe;
+  --md-dl-head-next7-text: #0369a1;
+  --md-dl-card-accent: #cbd5e1;
+  --md-dl-unassigned: #cbd5e1;
+  --md-dl-overdue: #dc2626;
+  --md-dl-critical: #ea580c;
+  --md-dl-warn-border: #eab308;
+  --md-dl-ok-border: #22c55e;
+  --md-dl-warning: #a16207;
+  --md-dl-ok: #16a34a;
+  --md-dl-event-bg: #eef2ff;
+  --md-dl-event-text: #4f46e5;
+  --md-dl-event-change: #334155;
+  --md-dl-event-reason: #0f766e;
+  --md-hourly: #e6f0ff;
+  --md-tpl-border: #edf0f4;
+  --md-diff-add: #f0f9eb;
+  --md-diff-remove: #fef0f0;
+  --md-cmd: #e6553e;
+  --md-cmd-border: #f0f0f0;
+  --md-watermark: #000000;
+  --md-placeholder: #adb5bd;
+  --md-quote-bar: #409eff;
+  --md-stat-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --md-card-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
 }
 
-/* Element Plus base variable overrides */
 html.dark {
+  --md-accent: #a5b4fc;
+  --md-accent-text: #c7d2fe;
   --md-bg: #0f0f23;
   --md-surface: #1a1a2e;
   --md-surface-2: #16213e;
   --md-surface-3: #1e1e34;
+  --md-chrome: #1e1e34;
   --md-hover: #2a2a4a;
+  --md-hover-soft: #24243e;
+  --md-active: rgba(99, 102, 241, 0.22);
+  --md-active-ep: rgba(64, 158, 255, 0.16);
+
   --md-border: #363660;
   --md-border-light: #2a2a4a;
-  --md-text: #e0e0e0;
-  --md-text-muted: #c0c0c0;
-  --md-text-dim: #909399;
-  --md-accent: #409eff;
-  --md-accent-text: #8ab4f8;
-  --md-green: #61afef;
+  --md-border-muted: #2e2e4e;
+  --md-border-strong: #4a4a74;
+  --md-border-grid: #2e2e4e;
+  --md-border-sheet: #3a3a5c;
+  --md-border-sheet-strong: #4a4a74;
+  --md-border-ribbon: #363660;
+  --md-sep: #363660;
+  --md-sep-sheet: #3a3a5c;
 
-  /* Element Plus binding */
+  --md-text: #e8eaf2;
+  --md-text-title: #f4f5fb;
+  --md-text-body: #e4e6f0;
+  --md-text-muted: #c5c7d6;
+  --md-text-secondary: #b7b9cc;
+  --md-text-dim: #a8abc0;
+  --md-text-faint: #8e91ab;
+  --md-text-soft: #c5c7d6;
+  --md-text-quiet: #b4b6cc;
+  --md-text-slate: #c5c7d6;
+  --md-text-slate-dim: #a8abc0;
+  --md-text-ink: #e4e6f0;
+
+  --md-link: #a5b4fc;
+  --md-link-ep: #8ab4f8;
+  --md-link-sheet: #8ab4f8;
+  --md-on-accent: #ffffff;
+
+  --md-code-bg: #12122a;
+  --md-pre-bg: #0c0c1c;
+  --md-pre-text: #cdd6f4;
+  --md-code-accent: #f0c674;
+  --md-code-text: #f3b4bc;
+
+  --md-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  --md-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --md-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+  --md-pill-bg: rgba(99, 102, 241, 0.22);
+  --md-pill-text: #c7d2fe;
+
+  --md-tint-doc: rgba(99, 102, 241, 0.2);
+  --md-tint-doc-2: rgba(99, 102, 241, 0.12);
+  --md-tint-sheet: rgba(54, 179, 126, 0.2);
+  --md-tint-sheet-2: rgba(54, 179, 126, 0.1);
+  --md-tint-sheet-text: #6ee7b7;
+  --md-tint-folder: rgba(250, 140, 22, 0.18);
+  --md-folder: #fdba74;
+  --md-preview-text: #c5c7d6;
+
+  --md-danger-soft: rgba(245, 108, 108, 0.16);
+  --md-success-soft: rgba(103, 194, 58, 0.16);
+
+  --md-kbd-bg: #12122a;
+  --md-notif-unread: rgba(99, 102, 241, 0.16);
+  --md-search-hl: #854d0e;
+  --md-search-hl-text: #fef9c3;
+
+  --md-batch-bg: linear-gradient(135deg, rgba(24, 144, 255, 0.16), rgba(99, 102, 241, 0.16));
+  --md-batch-border: rgba(129, 140, 248, 0.45);
+  --md-batch-text: #93c5fd;
+
+  --md-sheet-header: linear-gradient(180deg, #1e1e34, #16213e);
+  --md-sheet-header-row: linear-gradient(90deg, #1e1e34, #16213e);
+  --md-sheet-header-text: #d5d7e6;
+  --md-sheet-header-hover: linear-gradient(180deg, #2a2a4a, #22223c);
+  --md-sheet-header-hover-row: linear-gradient(90deg, #2a2a4a, #22223c);
+  --md-sheet-header-sel: linear-gradient(180deg, #2c3a66, #243056);
+  --md-sheet-header-sel-row: linear-gradient(90deg, #2c3a66, #243056);
+  --md-sheet-corner: linear-gradient(135deg, #1e1e34, #16213e);
+  --md-sheet-sel: rgba(99, 102, 241, 0.28);
+  --md-sheet-frozen: #141428;
+  --md-sheet-btn-hover: #2a2a4a;
+  --md-sheet-btn-active-bg: #2a2a4a;
+  --md-sheet-btn-active: #c7d2fe;
+  --md-sheet-btn-border: #5a5a8a;
+  --md-sheet-tab-hover: #2a2a4a;
+  --md-sheet-fx: #16213e;
+  --md-sheet-input: #12122a;
+  --md-comment-note-bg: #3a3018;
+  --md-comment-note-border: #6b5420;
+  --md-chart-bg: #141428;
+  --md-locked: #141428;
+
+  --md-dl-surface: #1a1a2e;
+  --md-dl-border: #363660;
+  --md-dl-overdue-bg: rgba(220, 38, 38, 0.16);
+  --md-dl-overdue-border: rgba(248, 113, 113, 0.45);
+  --md-dl-today-bg: rgba(234, 88, 12, 0.16);
+  --md-dl-today-border: rgba(251, 146, 60, 0.45);
+  --md-dl-next3-bg: rgba(202, 138, 4, 0.16);
+  --md-dl-next3-border: rgba(250, 204, 21, 0.4);
+  --md-dl-next7-bg: rgba(2, 132, 199, 0.16);
+  --md-dl-next7-border: rgba(125, 211, 252, 0.4);
+  --md-dl-head-overdue-bg: rgba(220, 38, 38, 0.28);
+  --md-dl-head-overdue-text: #fecaca;
+  --md-dl-head-today-bg: rgba(234, 88, 12, 0.28);
+  --md-dl-head-today-text: #fed7aa;
+  --md-dl-head-next3-bg: rgba(202, 138, 4, 0.28);
+  --md-dl-head-next3-text: #fef08a;
+  --md-dl-head-next7-bg: rgba(2, 132, 199, 0.28);
+  --md-dl-head-next7-text: #bae6fd;
+  --md-dl-card-accent: #4a4a74;
+  --md-dl-unassigned: #8e91ab;
+  --md-dl-overdue: #fca5a5;
+  --md-dl-critical: #fdba74;
+  --md-dl-warn-border: #facc15;
+  --md-dl-ok-border: #4ade80;
+  --md-dl-warning: #fde047;
+  --md-dl-ok: #86efac;
+  --md-dl-event-bg: rgba(99, 102, 241, 0.22);
+  --md-dl-event-text: #c7d2fe;
+  --md-dl-event-change: #e4e6f0;
+  --md-dl-event-reason: #5eead4;
+  --md-hourly: rgba(99, 102, 241, 0.2);
+  --md-tpl-border: #363660;
+  --md-diff-add: rgba(103, 194, 58, 0.18);
+  --md-diff-remove: rgba(245, 108, 108, 0.18);
+  --md-cmd: #fca5a5;
+  --md-cmd-border: #363660;
+  --md-watermark: #ffffff;
+  --md-placeholder: #8e91ab;
+  --md-quote-bar: #8ab4f8;
+  --md-stat-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --md-card-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+
+  /* Element Plus binding — keep buttons on the stock dark primary palette */
   --el-bg-color: var(--md-surface);
   --el-bg-color-overlay: var(--md-surface-2);
   --el-bg-color-page: var(--md-bg);
   --el-text-color-primary: var(--md-text);
   --el-text-color-regular: var(--md-text-muted);
   --el-text-color-secondary: var(--md-text-dim);
+  --el-text-color-placeholder: var(--md-text-faint);
   --el-border-color: var(--md-border);
   --el-border-color-light: var(--md-border-light);
+  --el-border-color-lighter: var(--md-border-light);
+  --el-border-color-extra-light: var(--md-border-light);
+  --el-fill-color: var(--md-surface-3);
+  --el-fill-color-light: var(--md-hover);
+  --el-fill-color-lighter: var(--md-surface-2);
+  --el-fill-color-extra-light: var(--md-surface-2);
   --el-fill-color-blank: var(--md-surface);
-  --el-color-white: var(--md-surface);
+  --el-mask-color: rgba(0, 0, 0, 0.62);
 
+  color-scheme: dark;
   background-color: var(--md-bg);
   color: var(--md-text);
 }
-html.dark body { background-color: var(--md-bg); color: var(--md-text); }
 
-/* ----- 交期看板 -----
-   DeadlineBoard.vue 的样式全部是硬编码浅色值（#fff / #f8fafc / #e2e8f0 …），
-   它没有吃 Element Plus 的暗色变量，所以深色模式下整页就是一块大白块。
-   这里统一覆盖（与 docs-page / editor-page 同一套变量）。 */
-html.dark .deadline-page { background: var(--md-bg); }
-
-html.dark .stat-card {
-  background: var(--md-surface);
-  border-color: var(--md-border);
+html.dark body {
+  background-color: var(--md-bg);
+  color: var(--md-text);
 }
-html.dark .stat-card:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
-html.dark .stat-card.overdue { background: rgba(220, 38, 38, 0.14); border-color: rgba(220, 38, 38, 0.4); }
-html.dark .stat-card.today { background: rgba(234, 88, 12, 0.14); border-color: rgba(234, 88, 12, 0.4); }
-html.dark .stat-card.next3 { background: rgba(202, 138, 4, 0.14); border-color: rgba(202, 138, 4, 0.4); }
-html.dark .stat-card.next7 { background: rgba(2, 132, 199, 0.14); border-color: rgba(2, 132, 199, 0.4); }
-html.dark .stat-label { color: var(--md-text-dim); }
 
-html.dark .column {
-  background: var(--md-surface);
-  border-color: var(--md-border);
-}
-html.dark .column-head { border-bottom-color: var(--md-border); }
-html.dark .column-head.overdue { background: rgba(220, 38, 38, 0.2); color: #fca5a5; }
-html.dark .column-head.today { background: rgba(234, 88, 12, 0.2); color: #fdba74; }
-html.dark .column-head.next3 { background: rgba(202, 138, 4, 0.2); color: #fde047; }
-html.dark .column-head.next7 { background: rgba(2, 132, 199, 0.2); color: #7dd3fc; }
-html.dark .column-empty { color: var(--md-text-dim); border-color: var(--md-border); }
-
-html.dark .deadline-card {
-  background: var(--md-surface-2);
-  border-color: var(--md-border);
-}
-html.dark .deadline-card:hover { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); }
-html.dark .card-foot { border-top-color: var(--md-border); }
-html.dark .card-order,
-html.dark .card-meta,
-html.dark .card-foot { color: var(--md-text-dim); }
-html.dark .cell-unassigned,
-html.dark .owner.unassigned { color: #5a5a7a; }
-
-html.dark .days.overdue, html.dark .due-cell.overdue { color: #f87171; }
-html.dark .days.critical, html.dark .due-cell.critical { color: #fb923c; }
-html.dark .days.warning, html.dark .due-cell.warning { color: #facc15; }
-html.dark .days.ok, html.dark .due-cell.ok { color: #4ade80; }
-
-html.dark .page-sub,
-html.dark .hint,
-html.dark .muted,
-html.dark .list-foot .total { color: var(--md-text-dim); }
-html.dark .detail-grid label { color: var(--md-text-dim); }
-html.dark .event-time { color: var(--md-text-dim); }
-html.dark .event-type { background: var(--md-brand-dim); color: var(--md-brand-light); }
-html.dark .event-change { color: var(--md-text-muted); }
-html.dark .event-reason { color: #5eead4; }
-
-/* ----- Editor ----- */
-html.dark .editor-page { background: var(--md-bg); }
-html.dark .editor-header { background: var(--md-surface-2); border-color: var(--md-border); }
-html.dark .ProseMirror { background: var(--md-surface); color: var(--md-text); }
-html.dark .ProseMirror h1, html.dark .ProseMirror h2, html.dark .ProseMirror h3 { color: var(--md-text); }
-html.dark .ProseMirror code { background: var(--md-hover); color: #e06c75; }
-html.dark .ProseMirror pre { background: var(--md-bg); }
-html.dark .ProseMirror blockquote { border-color: var(--md-border); color: var(--md-text-dim); }
-html.dark .ProseMirror table { border-color: var(--md-border); }
-html.dark .ProseMirror th { background: var(--md-surface-2); color: var(--md-text); border-color: var(--md-border); }
-html.dark .ProseMirror td { border-color: var(--md-border); }
-html.dark .ProseMirror a { color: var(--md-green); }
-
-/* ----- Docs list ----- */
-html.dark .docs-page { background: var(--md-bg); }
-html.dark .doc-card { background: var(--md-surface); border-color: var(--md-border); }
-html.dark .doc-card:hover { border-color: var(--md-accent); }
-html.dark .doc-card.selected { background: var(--md-surface-2); }
-html.dark .batch-bar { background: var(--md-surface-2); border-color: var(--md-border); color: var(--md-green); }
-html.dark .list-header { background: var(--md-surface-2); color: var(--md-text); }
-html.dark .empty-state { color: var(--md-text-dim); }
-html.dark .toolbar { background: var(--md-surface-2); border-color: var(--md-border); }
-html.dark .title-input .el-input__wrapper, html.dark .header-actions .el-input__wrapper { background: var(--md-surface); }
-
-/* ----- Sheet ----- */
-html.dark .sheet-container { background: var(--md-surface); color: var(--md-text); }
-html.dark .sheet-table th { background: var(--md-surface-2); color: var(--md-text); border-color: var(--md-border); }
-html.dark .sheet-table td { background: var(--md-surface); color: var(--md-text); border-color: var(--md-border); }
-html.dark .sheet-table td.selected { background: var(--md-hover); }
-html.dark .sheet-table td.editing { background: var(--md-surface-2); }
-html.dark .sheet-toolbar { background: var(--md-surface-2); border-color: var(--md-border); }
-html.dark .formula-bar { background: var(--md-surface-2); border-color: var(--md-border); color: var(--md-text); }
-html.dark .ribbon { background: var(--md-surface-3); border-color: var(--md-border); }
-html.dark .rb-btn { color: #ccc; }
-html.dark .rb-btn:hover:not(:disabled) { background: var(--md-hover); border-color: #4a4a7a; }
-html.dark .rb-btn.active { background: var(--md-hover); border-color: #5a5aaa; color: var(--md-accent-text); }
-html.dark .rb-sep, html.dark .rb-vsep { background: var(--md-border); }
-html.dark .ribbon-section-label { color: #777; }
-html.dark .cell { background: var(--md-surface); color: var(--md-text); }
-html.dark .cell.sel { background: var(--md-hover) !important; }
-html.dark .col-hdr { background: linear-gradient(180deg, var(--md-surface-3), var(--md-surface-2)); color: #999; border-color: var(--md-border); }
-html.dark .row-hdr { background: linear-gradient(90deg, var(--md-surface-3), var(--md-surface-2)); color: #999; border-color: var(--md-border); }
-html.dark .corner-cell { background: var(--md-surface-2); border-color: var(--md-border); }
-html.dark .grid-area { background: var(--md-bg); }
-html.dark .docs-page .sidebar { background: var(--md-surface); border-color: var(--md-border); }
-html.dark .section-item { color: #aaa; }
-html.dark .section-item:hover, html.dark .section-item.active { background: var(--md-hover); color: var(--md-accent-text); }
-html.dark .tree-header { background: var(--md-surface-2); border-color: var(--md-border); color: #ccc; }
-html.dark .list-row:hover { background: var(--md-surface-3); }
-html.dark .list-header-row { background: var(--md-surface-2); border-color: var(--md-border); color: var(--md-text-dim); }
-
-/* ----- Login ----- */
-html.dark .login-container { background: var(--md-bg); }
-html.dark .login-card { background: var(--md-surface); }
-html.dark .login-card h2, html.dark .login-card .title { color: var(--md-text); }
-html.dark .login-card .subtitle { color: var(--md-text-dim); }
-
-/* ----- Shared surfaces ----- */
-html.dark .sidebar { background: var(--md-surface-2) !important; }
-html.dark .topbar { background: var(--md-surface-2); border-color: var(--md-border); }
-html.dark .el-dialog { background: var(--md-surface); }
-html.dark .el-card { background: var(--md-surface); border-color: var(--md-border); }
-html.dark .comment-panel { background: var(--md-surface); border-color: var(--md-border); }
-html.dark .share-view { background: var(--md-bg); color: var(--md-text); }
-html.dark .share-content { background: var(--md-surface); }
-html.dark .notif-drawer { background: var(--md-surface); }
-html.dark .trash-page { background: var(--md-bg); color: var(--md-text); }
+/* Tables follow the surface tokens even when a view sets a header colour via CSS vars. */
 html.dark .el-table {
   --el-table-bg-color: var(--md-surface);
   --el-table-tr-bg-color: var(--md-surface);
   --el-table-header-bg-color: var(--md-surface-2);
-  --el-table-row-hover-bg-color: var(--md-surface-2);
+  --el-table-header-text-color: var(--md-text-muted);
+  --el-table-text-color: var(--md-text);
+  --el-table-row-hover-bg-color: var(--md-hover);
   --el-table-border-color: var(--md-border);
+  --el-table-current-row-bg-color: var(--md-active);
+  --el-table-expanded-cell-bg-color: var(--md-surface);
 }
 
-/* Print */
+/* Main nav chrome is dark in both themes. In dark mode the default hover mix
+   can flash a light fill; pin it to the same navy family. */
+html.dark .sidebar .el-menu-item.is-active {
+  background-color: #2a2b45 !important;
+}
+html.dark .sidebar .el-menu-item:hover {
+  background-color: #2a2b3d !important;
+}
+
+/* Print stays on paper, regardless of the screen theme. */
 @media print {
   .editor-header, .editor-footer, .el-aside, .topbar, .sidebar,
   .doc-tags-bar, .card-actions, .batch-bar, .toolbar, .menu-btn { display: none !important; }

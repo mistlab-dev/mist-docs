@@ -3,6 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    /* Apply theme before paint. Keep in sync with src/composables/useTheme.ts */
+    (function () {
+      try {
+        var t = localStorage.getItem('mistdocs-theme')
+        var dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        if (dark) document.documentElement.classList.add('dark')
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      } catch (e) {}
+    })()
+  </script>
+  <style>html{background:#f5f7fa}html.dark{background:#0f0f23}</style>
   <title>MistDocs — Team Runbooks & Documentation</title>
   <meta name="description" content="Collaborative runbooks, templates, and team documentation for MistLab.">
   <meta name="theme-color" content="#0a0a0f">

@@ -142,9 +142,9 @@ onMounted(load)
 </script>
 
 <style scoped>
-.admin-page { padding: 8px 4px 24px; }
+.admin-page { padding: 8px 4px 24px; background: var(--md-bg); color: var(--md-text); min-height: 100%; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
-.page-title { margin: 0 0 4px; font-size: 20px; }
+.page-title { margin: 0 0 4px; font-size: 20px; color: var(--md-text-title); }
 .page-sub { margin: 0; color: var(--el-text-color-secondary); font-size: 13px; }
 .panel { background: var(--el-bg-color); border: 1px solid var(--el-border-color-lighter); border-radius: 8px; padding: 16px; }
 .empty { text-align: center; color: var(--el-text-color-secondary); padding: 48px 16px; }

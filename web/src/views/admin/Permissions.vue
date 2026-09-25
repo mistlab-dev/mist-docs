@@ -21,13 +21,13 @@
     <div class="table-card">
       <el-table
         :data="perms"
-        :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
+        :header-cell-style="{ background: 'var(--md-surface-2)', color: 'var(--md-text-secondary)', fontWeight: 500, fontSize: '13px' }"
         :cell-style="{ fontSize: '14px' }"
       >
         <el-table-column :label="t('admin.permissions.resource')" min-width="240">
           <template #default="{ row }">
             <div class="type-cell">
-              <div class="type-icon" :style="{ background: row.resource_type === 'document' ? '#e6f7ff' : '#fff7e6' }">
+              <div class="type-icon" :style="{ background: row.resource_type === 'document' ? 'var(--md-tint-doc)' : 'var(--md-tint-folder)' }">
                 <svg v-if="row.resource_type === 'document'" viewBox="0 0 20 20" fill="#409eff"><path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg>
                 <svg v-else viewBox="0 0 20 20" fill="#fa8c16"><path d="M3 4a1 1 0 011-1h4a1 1 0 01.8.4L10.5 6H17a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>
               </div>
@@ -183,27 +183,27 @@ onMounted(load)
 </script>
 
 <style scoped>
-.admin-page { height: 100%; display: flex; flex-direction: column; padding: 20px; background: #f5f7fa; }
+.admin-page { height: 100%; display: flex; flex-direction: column; padding: 20px; background: var(--md-bg); }
 
 .page-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #e8ecf0;
+  margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--md-border);
 }
 .header-left { display: flex; align-items: baseline; gap: 16px; }
-.page-title { font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0; letter-spacing: -0.02em; }
-.header-count { font-size: 14px; color: #909399; }
+.page-title { font-size: 22px; font-weight: 600; color: var(--md-text-title); margin: 0; letter-spacing: -0.02em; }
+.header-count { font-size: 14px; color: var(--md-text-dim); }
 
 .filter-bar { margin-bottom: 16px; }
 
 .table-card {
-  background: #fff; border-radius: 16px;
+  background: var(--md-surface); border-radius: 16px;
   border: none; flex: 1; overflow: auto;
   padding: 16px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  box-shadow: var(--md-shadow);
 }
 .table-card :deep(.el-table__row) { height: 56px; }
 .table-card :deep(.el-table__cell) { padding: 12px 0; }
-.table-card :deep(.el-table__header-cell) { padding: 14px 0; background: #fafbfc !important; }
+.table-card :deep(.el-table__header-cell) { padding: 14px 0; background: var(--md-surface-2) !important; }
 
 .type-cell { display: flex; align-items: center; gap: 10px; }
 .type-icon {
@@ -216,16 +216,16 @@ onMounted(load)
 
 .mono-id {
   font-family: 'SF Mono', Monaco, monospace; font-size: 13px;
-  color: #606266; background: #f5f7fa; padding: 3px 8px; border-radius: 6px;
+  color: var(--md-text-muted); background: var(--md-bg); padding: 3px 8px; border-radius: 6px;
 }
-.mono-id.sm { font-size: 11px; color: #909399; }
+.mono-id.sm { font-size: 11px; color: var(--md-text-dim); }
 
-.inherit-badge { color: #36b37e; font-weight: 700; }
-.no-inherit { color: #c0c4cc; }
+.inherit-badge { color: var(--md-tint-sheet-text); font-weight: 700; }
+.no-inherit { color: var(--md-text-faint); }
 
 .del-btn { font-size: 13px; }
 
-.perm-form :deep(.el-form-item__label) { font-weight: 500; color: #606266; }
+.perm-form :deep(.el-form-item__label) { font-weight: 500; color: var(--md-text-muted); }
 .perm-form :deep(.el-input__wrapper) { border-radius: 8px; }
 .full-width { width: 100%; }
 
