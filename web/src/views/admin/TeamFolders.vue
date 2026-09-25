@@ -106,7 +106,7 @@ onMounted(loadTree)
 </script>
 
 <style scoped>
-.team-folders { padding: 20px; }
+.team-folders { padding: 20px; background: var(--md-bg); color: var(--md-text); min-height: 100%; }
 .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
 .tree-node { display: flex; justify-content: space-between; width: 100%; }
 .actions { display: none; }

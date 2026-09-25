@@ -35,7 +35,7 @@
     <div v-else-if="filteredTrash.length" class="trash-card">
       <el-table
         :data="filteredTrash"
-        :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
+        :header-cell-style="{ background: 'var(--md-surface-2)', color: 'var(--md-text-secondary)', fontWeight: 500, fontSize: '13px' }"
         :cell-style="{ fontSize: '14px' }"
         :row-style="{ height: '56px' }"
       >
@@ -145,7 +145,7 @@ onMounted(load)
 <style scoped>
 .trash-page {
   height: 100%; display: flex; flex-direction: column;
-  padding: 20px; background: #f5f7fa;
+  padding: 20px; background: var(--md-bg);
 }
 
 .page-header {
@@ -153,8 +153,8 @@ onMounted(load)
   margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
 }
 .header-info { display: flex; align-items: baseline; gap: 10px; }
-.page-title { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0; }
-.page-count { font-size: 13px; color: #909399; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--md-text-title); margin: 0; }
+.page-count { font-size: 13px; color: var(--md-text-dim); }
 .header-actions { display: flex; gap: 8px; align-items: center; }
 
 .empty-state {
@@ -162,16 +162,16 @@ onMounted(load)
   justify-content: center; flex: 1; padding: 80px 20px;
 }
 .empty-icon { font-size: 56px; margin-bottom: 16px; opacity: 0.5; }
-.empty-title { font-size: 16px; color: #606266; margin: 0 0 4px; }
-.empty-desc { font-size: 13px; color: #909399; margin: 0; }
+.empty-title { font-size: 16px; color: var(--md-text-muted); margin: 0 0 4px; }
+.empty-desc { font-size: 13px; color: var(--md-text-dim); margin: 0; }
 
 .loading-state { padding: 40px; }
 
 .trash-card {
-  background: #fff; border-radius: 16px; overflow: hidden;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.04); flex: 1;
+  background: var(--md-surface); border-radius: 16px; overflow: hidden;
+  box-shadow: var(--md-shadow); flex: 1;
 }
-.trash-card :deep(.el-table__row:hover) { background: #f9fbff !important; }
+.trash-card :deep(.el-table__row:hover) { background: var(--md-hover-soft) !important; }
 .trash-card :deep(.el-table__cell) { padding: 12px 0; }
 
 .doc-title { display: flex; align-items: center; gap: 10px; }
@@ -179,10 +179,10 @@ onMounted(load)
   width: 28px; height: 28px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.type-icon.doc { background: #e8f0fe; color: #4f6ef7; }
-.type-icon:not(.doc) { background: #e6f7f0; color: #36b37e; }
+.type-icon.doc { background: var(--md-active); color: var(--md-link); }
+.type-icon:not(.doc) { background: var(--md-tint-sheet); color: var(--md-tint-sheet-text); }
 .title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.time-text { font-size: 13px; color: #909399; }
+.time-text { font-size: 13px; color: var(--md-text-dim); }
 .row-actions { display: flex; align-items: center; gap: 4px; }
 
 @media (max-width: 768px) {

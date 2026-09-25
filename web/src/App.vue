@@ -10,6 +10,9 @@ import { ElConfigProvider } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import en from 'element-plus/es/locale/lang/en'
 import { useI18n } from 'vue-i18n'
+import { useTheme } from '@/composables/useTheme'
+
+useTheme()
 
 const { locale } = useI18n()
 
@@ -30,7 +33,7 @@ html, body, #app {
 }
 body {
   font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f5f7fa;
+  background: var(--md-bg, #f5f7fa);
 }
 
 /* Dark theme overrides are centralized in src/styles/dark.css */

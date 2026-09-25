@@ -44,9 +44,11 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   height: 100vh;
+  background: var(--md-bg);
+  color: var(--md-text);
 }
 .loading {
   text-align: center;
-  color: #666;
+  color: var(--md-text-soft);
 }
 </style>

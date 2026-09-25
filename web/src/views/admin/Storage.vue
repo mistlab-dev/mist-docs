@@ -82,7 +82,7 @@
     <div class="panel" v-if="Object.keys(usage.by_type || {}).length">
       <div class="panel-title">{{ t('admin.storage.storageDetailed') }}</div>
       <el-table :data="typeRows" size="small"
-        :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
+        :header-cell-style="{ background: 'var(--md-surface-2)', color: 'var(--md-text-secondary)', fontWeight: 500, fontSize: '13px' }"
       >
         <el-table-column prop="type" label="Type" min-width="180" />
         <el-table-column prop="human" :label="t('admin.storage.usage')" width="160" align="center">
@@ -147,46 +147,46 @@ onMounted(load)
 </script>
 
 <style scoped>
-.admin-page { height: 100%; overflow-y: auto; padding: 20px; background: #f5f7fa; }
+.admin-page { height: 100%; overflow-y: auto; padding: 20px; background: var(--md-bg); }
 
 .page-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #e8ecf0;
+  margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--md-border);
 }
 .header-left { display: flex; align-items: center; gap: 16px; }
-.page-title { font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0; letter-spacing: -0.02em; }
+.page-title { font-size: 22px; font-weight: 600; color: var(--md-text-title); margin: 0; letter-spacing: -0.02em; }
 
 .panel {
-  background: #fff; border-radius: 16px; padding: 20px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.04); margin-bottom: 16px;
+  background: var(--md-surface); border-radius: 16px; padding: 20px;
+  box-shadow: var(--md-shadow); margin-bottom: 16px;
 }
 .panel-title {
-  font-size: 15px; font-weight: 600; color: #1a1a2e;
-  margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0;
+  font-size: 15px; font-weight: 600; color: var(--md-text-title);
+  margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--md-border-light);
 }
 
 .quota-stats { display: flex; gap: 40px; flex-wrap: wrap; }
 .quota-item { display: flex; flex-direction: column; gap: 4px; }
-.disk-label { font-size: 13px; color: #909399; }
-.quota-value { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+.disk-label { font-size: 13px; color: var(--md-text-dim); }
+.quota-value { font-size: 20px; font-weight: 700; color: var(--md-text-title); }
 
-.admin-hint { margin-top: 12px; font-size: 12px; color: #e6a23c; }
+.admin-hint { margin-top: 12px; font-size: 12px; color: var(--md-warning); }
 
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .stat-card {
-  background: #fff; border-radius: 14px; padding: 16px;
+  background: var(--md-surface); border-radius: 14px; padding: 16px;
   display: flex; align-items: center; gap: 12px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  box-shadow: var(--md-shadow);
 }
 .stat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.stat-val { font-size: 20px; font-weight: 700; color: #1a1a2e; }
-.stat-lbl { font-size: 12px; color: #909399; margin-top: 2px; }
+.stat-val { font-size: 20px; font-weight: 700; color: var(--md-text-title); }
+.stat-lbl { font-size: 12px; color: var(--md-text-dim); margin-top: 2px; }
 
 .mono-id {
   font-family: 'SF Mono', Monaco, monospace; font-size: 13px;
-  color: #606266; background: #f5f7fa; padding: 3px 8px; border-radius: 6px;
+  color: var(--md-text-muted); background: var(--md-bg); padding: 3px 8px; border-radius: 6px;
 }
-.size-text { font-weight: 600; color: #1a1a2e; }
+.size-text { font-weight: 600; color: var(--md-text-title); }
 
 @media (max-width: 768px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }

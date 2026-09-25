@@ -127,11 +127,11 @@ const filteredSections = computed(() => {
 .help-header h1 {
   font-size: 28px;
   font-weight: 700;
-  color: #303133;
+  color: var(--md-text);
   margin: 0 0 8px;
 }
 .help-header p {
-  color: #909399;
+  color: var(--md-text-dim);
   font-size: 15px;
   margin: 0;
 }
@@ -146,17 +146,17 @@ const filteredSections = computed(() => {
 .help-section h2 {
   font-size: 18px;
   font-weight: 600;
-  color: #303133;
+  color: var(--md-text);
   margin: 0 0 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--md-border-muted);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 .section-icon {
   display: inline-flex;
-  color: #409eff;
+  color: var(--md-link-ep);
 }
 
 .help-cards {
@@ -166,16 +166,16 @@ const filteredSections = computed(() => {
 }
 
 .help-card {
-  background: #fff;
-  border: 1px solid #e8ecf0;
+  background: var(--md-surface);
+  border: 1px solid var(--md-border);
   border-radius: 8px;
   padding: 14px 18px;
   cursor: pointer;
   transition: all 0.2s;
 }
 .help-card:hover {
-  border-color: #409eff;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.1);
+  border-color: var(--md-link-ep);
+  box-shadow: var(--md-shadow);
 }
 
 .help-card-header {
@@ -186,11 +186,11 @@ const filteredSections = computed(() => {
 .help-q {
   font-size: 15px;
   font-weight: 500;
-  color: #303133;
+  color: var(--md-text);
 }
 .help-card-header .el-icon {
   transition: transform 0.2s;
-  color: #c0c4cc;
+  color: var(--md-text-faint);
 }
 .help-card-header .el-icon.rotated {
   transform: rotate(180deg);
@@ -199,20 +199,20 @@ const filteredSections = computed(() => {
 .help-card-body {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #f0f2f5;
+  border-top: 1px solid var(--md-border-light);
   font-size: 14px;
-  color: #606266;
+  color: var(--md-text-muted);
   line-height: 1.8;
 }
 .help-card-body :deep(code) {
-  background: #f5f7fa;
+  background: var(--md-bg);
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 13px;
-  color: #e6a23c;
+  color: var(--md-warning);
 }
 .help-card-body :deep(b) {
-  color: #303133;
+  color: var(--md-text);
 }
 
 .help-empty {
@@ -223,8 +223,8 @@ const filteredSections = computed(() => {
   text-align: center;
   margin-top: 40px;
   padding: 20px 0;
-  border-top: 1px solid #ebeef5;
-  color: #909399;
+  border-top: 1px solid var(--md-border-muted);
+  color: var(--md-text-dim);
   font-size: 14px;
 }
 

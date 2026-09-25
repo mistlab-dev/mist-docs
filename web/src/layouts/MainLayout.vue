@@ -136,9 +136,14 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="theme">
-                  <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
-                  {{ isDark ? t('mainLayout.lightMode') : t('mainLayout.darkMode') }}
+                <el-dropdown-item command="theme-light">
+                  <span class="theme-item"><el-icon><Sunny /></el-icon>{{ t('mainLayout.themeLight') }}<span v-if="themeMode === 'light'" class="theme-check">✓</span></span>
+                </el-dropdown-item>
+                <el-dropdown-item command="theme-dark">
+                  <span class="theme-item"><el-icon><Moon /></el-icon>{{ t('mainLayout.themeDark') }}<span v-if="themeMode === 'dark'" class="theme-check">✓</span></span>
+                </el-dropdown-item>
+                <el-dropdown-item command="theme-system">
+                  <span class="theme-item"><el-icon><Monitor /></el-icon>{{ t('mainLayout.themeSystem') }}<span v-if="themeMode === 'system'" class="theme-check">✓</span></span>
                 </el-dropdown-item>
                 <el-dropdown-item command="password">{{ t('mainLayout.changePassword') }}</el-dropdown-item>
                 <el-dropdown-item command="logout" divided>{{ t('mainLayout.logout') }}</el-dropdown-item>
@@ -223,6 +228,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { Sunny, Moon, Folder, FolderOpened, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled, Calendar, Lock, Link } from '@element-plus/icons-vue'
+import { useTheme, type ThemeMode } from '@/composables/useTheme'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -245,7 +251,7 @@ function switchTeam(teamId: string) {
   if (route.path !== '/docs') router.push('/docs')
   loadNotifications()
 }
-const isDark = ref(false)
+const { mode: themeMode, setThemeMode } = useTheme()
 const collapsed = ref(false)
 const mobileMenu = ref(false)
 const sidebarHidden = ref(false)
@@ -342,15 +348,9 @@ function handleCommand(cmd: string) {
     auth.redirectToPortalLogin()
   } else if (cmd === 'password') {
     showPasswordDialog.value = true
-  } else if (cmd === 'theme') {
-    toggleDark()
+  } else if (cmd === 'theme-light' || cmd === 'theme-dark' || cmd === 'theme-system') {
+    setThemeMode(cmd.slice('theme-'.length) as ThemeMode)
   }
-}
-
-function toggleDark() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem('mistdocs-theme', isDark.value ? 'dark' : 'light')
 }
 
 async function changePassword() {
@@ -371,12 +371,6 @@ onMounted(() => {
   const setVh = () => document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`)
   setVh()
   window.addEventListener('resize', setVh)
-
-  const saved = localStorage.getItem('mistdocs-theme')
-  if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-    isDark.value = true
-    document.documentElement.classList.add('dark')
-  }
 
   if (auth.token && !auth.user) {
     auth.fetchMe()
@@ -448,7 +442,7 @@ onMounted(() => {
   flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
 }
-.sidebar-hide-btn:hover { background: #2a2b3d; color: #fff; }
+.sidebar-hide-btn:hover { background: #2a2b3d; color: var(--md-on-accent); }
 .sidebar-bottom {
   margin-top: auto;
   padding: 8px 0 12px;
@@ -460,7 +454,7 @@ onMounted(() => {
   color: #a0a4b8; font-size: 14px;
   transition: all 0.2s;
 }
-.help-btn:hover { background: #2a2b3d; color: #fff; }
+.help-btn:hover { background: #2a2b3d; color: var(--md-on-accent); }
 .help-btn .el-icon { font-size: 18px; }
 .sidebar.collapsed .help-btn { justify-content: center; padding: 10px 0; }
 .topbar {
@@ -483,11 +477,13 @@ onMounted(() => {
 .portal-link:hover { color: var(--md-accent-text, #818cf8); }
 .portal-link-mark { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
 .user-area { display: flex; align-items: center; gap: 16px; }
+.theme-item { display: inline-flex; align-items: center; gap: 8px; min-width: 140px; }
+.theme-check { margin-left: auto; color: var(--md-link-ep, #409eff); }
 .team-chip { max-width: 180px; }
 .team-switch {
   display: inline-flex; align-items: center; gap: 4px;
   max-width: 180px; padding: 4px 10px; border-radius: 999px;
-  background: #f0f5ff; color: #3b4cca; font-size: 13px; cursor: pointer;
+  background: var(--md-pill-bg); color: var(--md-pill-text); font-size: 13px; cursor: pointer;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .user-name {
@@ -496,23 +492,23 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
 }
-.user-avatar { background: var(--md-accent, #6366f1); color: #fff; font-size: 13px; flex-shrink: 0; }
+.user-avatar { background: var(--md-accent, #6366f1); color: var(--md-on-accent); font-size: 13px; flex-shrink: 0; }
 .notif-badge { margin-right: 4px; }
 .el-divider { margin: 8px 16px; border-color: #2a2b3d; }
 
 .notif-header { display: flex; justify-content: flex-end; margin-bottom: 8px; }
-.notif-item { padding: 12px; border-bottom: 1px solid #f0f0f0; }
-.notif-item.unread { background: #f0f7ff; }
+.notif-item { padding: 12px; border-bottom: 1px solid var(--md-border-light); }
+.notif-item.unread { background: var(--md-notif-unread); }
 .notif-title { margin: 4px 0; font-size: 14px; }
-.notif-time { font-size: 12px; color: #c0c4cc; }
+.notif-time { font-size: 12px; color: var(--md-text-faint); }
 .notif-actions { margin-top: 4px; display: flex; gap: 8px; }
-.no-data { text-align: center; padding: 40px; color: #c0c4cc; }
+.no-data { text-align: center; padding: 40px; color: var(--md-text-faint); }
 
-.help-content h4 { margin: 16px 0 8px; color: #303133; }
+.help-content h4 { margin: 16px 0 8px; color: var(--md-text); }
 .help-content h4:first-child { margin-top: 0; }
 .help-content ul { padding-left: 20px; margin: 4px 0; }
-.help-content li { margin: 6px 0; color: #606266; font-size: 14px; line-height: 1.6; }
-.help-content kbd { background: #f5f5f5; border: 1px solid #dcdfe6; border-radius: 3px; padding: 1px 6px; font-size: 12px; }
+.help-content li { margin: 6px 0; color: var(--md-text-muted); font-size: 14px; line-height: 1.6; }
+.help-content kbd { background: var(--md-kbd-bg); border: 1px solid var(--md-border-strong); border-radius: 3px; padding: 1px 6px; font-size: 12px; }
 
 /* Mobile */
 .menu-btn { display: none; color: var(--md-text, #fff) !important; }

@@ -39,13 +39,13 @@
     <div class="table-card">
       <el-table
         :data="audits"
-        :header-cell-style="{ background: '#fafbfc', color: '#5a5f6b', fontWeight: 500, fontSize: '13px' }"
+        :header-cell-style="{ background: 'var(--md-surface-2)', color: 'var(--md-text-secondary)', fontWeight: 500, fontSize: '13px' }"
         :cell-style="{ fontSize: '14px' }"
       >
         <el-table-column :label="t('admin.audits.time')" width="170">
           <template #default="{ row }">
             <div class="time-cell">
-              <el-icon :size="14" color="#909399"><Clock /></el-icon>
+              <el-icon :size="14" color="var(--md-text-dim)"><Clock /></el-icon>
               <span>{{ row.created_at }}</span>
             </div>
           </template>
@@ -182,15 +182,15 @@ onMounted(load)
 </script>
 
 <style scoped>
-.admin-page { height: 100%; display: flex; flex-direction: column; padding: 20px; background: #f5f7fa; }
+.admin-page { height: 100%; display: flex; flex-direction: column; padding: 20px; background: var(--md-bg); }
 
 .page-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #e8ecf0;
+  margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--md-border);
 }
 .header-left { display: flex; align-items: baseline; gap: 16px; }
-.page-title { font-size: 22px; font-weight: 600; color: #1a1a2e; margin: 0; letter-spacing: -0.02em; }
-.header-count { font-size: 14px; color: #909399; }
+.page-title { font-size: 22px; font-weight: 600; color: var(--md-text-title); margin: 0; letter-spacing: -0.02em; }
+.header-count { font-size: 14px; color: var(--md-text-dim); }
 
 .filter-bar {
   display: flex; align-items: center; justify-content: space-between;
@@ -200,37 +200,37 @@ onMounted(load)
 .filter-select { width: 140px; }
 .filter-user { width: 150px; }
 .filter-date { width: 150px; }
-.filter-sep { color: #c0c4cc; }
+.filter-sep { color: var(--md-text-faint); }
 
 .filter-right { display: flex; align-items: center; gap: 8px; }
 
 .table-card {
-  background: #fff; border-radius: 16px;
+  background: var(--md-surface); border-radius: 16px;
   border: none; flex: 1; overflow: auto;
   padding: 16px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  box-shadow: var(--md-shadow);
 }
 .table-card :deep(.el-table__row) { height: 56px; }
 .table-card :deep(.el-table__cell) { padding: 12px 0; }
-.table-card :deep(.el-table__header-cell) { padding: 14px 0; background: #fafbfc !important; }
+.table-card :deep(.el-table__header-cell) { padding: 14px 0; background: var(--md-surface-2) !important; }
 
-.time-cell { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #606266; }
+.time-cell { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--md-text-muted); }
 
 .user-cell { display: flex; align-items: center; gap: 8px; }
 .mini-avatar {
   width: 26px; height: 26px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 12px; font-weight: 600; flex-shrink: 0;
+  color: var(--md-on-accent); font-size: 12px; font-weight: 600; flex-shrink: 0;
 }
 
-.resource-type { font-size: 13px; color: #909399; }
-.res-name { color: #303133; }
+.resource-type { font-size: 13px; color: var(--md-text-dim); }
+.res-name { color: var(--md-text); }
 .ip-code {
-  font-size: 12px; color: #909399; background: #f5f7fa;
+  font-size: 12px; color: var(--md-text-dim); background: var(--md-bg);
   padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Monaco, monospace;
 }
 
-.detail-btn { font-size: 13px; color: #409eff; }
+.detail-btn { font-size: 13px; color: var(--md-link-ep); }
 
 .pagination-wrap {
   display: flex; justify-content: flex-end; padding: 16px 0 0;
@@ -238,9 +238,9 @@ onMounted(load)
 
 .detail-pre {
   white-space: pre-wrap; word-break: break-all;
-  background: #f5f7fa; padding: 16px; border-radius: 12px;
+  background: var(--md-bg); padding: 16px; border-radius: 12px;
   font-size: 13px; margin: 0; font-family: 'SF Mono', Monaco, monospace;
-  line-height: 1.6; color: #303133;
+  line-height: 1.6; color: var(--md-text);
 }
 
 :deep(.el-dialog) { border-radius: 16px; }
