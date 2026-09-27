@@ -557,7 +557,7 @@ export default {
     },
     webhooks: {
       title: 'Webhooks',
-      subtitle: 'Push an event to your own URL when a document is created or saved',
+      subtitle: 'Push document, comment, share and deadline-reminder events to your own URL',
       empty: 'No webhooks yet',
       add: 'New webhook',
       name: 'Name',
@@ -571,6 +571,15 @@ export default {
       deleted: 'Webhook deleted',
       toggled: 'Status updated',
       deleteConfirm: 'Delete this webhook? It will stop receiving events.',
+      edit: 'Edit webhook',
+      saved: 'Saved',
+      reminderHint: 'Deadline reminders: once any webhook in the team subscribes to "Deadline reminder", reminders go only to those; if none does, they still go to every enabled webhook (compatible with older setups).',
+      ev: {
+        document_created: 'Document created', document_updated: 'Document saved', document_deleted: 'Document deleted',
+        document_shared: 'Document shared', comment_created: 'New comment', document_imported: 'Document imported',
+        document_locked: 'Document locked', document_unlocked: 'Document unlocked', document_restored: 'Document restored',
+        deadline_reminder: 'Deadline reminder',
+      },
     },
     permissions: {
       title: 'Permissions',
@@ -630,6 +639,14 @@ export default {
       detail: 'Detail',
       detailTitle: 'Action Detail',
       exportSuccess: 'Exported',
+      act: {
+        create_doc: 'Create', edit_doc: 'Edit', delete_doc: 'Delete', purge_doc: 'Purge', restore_doc: 'Restore',
+        move: 'Move', view: 'View', export: 'Export', import_doc: 'Import',
+        create_share: 'Share', delete_share: 'Unshare', create_comment: 'Comment', delete_comment: 'Delete comment',
+        add_collaborator: 'Add collaborator', update_collaborator: 'Change collaborator', remove_collaborator: 'Remove collaborator',
+        set_permission: 'Permission change', remove_permission: 'Remove permission',
+        lock_doc: 'Lock', unlock_doc: 'Unlock', create_folder: 'Create folder', delete_folder: 'Delete folder', delete_media: 'Delete media',
+      },
     },
     storage: {
       title: 'Storage Monitor',

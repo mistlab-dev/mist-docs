@@ -667,7 +667,7 @@ export default {
     },
     webhooks: {
       title: 'Webhook',
-      subtitle: '文档创建或保存后，把事件推到你自己的地址',
+      subtitle: '文档、评论、分享和交期提醒发生时，把事件推到你自己的地址',
       empty: '还没有 Webhook',
       add: '新建',
       name: '名称',
@@ -681,6 +681,15 @@ export default {
       deleted: '已删除',
       toggled: '状态已更新',
       deleteConfirm: '删除这个 Webhook？之后不再推送。',
+      edit: '编辑 Webhook',
+      saved: '已保存',
+      reminderHint: '交期提醒：团队里只要有一个 Webhook 勾选了"交期提醒"，提醒就只发给勾选的；都没勾选时仍发给所有启用的 Webhook（兼容旧设置）。',
+      ev: {
+        document_created: '新建文档', document_updated: '保存文档', document_deleted: '删除文档',
+        document_shared: '分享文档', comment_created: '新评论', document_imported: '导入文档',
+        document_locked: '锁定文档', document_unlocked: '解锁文档', document_restored: '恢复文档',
+        deadline_reminder: '交期提醒',
+      },
     },
     permissions: {
       title: '权限管理',
@@ -740,6 +749,14 @@ export default {
       detail: '详情',
       detailTitle: '操作详情',
       exportSuccess: '已导出',
+      act: {
+        create_doc: '新建文档', edit_doc: '编辑', delete_doc: '删除', purge_doc: '彻底删除', restore_doc: '恢复',
+        move: '移动', view: '查看', export: '导出', import_doc: '导入',
+        create_share: '分享', delete_share: '取消分享', create_comment: '评论', delete_comment: '删除评论',
+        add_collaborator: '添加协作者', update_collaborator: '修改协作者', remove_collaborator: '移除协作者',
+        set_permission: '权限变更', remove_permission: '移除权限',
+        lock_doc: '锁定', unlock_doc: '解锁', create_folder: '新建文件夹', delete_folder: '删除文件夹', delete_media: '删除媒体文件',
+      },
     },
     storage: {
       title: '存储监控',

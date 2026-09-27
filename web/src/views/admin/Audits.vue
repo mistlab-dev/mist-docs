@@ -11,17 +11,7 @@
     <div class="filter-bar">
       <div class="filter-left">
         <el-select v-model="filter.action" clearable :placeholder="t('admin.audits.actionType')" size="default" class="filter-select">
-          <el-option :label="t('admin.audits.create')" value="create_doc" />
-          <el-option :label="t('admin.audits.editAction')" value="edit_doc" />
-          <el-option :label="t('admin.audits.delete')" value="delete_doc" />
-          <el-option :label="t('admin.audits.view')" value="view" />
-          <el-option :label="t('admin.audits.move')" value="move" />
-          <el-option :label="t('admin.audits.restore')" value="restore_doc" />
-          <el-option :label="t('admin.audits.exportAction')" value="export" />
-          <el-option :label="t('admin.audits.share')" value="create_share" />
-          <el-option :label="t('admin.audits.comment')" value="create_comment" />
-          <el-option :label="t('admin.audits.permissionChange')" value="set_permission" />
-          <el-option :label="t('admin.audits.removePermission')" value="remove_permission" />
+          <el-option v-for="a in AUDIT_ACTIONS" :key="a" :label="t(auditActionKey(a))" :value="a" />
         </el-select>
         <el-input v-model="filter.user_name" clearable :placeholder="t('admin.audits.userName')" size="default" class="filter-user" />
         <el-date-picker v-model="filter.start_date" type="date" value-format="YYYY-MM-DD" :placeholder="t('admin.audits.startDate')" size="default" class="filter-date" />
@@ -62,8 +52,8 @@
         </el-table-column>
         <el-table-column :label="t('admin.audits.action')" width="120">
           <template #default="{ row }">
-            <el-tag :type="actionColor[row.action] || 'info'" size="small" effect="light" round disable-transitions>
-              {{ actionMap[row.action] || row.action }}
+            <el-tag :type="auditActionColor(row.action) || undefined" size="small" effect="light" round disable-transitions>
+              {{ actionLabel(row.action) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -117,24 +107,14 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
+import { AUDIT_ACTIONS, auditActionKey, auditActionColor } from '@/utils/auditActions'
 
 const { t } = useI18n()
 
-const actionMap: any = {
-  login: t('admin.audits.login'), logout: t('admin.audits.logout'),
-  create_doc: t('admin.audits.create'), edit_doc: t('admin.audits.editAction'), edit: t('admin.audits.editAction'),
-  delete_doc: t('admin.audits.delete'), delete: t('admin.audits.delete'),
-  view: t('admin.audits.view'), move: t('admin.audits.move'),
-  restore_doc: t('admin.audits.restore'), restore: t('admin.audits.restore'),
-  export: t('admin.audits.exportAction'), create_share: t('admin.audits.share'),
-  create_comment: t('admin.audits.comment'), set_permission: t('admin.audits.permissionChange'),
-  remove_permission: t('admin.audits.removePermission'),
-}
-const actionColor: any = {
-  login: 'success', logout: 'info', create_doc: 'primary',
-  edit_doc: 'warning', edit: 'warning', delete_doc: 'danger', delete: 'danger',
-  view: 'info', move: '', restore_doc: 'success', export: 'info',
-  set_permission: 'warning', remove_permission: 'danger',
+function actionLabel(action: string) {
+  const key = auditActionKey(action)
+  const label = t(key)
+  return label === key ? action : label
 }
 const resourceMap: any = { document: t('common.doc'), folder: t('common.folder'), user: t('common.user'), department: t('common.department') }
 
