@@ -2145,9 +2145,7 @@ var _ = model.Document{}
 // ==================== Media Upload (Team-scoped) ====================
 
 func TeamUploadFile(c *gin.Context) {
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	if !requireRole(c, RoleEditor) {
 		return
 	}
 	teamID := getTeamID(c)
@@ -2180,12 +2178,20 @@ func TeamUploadFile(c *gin.Context) {
 		return
 	}
 	defer f.Close()
-	io.Copy(f, file)
+	size, err := io.Copy(f, file)
+	if err != nil {
+		os.Remove(path)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	database.DB.Exec(
+		`INSERT INTO md_media (filename, team_id, original_name, uploaded_by, size) VALUES (?, ?, ?, ?, ?)`,
+		filename, teamID, header.Filename, c.GetString("user_id"), size)
 
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"filename": filename,
 		"original": header.Filename,
-		"size":     header.Size,
+		"size":     size,
 		"url":      "/api/teams/" + teamID + "/media/" + filename,
 	}})
 }
@@ -2198,16 +2204,41 @@ func TeamListMedia(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
 		return
 	}
+
+	type mediaRow struct{ original, uploader, uploaderName string }
+	known := map[string]mediaRow{}
+	if rows, err := database.DB.Query(
+		`SELECT m.filename, m.original_name, m.uploaded_by,
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), '')
+		 FROM md_media m LEFT JOIN users u ON m.uploaded_by COLLATE utf8mb4_unicode_ci = u.id
+		 WHERE m.team_id=?`, teamID); err == nil {
+		for rows.Next() {
+			var fn string
+			var r mediaRow
+			if rows.Scan(&fn, &r.original, &r.uploader, &r.uploaderName) == nil {
+				known[fn] = r
+			}
+		}
+		rows.Close()
+	}
+
+	uid := c.GetString("user_id")
+	admin := isTeamAdmin(c)
 	var files []map[string]interface{}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
 		info, _ := e.Info()
+		r := known[e.Name()]
 		files = append(files, map[string]interface{}{
-			"filename": e.Name(),
-			"size":     info.Size(),
-			"modified": info.ModTime().Format("2006-01-02 15:04:05"),
+			"filename":         e.Name(),
+			"original":         r.original,
+			"size":             info.Size(),
+			"modified":         info.ModTime().Format("2006-01-02 15:04:05"),
+			"uploaded_by":      r.uploader,
+			"uploaded_by_name": r.uploaderName,
+			"can_delete":       admin || (r.uploader != "" && r.uploader == uid && roleAtLeast(c, RoleEditor)),
 		})
 	}
 	if files == nil {
@@ -2216,6 +2247,8 @@ func TeamListMedia(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": files})
 }
 
+// TeamDeleteMedia: the uploader (editor or above) or a team admin (D3).
+// Files without an md_media row predate upload tracking; admins only.
 func TeamDeleteMedia(c *gin.Context) {
 	teamID := getTeamID(c)
 	filename, ok := safeBaseName(c.Param("filename"))
@@ -2224,7 +2257,22 @@ func TeamDeleteMedia(c *gin.Context) {
 		return
 	}
 	path := filepath.Join(store.RootPath(), teamID, "media", filename)
-	os.Remove(path)
+	if _, err := os.Stat(path); err != nil {
+		denyNotFound(c, "文件不存在")
+		return
+	}
+	var uploader string
+	database.DB.QueryRow(`SELECT uploaded_by FROM md_media WHERE team_id=? AND filename=?`, teamID, filename).Scan(&uploader)
+	if !isTeamAdmin(c) && !(uploader != "" && uploader == c.GetString("user_id") && roleAtLeast(c, RoleEditor)) {
+		denyForbidden(c)
+		return
+	}
+	if err := os.Remove(path); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	database.DB.Exec(`DELETE FROM md_media WHERE team_id=? AND filename=?`, teamID, filename)
+	audit(c, "delete_media", "media", filename, "", "")
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 

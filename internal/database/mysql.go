@@ -120,6 +120,22 @@ func Migrate() error {
 		fmt.Printf("backfill md_documents.deleted_at: %v\n", err)
 	}
 
+	// md_media records who uploaded each team media file, so the uploader can
+	// delete their own files (D3). Files uploaded before this table have no
+	// row; only admins can delete those.
+	if _, err := DB.Exec(`CREATE TABLE IF NOT EXISTS md_media (
+		filename VARCHAR(100) NOT NULL,
+		team_id VARCHAR(64) NOT NULL,
+		original_name VARCHAR(255) NOT NULL DEFAULT '',
+		uploaded_by VARCHAR(64) NOT NULL,
+		size BIGINT NOT NULL DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (team_id, filename),
+		INDEX idx_uploader (uploaded_by)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
+		fmt.Printf("migrate md_media: %v\n", err)
+	}
+
 	return migrateDeadlines()
 }
 
