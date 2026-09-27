@@ -2450,8 +2450,10 @@ func TeamListNotifications(c *gin.Context) {
 	}
 	offset := (page - 1) * pageSize
 
-	var total int
-	database.DB.QueryRow("SELECT COUNT(*) FROM md_notifications WHERE user_id=? AND team_id=?", userID, teamID).Scan(&total)
+	// unread_count is what the bell badge shows; it was never sent, so the
+	// badge stayed hidden no matter how many unread notifications there were.
+	var total, unread int
+	database.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(is_read=0),0) FROM md_notifications WHERE user_id=? AND team_id=?", userID, teamID).Scan(&total, &unread)
 
 	rows, err := database.DB.Query(
 		`SELECT id, type, title, is_read, created_at
@@ -2475,7 +2477,7 @@ func TeamListNotifications(c *gin.Context) {
 	if notifications == nil {
 		notifications = []map[string]interface{}{}
 	}
-	c.JSON(http.StatusOK, gin.H{"data": notifications, "total": total})
+	c.JSON(http.StatusOK, gin.H{"data": notifications, "total": total, "unread_count": unread})
 }
 
 func TeamMarkNotificationRead(c *gin.Context) {
