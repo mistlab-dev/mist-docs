@@ -863,7 +863,9 @@ func TeamAddFavorite(c *gin.Context) {
 	if !requireDoc(c, docID, "read", true) {
 		return
 	}
-	_, err := database.DB.Exec(`INSERT IGNORE INTO md_favorites (user_id, document_id) VALUES (?, ?)`, userID, docID)
+	// md_favorites.id has no default: without an explicit id the first row
+	// got id='' and INSERT IGNORE silently dropped every later favorite.
+	_, err := database.DB.Exec(`INSERT IGNORE INTO md_favorites (id, user_id, document_id) VALUES (?, ?, ?)`, uuid.New().String(), userID, docID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
