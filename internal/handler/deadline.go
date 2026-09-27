@@ -401,6 +401,15 @@ func TeamUpdateDeadline(c *gin.Context) {
 		recordDeadlineEvent(teamID, id, "updated", "progress",
 			strconv.Itoa(cur.Progress), strconv.Itoa(progress), in.Reason, userID)
 	}
+	// Priority and planned start move an order in the queue, so the explainer
+	// needs them in the history too.
+	if cur.Priority != next.Priority {
+		recordDeadlineEvent(teamID, id, "updated", "priority", cur.Priority, next.Priority, in.Reason, userID)
+	}
+	newStart, _ := startDate.(string)
+	if oldStart := fmtDatePtr(cur.StartDate); oldStart != newStart {
+		recordDeadlineEvent(teamID, id, "updated", "start_date", oldStart, newStart, in.Reason, userID)
+	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -797,6 +806,13 @@ func recordDeadlineEvent(teamID, deadlineID, eventType, field, oldValue, newValu
 			(id, team_id, deadline_id, event_type, field, old_value, new_value, reason, actor_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		uuid.New().String(), teamID, deadlineID, eventType, field, oldValue, newValue, reason, actorID)
+}
+
+func fmtDatePtr(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format(dateLayout)
 }
 
 func clampProgress(p int) int {

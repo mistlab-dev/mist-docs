@@ -170,6 +170,7 @@ func RegisterAPI(r gin.IRouter) {
 				teams.PUT("/deadlines/:id", handler.TeamUpdateDeadline)
 				teams.DELETE("/deadlines/:id", handler.TeamDeleteDeadline)
 				teams.GET("/deadlines/:id/events", handler.TeamDeadlineEvents)
+				teams.GET("/deadlines/:id/explain", handler.TeamExplainDeadline)
 
 				// 交期提醒规则
 				teams.GET("/reminder-rules", handler.TeamListReminderRules)
