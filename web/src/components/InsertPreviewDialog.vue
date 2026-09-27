@@ -134,7 +134,11 @@ import GuardedButton from '@/components/GuardedButton.vue'
 import { useAuthStore } from '@/stores/auth'
 import { conclusionText, conclusionType, shortDate, flagKey, changeKey, isStaleError, type PreviewResult, type ProposalChange } from '@/utils/insertPreview'
 
-defineProps<{ modelValue: boolean }>()
+const props = defineProps<{
+  modelValue: boolean
+  // Opened from the explainer: preview "what if this order were expedited".
+  prefill?: { deadline_id: string; priority: string; due_date: string } | null
+}>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'applied'): void }>()
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -224,6 +228,16 @@ async function onOpen() {
     openOrders.value = ((data.data || []) as OpenOrder[]).filter(o => o.status !== 'done')
   } catch {
     openOrders.value = []
+  }
+  const p = props.prefill
+  if (p?.deadline_id) {
+    form.mode = 'existing'
+    form.deadline_id = p.deadline_id
+    form.priority = p.priority || 'urgent'
+    form.due_date = p.due_date
+    result.value = null
+    stale.value = false
+    await run()
   }
 }
 function onPick(id: string) {

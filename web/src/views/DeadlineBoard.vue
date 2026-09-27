@@ -13,7 +13,7 @@
         <el-button @click="openHistory" data-test="proposal-history-btn">
           <el-icon><Tickets /></el-icon> {{ t('insertPreview.history') }}
         </el-button>
-        <el-button @click="previewVisible = true" data-test="insert-preview-btn">
+        <el-button @click="openPreview(null)" data-test="insert-preview-btn">
           <el-icon><DataAnalysis /></el-icon> {{ t('insertPreview.button') }}
         </el-button>
         <GuardedButton type="primary" :allowed="canEdit" :reason="t('perm.needEditor')" @click="openCreate">
@@ -84,6 +84,8 @@
                 <div class="card-foot">
                   <span class="owner" :class="{ unassigned: !d.owner_name }">{{ d.owner_name || t('deadlines.unassigned') }}</span>
                   <span class="status">{{ statusText(d.status) }}</span>
+                  <el-button v-if="worthExplaining(d.risk_level, d.status)" link size="small" class="why-btn"
+                    data-test="card-explain" @click.stop="openExplain(d)">{{ t('explain.short') }}</el-button>
                 </div>
               </div>
             </div>
@@ -156,9 +158,10 @@
             </template>
           </el-table-column>
           <!-- 操作收敛成文字按钮：以前每行一个实心蓝块，整表都是高饱和色块 -->
-          <el-table-column :label="t('common.operation')" width="120" fixed="right">
+          <el-table-column :label="t('common.operation')" width="190" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openDetail(row)">{{ t('common.detail') }}</el-button>
+              <el-button v-if="row.status !== 'done'" link type="warning" @click="openExplain(row)">{{ t('explain.short') }}</el-button>
               <el-button v-if="canEdit" link @click="openEdit(row)">{{ t('common.edit') }}</el-button>
             </template>
           </el-table-column>
@@ -247,7 +250,9 @@
       </el-tab-pane>
     </el-tabs>
 
-    <InsertPreviewDialog v-model="previewVisible" @applied="loadAll" />
+    <InsertPreviewDialog v-model="previewVisible" :prefill="previewPrefill" @applied="loadAll" />
+    <ExplainDrawer v-model="explainVisible" :deadline-id="explainTarget.id" :order-no="explainTarget.order_no"
+      @preview="onExplainPreview" />
 
     <el-drawer v-model="historyVisible" :title="t('insertPreview.history')" size="720px" class="proposal-drawer">
       <el-table :data="proposals" v-loading="historyLoading" :empty-text="t('insertPreview.histEmpty')">
@@ -383,6 +388,8 @@
         <div class="detail-footer">
           <GuardedButton type="danger" plain :allowed="canDeleteDetail" :reason="canEdit ? t('perm.deadlineDelete') : t('perm.needEditor')" @click="removeDeadline">{{ t('common.delete') }}</GuardedButton>
           <span class="footer-gap" />
+          <el-button v-if="detail && detail.status !== 'done'" type="warning" plain data-test="detail-explain"
+            @click="openExplain(detail)">{{ t('explain.button') }}</el-button>
           <el-button @click="detailVisible = false">{{ t('common.close') }}</el-button>
           <GuardedButton type="primary" :allowed="canEdit" :reason="t('perm.needEditor')" @click="openEdit(detail)">{{ t('common.edit') }}</GuardedButton>
         </div>
@@ -431,6 +438,8 @@ import { Plus, Refresh, Search, DataAnalysis, Tickets } from '@element-plus/icon
 import teamApi from '@/utils/team-api'
 import GuardedButton from '@/components/GuardedButton.vue'
 import InsertPreviewDialog from '@/components/InsertPreviewDialog.vue'
+import ExplainDrawer from '@/components/ExplainDrawer.vue'
+import { worthExplaining, type SuggestedPreview } from '@/utils/explain'
 import { conclusionText, proposalStatusType } from '@/utils/insertPreview'
 import { useAuthStore } from '@/stores/auth'
 import { canManageRecord } from '@/utils/roles'
@@ -472,6 +481,25 @@ interface Rule {
 
 const tab = ref('board')
 const previewVisible = ref(false)
+const previewPrefill = ref<SuggestedPreview | null>(null)
+function openPreview(p: SuggestedPreview | null) {
+  previewPrefill.value = p
+  previewVisible.value = true
+}
+
+// ---- 为什么可能晚？ ----
+const explainVisible = ref(false)
+const explainTarget = reactive({ id: '', order_no: '' })
+function openExplain(d: { id: string; order_no?: string; title?: string }) {
+  explainTarget.id = d.id
+  explainTarget.order_no = d.order_no || d.title || ''
+  explainVisible.value = true
+}
+function onExplainPreview(p: SuggestedPreview) {
+  explainVisible.value = false
+  detailVisible.value = false
+  openPreview(p)
+}
 const historyVisible = ref(false)
 const historyLoading = ref(false)
 const proposals = ref<any[]>([])
@@ -1112,6 +1140,8 @@ onMounted(loadAll)
   padding-top: 6px;
   border-top: 1px dashed var(--md-dl-border);
 }
+.card-foot .status { margin-left: auto; }
+.card-foot .why-btn { margin-left: 8px; padding: 0; height: auto; font-size: 12px; }
 .cell-unassigned,
 .owner.unassigned {
   color: var(--md-dl-unassigned);
