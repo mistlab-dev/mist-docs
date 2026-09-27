@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 
 	dbPassword := os.Getenv("MIST_DOCS_TEST_DB_PASSWORD")
 	if dbPassword == "" {
-		dbPassword = "MistTeam@2026"
+		dbPassword = "test-db-password"
 	}
 
 	config.C = config.Config{
@@ -440,7 +440,7 @@ func createTestDoc(t *testing.T, token, title string) string {
 func TestLoginDeprecated(t *testing.T) {
 	w := request("POST", "/api/auth/login", map[string]string{
 		"username": "admin",
-		"password": "Admin@2026",
+		"password": "test-password",
 	}, "")
 	if w.Code != 410 {
 		t.Errorf("deprecated login should return 410, got %d", w.Code)

@@ -1,0 +1,36 @@
+# mist-docs 配置模板 —— 复制为 configs/config.yaml 后填入真实值
+#
+# configs/config.yaml 已被 gitignore，不会进入仓库。
+# 生产环境使用 /etc/mistdocs/config.yaml，由运维单独维护。
+
+server:
+  host: "0.0.0.0"
+  port: 8900
+
+database:
+  host: "127.0.0.1"
+  port: 3306
+  user: "<db-user>"
+  password: "<db-password>"
+  dbname: "<db-name>"
+  max_open_conns: 20
+  max_idle_conns: 10
+
+jwt:
+  # 必须与 Portal（mist-team-server）一致才能打通 SSO；使用强随机值
+  secret: "<shared-jwt-secret>"
+  issuer: "mist-docs"
+  expire_hours: 24
+
+storage:
+  root: "/var/lib/mist-docs/files"
+  max_file_size: 52428800    # 50MB
+  version_keep: 20
+  audit_retain_days: 180
+
+websocket:
+  max_message_size: 1048576  # 1MB
+  ping_interval: 30          # seconds
+
+log:
+  level: "info"

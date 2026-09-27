@@ -1,0 +1,52 @@
+########## Q: 工单 系统 中小工厂 价格 3000
+T: 20人小厂花3000块用AI,第一个月省了8000:小工厂搞AI的五步走方法论
+A: 老兵说AI 实战 | 2026-09-20
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLSKoY62Ei7FxkaY3faWaIdFqXa8Fplpd98uDDQgBa3YUjTxLovSvSxcmLScFk73HyDP2_8e0x5hJTbtYEuiKMtpFbEtUvahxv6n0r41ZQ3q43vurQtsfmmK2APM_6bsnc7fmIZlvnN549kPCHgjcL1Nwy-hkY3ItaiIohxES9ZSlG_Rd81mgwTtXRnBaYcl3uPmZZ_Izcql
+S: 你可能连ERP都没有,工人还在用纸质报工单.听起来落后,其实... 一步到位真实例子:3000块的AI质检系统回到开头说的那个东莞的...
+---
+T: 中小企业用AI的正确姿势——不是买软件,是重新设计流程
+A: 明伯讲科技AI | 2026-03-23
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLSKoY62Ei7FxkaY3faWaIdFqXa8Fplpd9GGfmraU1EnInoBq3OUXHmTH0bjvHCeHMYBSDY7XPLUrH_raCTLqwcvB6lFtPNtqEHb91i6UFiKGoXTPwAYJViEhPJ1eyxhYaw_8CuV-vpI7pFZXvDal_3kLUxLc8kioR2p-1V6_GTA85dBhsyo93M25HZJiTrshwg_UrYLUxBl
+S: 你去找供应商,看演示,比价格,签合同,安装部署——这一套流... 最后的状态是:工单系统里有一套记录,微信群里有另一套,两边...
+---
+T: 周三招聘会(9.15)岗位信息
+A: 镇江新区人力资源网 | 2021-09-10
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLSKoY62Ei7FxkaY3faWaIdFqXa8Fplpd9BMziDlGwnGuzfPizUJQFoF4DVbko1Uq9ZbFq05X0pM3Rb1WVa7gt-Hw5fKVdF_9IClaNmpuk0BmfK62YnR8vQYCnJCpSd4k0pm8HK9fuGaGXloAQ-bUIJzjN6aA-bvNf6QD1mGGYIn-8TExRPdGH_Id9Kqh6HnCWhGKd-5ZjSy
+S: 3000~3500元/月,岗位要求:进行样品的制作,有较强的动手能... 负责ERP系统工单的变更操作;负责非标订单ERP系统的录入;...
+---
+T: 工业 4.0 倒逼切削液升级:智能化 + 定制化,工厂效率提升 650%!
+A: 润滑江湖 | 2026-03-22
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLSKoY62Ei7FxkaY3faWaIdFqXa8Fplpd9RqC9TdjSlLpOeulyRKte0NgM3D7cS-_ajXrhQ7ulFdhgUCY9bzwPAdvAfOFxehh5IrmY9NclXktPGHaBVMV7lSrCzoOQdJ7G4sxwevm8tVfilgohXZev3NsNE6HPo2Otxio-Ko05tcr21R9RdDdGBnODgRLgyJHMQ5FuHK705S
+S: 换液停机时间、废液处理费用(每吨 3000-5000 元)、刀具损耗... “基础”,某工厂只装监测系统未换定制液,废品率仅下降 10%,...
+---
+T: 中小制造企业ERP实施失败率为什么这么高?我看过200家工厂后总结的7个避坑铁律
+A: 城中探秘者的小宇宙 | 2026-09-09
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLSKoY62Ei7FxkaY3faWaIdFqXa8Fplpd9WNviRtBu16mXwo_2Z9YOSoTi0oXBmaKK7MVblNFNkYiWq6CJpk40EhAZ_d80D4wlfP3EuL3ccXpdaAnSuiURnv6IR5D1eua1jzN8ufVMYc6pGkwYlAI51CcFz6ev6e5V30LgT-6dqV9HhoFIHo0NOlZeUdIV-_oEYh1ebk_6iL
+S: 生产线还在用Excel排工单,仓库还在手工记账.最后这套系统沦... 在我接触的200多家中小制造工厂里,类似的故事反复上演.问题...
+---
+T: 预测性维护:低成本预测性维护解决方案与工具花小钱办大事:中小企业如何用传感器+算法,实现设备“治未病”?
+A: AI行业应用研究 | 2026-03-22
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLSKoY62Ei7FxkaY3faWaIdFqXa8Fplpd98xQmOZ33dRxA5eKdcgGv0VBWg3nJUKaiF0ddfEhIOJiljREWAHDZFYohAV023MMcrVrB0auOsdd-pGl8b7vONEkXFKTumkwk2-ISZYe5sl-0STqHJ8kVobmZlsxyDsRxfeRf02IPISKz3NLHTCm60opEbwLiSWxah8UUIq7whc
+S: 一套完整的系统动辄几十万甚至上百万,对中小企业来说是笔不小... 预警触发→自动创建维护工单维护完成→更新设备健康状态形成从...
+---
+T: OpenClaw 私有化部署的赚钱方法:从入门到月入过万的 AI 变现全攻略
+A: 一万网络 | 2026-03-31
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLSKoY62Ei7FxkaY3faWaIdFqXa8Fplpd9lR0eBbRgkwE32BFv7Jh22ifMIhiN4vS4xR8gHlCF3d29FefbGV9PNw0ockV-uIkc_54XrohEQIPoIJXTNqC12tPHQLNHAxSn6eXBDD54qPGPldC1-WLbtruw5dthPNumRlmJB1D0CGkxXk5pJxAlfc-AvVVzGp23IxkfeV1FRm
+S: OA、ERP、CRM、工单系统• 7*24 小时运维、安全加固、定期升级收费标准:基础企业版 3000–10000 元,高级定制版 10000–...
+---
+T: 蓝盟IT外包的服务优势解码:一家企业凭什么让客户连续合作十年.
+A: 蓝盟IT外包服务 | 2026-02-27
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLSKoY62Ei7FxkaY3faWaIdFqXa8Fplpd9G82qHKjoPeLVIHcKLxltfs2V9cqLRuXaHoJ41p-KucAa9Q9bY3aNjXPxr9Vh7LMmne4pW3H4hWRwnwcVZ4mNNeo-YLvfz2r4Dz1PG5VU48dz7u8s-8ijGs9QTI8BvG6wENrX4mpJf74p6EIzPEBiW_VooFTvPUzC0mYknVt6aG
+S: 系统自动推送该客户的网络拓扑图、历史工单记录、门禁二维码及... 远超过任何短期的价格优惠./// END /// 作者:云上编辑部蓝盟于...
+---
+T: Token经营,到底要经营什么?
+A: UXTOOLS | 2026-03-26
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLSKoY62Ei7FxkaY3faWaIdFqXa8Fplpd9HRpLI_8gzKuhLFRuQFZc5MMy-LUGKOO6TOJykSJRnILn4FirGVZzgY7SQfb9ItAeaK9knFv_XOOQtkltTEqbx3myjRt_kAooGNhviA0Ak5LFN0kICDHvmub4XZctbAG_Hm-W-jeYPYU9mwEBbAjJyCMztp5DthrntPUk8hQDDX
+S: 3000个边缘算力节点,1.1亿AI应用用户.一个大型企业客户在其... 买了模型API,接入了内部系统,员工开始用AI处理工单、生成报...
+---
+T: 水泵行业的需求、痛点与解决方案
+A: OGPC化工园区 | 2026-03-15
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLSKoY62Ei7FxkaY3faWaIdFqXa8Fplpd9GPtBrTZetTFJlzpFVYOzVOqKhLBeiozA4mzo7Yy1gk-QCoJ3dgDyLb9lulFEc3O_nLlhBpx4xGp0IHZSaUdkndPnPz_BahMgAutb4coDS1UYsZmqGdwY6B373B0d33NSpCtc9r7rLBNNnbGwNK7ewronN692Nlfdb0VPg2fYiO
+S: 劳动力成本上涨,价格内圈导致利润微薄,中小企业生存困难.... 工单管理:自动生成运维工单,全流程追溯,优化备件库存.(2)服...
+---
+count 10

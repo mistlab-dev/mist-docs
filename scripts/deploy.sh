@@ -10,7 +10,12 @@
 
 set -e
 
-PROD="root@85.137.247.166"
+# 目标主机经环境变量传入，避免把生产地址写进仓库
+# 本地可将目标写入 scripts/deploy.env（已 gitignore）
+if [ -z "$MISTDOCS_PROD" ] && [ -f "$(dirname "$0")/deploy.env" ]; then
+  . "$(dirname "$0")/deploy.env"
+fi
+PROD="${MISTDOCS_PROD:?请设置 MISTDOCS_PROD=user@host（或写入 scripts/deploy.env）}"
 REMOTE_DIR="/var/www/mistdocs"
 WEB_DIR="$REMOTE_DIR/web"
 SERVICE="mist-docs"

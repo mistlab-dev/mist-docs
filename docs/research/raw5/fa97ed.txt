@@ -1,0 +1,52 @@
+########## Q: 小工厂 上系统 失败 原因
+T: 别再拿数字化当“电子狗链”了!90%的工厂转型失败,根源就在这
+A: 工业数智化生产 | 2026-03-22
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLP5PvYtAcrjZkaY3faWaIdFqXa8Fplpd9dtb7-70emOvIyVah84pdIZ0xdniGB1UExUPjhY2CYiIGaPqf4blYWWl3HVE-Lw7BozRvJnhG9jwWNMpGTCJeDZ4QuXh4LQPXbZWjeisllrGKdF6iSSvOEHYgwYbLm6-at3McG4Kbqg-BvXXoT3OXR8prjvYPPn54Ev9pR0e2Zh
+S: 工厂里最常见的一幕是什么?是“阴阳报表”和“事后补录”.... 这就是典型的失败案例.系统里的数据和真实的业务是割裂的....
+---
+T: ERP系统是什么?工厂不上ERP和上了ERP的区别是什么?
+A: 源技智能科技 | 2026-09-10
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLP5PvYtAcrjZkaY3faWaIdFqXa8Fplpd9A-ZDkxePrVnrWPWab3nR2I1WmCPG-miUX1uyWudEefN8ORfO9nt4T-QB_BYEa1QiIQAdcnM6nQlmljRvuL4cSUCVp20EeKqADvagfUOKnVMCyUnLBj-aqKuZu0HxhJl4SQV6Z3b1MYrYldZNnpqlGH02TuKZ34YoMWBxIQOo0h
+S: 很多工厂老板跟我聊天,聊到最后都会问一句: ＂我厂里现在用... 但失败的原因不是软件不好,是这几点:1. 流程不改,硬套系统＂...
+---
+T: 从单点模块到全厂数字化,中小工厂的迭代节奏怎么把控
+A: 王妃家居生活馆 | 2026-09-14
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLP5PvYtAcrjZkaY3faWaIdFqXa8Fplpd9nCCaAfTOJr1-I63a7MI5xYEEJBHVt8Jq3PT1abnUabciIEkCKGPB6JnQt5fELVimI1sx7V6xsIDETKviQen4pQnqEUvr59I0Vbuq23iKaz7Q1AcwuqD89ndBdy9EKMRU3h8q3Ed03oSiolxART4PefMWMcFtiFCo7WwolsC5gF
+S: 对数字化都有一个纠结的共识:不上系统,管理全靠经验,越做越... 这也是绝大多数中小工厂数字化失败的核心原因:用大企业的建设...
+---
+T: 失败案例拆解!这些错误是如何导致 90% 工厂化循环水养殖失败的!
+A: 智慧水产 | 2026-02-28
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLP5PvYtAcrjZkaY3faWaIdFqXa8Fplpd95QEF5XtixtWe_ELMiwXc-CyT7p4Xy3oRyhBn3XGFn95DfeZpz6-fN9TAuzRpxIyUF3v7bFIivPJNPA0H_234OFongIndjz11FoIVrNvyHc1TtCXVHjrQTnjaV1X7fgz7u_JcAJP0cJw4b8KyxcChpufcWyKQR5qsNi-MYivGbf
+S: 还有很多小厂家为了抢订单,虚标参数、偷工减料,用劣质材料生... 但最终还是失败了,核心原因就是管理水平低下,没有专业的技术...
+---
+T: 中小工厂AI落地,先从这3个地方花钱最划算
+A: 老兵说AI 实战 | 2026-09-11
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLP5PvYtAcrjZkaY3faWaIdFqXa8Fplpd98uDDQgBa3YUjTxLovSvSxcmLScFk73HyDP2_8e0x5hJTbtYEuiKMtgJvm7wP9oMJXwjUva2rwwPREpMENkCnMT2C9GlrjF1myJqdhsn4Lir05ft5ag18LVeVsns0fTX0LZToPNZLAOzfhcBWsJ64aeNPzp04CuaWfYxCpmLXy0
+S: 三个原因:第一,痛点最为明确.几乎每个工厂都在为质检头疼—... 很多小工厂买了高级APS系统,最后发现:自己的基础数据都不准...
+---
+T: 宁波工厂老板用90天改掉一个坏习惯,你也能做到
+A: 微茫云建 | 2026-09-08
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLP5PvYtAcrjZkaY3faWaIdFqXa8Fplpd92kbSPJTIO4mMFuArcVFj9uxke1j3jUWtlHoX56dWht1SUNzq9kCaUv_pOfUNyhXbEdSpp36RqYUQWtznFcRcEHm5PgXPiN5SZqa91AIuybCEwE6Z6KSDUT5VlSsNpJyHqfkyDh2Fu0OSD1kJTup-7FLhdypBeMR2_F4KePXdPJ
+S: 制造业数字化转型失败率高达74%,中小工厂更是超过80%.更扎心的是,72%的失败原因不是技术落后,而是系统与实际业务流程脱...
+---
+T: 公司如果想做工厂数据化该如何下手?
+A: 全栈工位 | 2026-09-15
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLP5PvYtAcrjZkaY3faWaIdFqXa8Fplpd9O34ElKr3NMXV1KfqGp2H5K4Or1l0Mwtw1g7dIJuO9kWg9vEFIpctWrUHrufdZEieFLyUbiFZBeVmgzqcuNeReYmd34ga30dQvwFF9j7cviUcZRJVUgQHDFi47Srhcbi2o4_9lk1Xofla3Rfve8O7Y2-2CcZV-zePhiz0QcQcj6
+S: 系统 → 试点跑通 → 全工厂复制.很多工厂直接买 MES 最后失败... 工序产量不清、返工原因无法统计、在制品 WIP 不知道在哪.仓...
+---
+T: ＂小快轻准＂是怎么救中小企业的:把数字化从＂赌身家＂变成＂过日子＂
+A: 合德数智Hardyne | 2026-09-15
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLP5PvYtAcrjZkaY3faWaIdFqXa8Fplpd93gf7aN29L3a4SLGTNf1KVFQ-DHXlXQAAnPoSPZRrdXORsJ5250-D-NWCi8MJGHVbBIOSrsT1LXg0lnXzvfb9XYQimfrzn_Y7HFffmWQ4yS8NPhW0MK5Z6AKDuuug-4nqk3KePTn4DCPtSZFbW8lQXXdQ85wubIvCVCdbhnHnzx
+S: ＂又来一个要填的系统＂＂这个工具帮我省了事＂失败代价推倒重... 对现金流紧绷、人手不足、经不起折腾的中小工厂来说,这可能是...
+---
+T: 海外工厂落地了,出海就跑通了吗?
+A: 复旦商业知识 | 2026-09-15
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLP5PvYtAcrjZkaY3faWaIdFqXa8Fplpd9XsEvgUi0QGHLNYymJ6JD7XzpcT-mOCeGHyXZVOEJf_hdYo39ZXG9Ijr6y-1ApzbH_sevh-NhwFJ_4Apo9QPFGvX3M0_SBeMdW5qJcJ28eSBdQOrZxXtk516daosGwqSPKb_uXrWmEa7nKWNfq0AKqVxpebndQUdfTZinWrjbGa
+S: 对海外客户而言,交付失败不论原因是何,都意味着品牌失信.... 销售和社区关系相互支持的属地经营系统.工厂落成并不代表企业...
+---
+T: 2026 模数共振行动落地,别再把工厂数字化做成 “一次性样板工程”
+A: 安得利水来看 | 2026-09-11
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLP5PvYtAcrjZkaY3faWaIdFqXa8Fplpd9dN4oZlMWMKeeXe-Q_r7Zi0e63yFisw4CVOxsFtf9GaT8n3ALwf1Lj5b5Yxqywv3M96L-_badj_De5vntfC7pj-lHp_XNKSKTR5JLpCg0GfWSfklqRLMUlan9-R-CfPikopcxB-AJYvbwbeLQw91RumdeaYeiXzRQJ72wCYqfxu
+S: 中小工厂数字化三大致命痛点,也是绝大多数项目失败根源✘ 痛点... 无法定位工序浪费、不良品根源、设备停机真实原因.重采集、轻...
+---
+count 10

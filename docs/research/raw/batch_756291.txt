@@ -1,0 +1,52 @@
+########## Q: 中小工厂 生产排产 需求 (p1)
+T: 一文详解!中小工厂生产管理到底需要 “管” 什么?又要 “理” 什么?
+A: 老孙聊制造 | 2026-09-17
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLG1tIvIIqctVkaY3faWaIdFqXa8Fplpd9KvEP-XvWk0ndEnPRt-fNzz-ZiLgC-UydT09nL8wRU57PjrWLN2yIV31ozEcp5yar-AWivq4Xon6JGFp2_1NFVPwrVU9oJEoFWhxUzuBG2hwL8UhSrkXP6DirIVA2KPIp1mXerWM0cpFnc4JlJ4swm70Kyr4oXjVjYd1AYUBQJd
+S: 而中控云灵动小工单可以帮助中小工厂解决这一难题,在接单排产时,业务即便还在客户那儿,也可以掏出手机立即下单,订单自动推...
+---
+T: 什么是生产排产管理系统?如何快速搭建生产计划系统?(内附免费模板)
+A: 零代码研究局 | 2024-03-14
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLG1tIvIIqctVkaY3faWaIdFqXa8Fplpd95UoPmlS4dZ5mcbocc_9ND6by29gHB3xTLmfQPCoGVeviCP7rh-HFQqF9mBAwgBO7_9VpCqyrkRQFYCTPWAKetibSGFG6jDe-0w3-lpVehp73WjugRWvt3PL7itM-pUIvrhBS45RXIG9GYRlJgpdomrOEj4Ehaq6Senq4wlQXNH
+S: 力争为中小企业探索出一条最具性价比的数字化方式.简道云生产... 在生产排产中,企业需要考虑订单需求、物料供应、设备状况、人...
+---
+T: 年省25万!东经科技帮扶山东大昌包装解决生产排产问题,达成咨询服务合作!
+A: 东经易网 | 2020-12-14
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLG1tIvIIqctVkaY3faWaIdFqXa8Fplpd9jXZGPwPAVWdHJYsw_6TlkIPdFphPb3fYJzJxGIwo78Vgz4lsKhP1qm3kglCyYMl7hJpoW03IRdLATGfA02bPe7hJFjxLY0SxIteC_YQqE7Zn8k1lUggrLYYdNyscAdydrTy4BOuLC8_0HytXi1ZyhXm5upigu1xx3GROoVXORN
+S: 解决纸板厂排产痛点需求 # 排单在整个生产管理环节中是至关... 工厂内新来的排单员对生产排产流程不够熟悉; 2、现有的排产...
+---
+T: MES生产排程:工厂怎么安排生产?
+A: 系统开发与管理 | 2026-03-25
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLG1tIvIIqctVkaY3faWaIdFqXa8Fplpd9Dk3qJNUGuEvHpl5ZYbIYcUS5rqVgZ7U6LPGDmRoB8PpYpx7va9ACL4Oq5yXyNQduSeGdu0p_FAG9X35NCi3mqss_caGK8vpuxsmRD6_gKs1Hx70zmJm57Fb3N87JCkpEGPNdpWSxrCYVnvdzPL3MmufrdGYFwhdtItdkl7jGxE
+S: 中小加工厂:简易灵活排程中小工厂订单杂、产能有限、人员少,核心需求是操作简单、快速排产、应对插单,MES排程无需复杂配置...
+---
+T: 不再羡慕大厂:2026工业大模型适配中小企业,质检排产效率暴增,小厂逆袭的核心逻辑与实操路径!中国制造告别规模依赖的变革与机遇!
+A: 科技干货铺 | 2026-03-28
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLG1tIvIIqctVkaY3faWaIdFqXa8Fplpd9Dj17RVn8mMOjevpU7c6AC43Th9rfSwGw7iPQLtq3_QWt11aEbkb_KGSQeBd3CSqP9BNruESH3BV5URKyD16rOzEvcunX_pLITTB4w0xLtzb3BUsDXdoO50eS-5NL7yznr76XJPFBhnD4kiiaTgtgQafqWNMdKZ6AAf2LRTRCjW
+S: 以前的工业大模型,需要海量的生产数据来训练,才能适配企业的业务,可中小企业的特点就是数据少、不规范,根本满足不了需求,...
+---
+T: 中小制造企业,如何选型信息系统?
+A: 让工厂管理变简单 | 2020-10-06
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLG1tIvIIqctVkaY3faWaIdFqXa8Fplpd9uLnAXtzxSrpMTdkBXNWUi8XnmcfOguVYKdJfVZ7mjIXj5_sNTznlbJY1pkEXuIO-GeWPW-hSA2wu3W40XRo87C17x1uXLGSslZnRq9t1GfyZF-K9DCqHFi2dZ3hSG7cf1iWx0QTbB-iJ_09rmRY3fOno4F9l3QeijYwvzv8NQk
+S: 前言 最近走访客户和讲课比较多,接触到了大量的中小制造企业,深刻体会到了制造企业的焦虑,也深刻体会到了中小企业期望进行数字化转型...定义企业的运作目标 其一,企业信息化企业本质上是工具,是为企业的经营过程服务的工具. 信息化的工具...定义企业所需信息系统整体 由于制造过程的多样性和复杂性、业务过程的多样性和复杂性,所以制造企业的信息系统十分多样...
+---
+T: 为什么我们更懂中小企业工厂的ERP需求!
+A: 云合未来计算机技术有限公司 | 2026-09-12
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLG1tIvIIqctVkaY3faWaIdFqXa8Fplpd9WxiJ8xcsM3vps8GoPdhnY1QjPeMQR5zYZGAkrRK2Sja7SjRkTkewAhHW8-Ye1nPrudODEVgMQqilMJzPtyHqtB2FZTy9aX5s2EMkZ4PJ3_f83G5Ovy47ETWGWnletAT8RC679txTQ2IBIym-4XoWSiJx6gIFTSarwh1cQUlcH1
+S: 全部来自多年来上万+中小客户的真实反馈和日常需求汇总. 从基础的进销存、库存管理、财务对账,到工厂核心的生产排产、工序管...
+---
+T: 看样学样丨福州中小企业数字化转型案例展示(四十八):福建森达电气股份有限公司
+A: 福州工信 | 2026-03-13
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLG1tIvIIqctVkaY3faWaIdFqXa8Fplpd9nc8YkgYnq9Ov0T_QaOSS7xfCL2Ts62ueoyojg5EWuzdia4_NDhPNTQvK7bObFFc7JEdoJWMDqfTNhVBnNAwl3c6eigHNHz90Su3Kos4nXhL8RBGaJWMeQxownQS784Fn5LAQVrTlNgL4IqgPZ14wR8Gvfek8euNrFjEGohuvh-
+S: 依据排产计划,结合配额执行数据,可提供出与计划生产序列对应... (5)生产与采购协同:生产计划确定后,系统基于物料需求计划(...
+---
+T: 月度排产| 2026年3月中国电池排产环比增16.5% 储能大电芯主导需求增长
+A: 大东时代智库 | 2026-02-26
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLG1tIvIIqctVkaY3faWaIdFqXa8Fplpd9_ITDSbARe8ht38Pmax0E3CeioKCa7wROzev0pL2ZU1ri4MpnR-Jb51zvYwFnHQSUkbZBS1kchZjyhfQ_5bNavMLZ1IzuT0FXygNwZnWkYTjwOqKNaXPynH6Tv0Vwpcxhtv1kAKQtwTjCCUQnPbXbuqzMBj65Xrk_MrrRRjw4uF
+S: 部分工厂即便在春节假期也保持三班倒生产节奏,核心产能始终围绕市场刚需释放;与之形成鲜明反差的是,小容量消费电芯、低需求...
+---
+T: 速达软件:中小工厂什么时候需要引入MES系统(上)
+A: 山东速达天耀 | 2026-03-02
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLG1tIvIIqctVkaY3faWaIdFqXa8Fplpd9tIF4ET1OFLjeX14chRaYs9qq66X_ED8IkIepyx6_Y2UOOFtG94Ejdhk4O_IpoaUIt4aTLZmMMBjerkKl4itQCfO_GjMv_3cQtbHm1kLsbonsdFeGSby54lJ13QO-DSxxQYtU2gpq8xC5xo-_rUlAW7MIgkuvcqOWQ3R5FmdLha
+S: 中小工厂在生产规模扩张导致传统管理失效、多品种小批量生产模式下的柔性需求、严格的质量追溯与合规要求、设备效率低下造成产...
+---
+count 10

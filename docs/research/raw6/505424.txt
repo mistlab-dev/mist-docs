@@ -1,0 +1,52 @@
+########## Q: 生产 日报 手机 录入 车间 工人
+T: 自动汇总更新数据的生产日报表原来这么简单!
+A: 零代码研究局 | 2026-03-26
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLsJqIslmNOkVkaY3faWaIdFqXa8Fplpd95UoPmlS4dZ5mcbocc_9ND6by29gHB3xTLmfQPCoGVeviCP7rh-HFQmRzTo_UeJUHbezLZ9m-zTXHbkgNXx7_BU_Knc-TbeqDr2P-GZdWueYM8F5G5YtU8aj4C_2fpfMA25BAE4pgY3x9rSUXozkzm9CNIILuKKY9A6wlr-0JhA
+S: 因此,工人手边有手机、平板,或者车间有个触摸屏,干完活顺手... 我先录入十几条生产和工序信息,让操作员实测.这时候,你的生...
+---
+T: 那些一流制造企业,都在怎么做生产管理?
+A: SMT顶级人脉圈 | 2019-11-25
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLsJqIslmNOkVkaY3faWaIdFqXa8Fplpd9ImuEzWlBW0PGRKJokNORR4JiYOPtX72yLSk-R91Vm93i4XXeK9HJpju_wUFWhKwQQYzy0PTeUhqRTtx6j0imGV3gNJEdOIS3JEwDbhaQxm5wpJbiiNbVmct3UUR87hPdEZ7D1k4irxlouffLYmoLddVV8Mth88AgijAqGNobjV
+S: 解决【纸质报工效率低】问题 在传统的纸质报工环境中,工人拿着表格填写,漏填出错是家常便饭;班组长每天检验产品数量...解决【财务统计工资难】问题 过去,企业通过报工单计算工资.财务部门每天花费50%以上的时间统计报工信息、并按件计算工资...解决【生产日报发布慢】问题 在过去的管理模式中,当天的报工数据需要等到晚上加班录入、第二天分析处理,最快次日中午才能看到生产日报...
+---
+T: 媒体聚焦 | 《南京日报》报道康尼机电“智改数转”推动企业转型升级
+A: 康尼机电 | 2022-03-14
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLsJqIslmNOkVkaY3faWaIdFqXa8Fplpd9NvXutFCZYhRH9mowyGscDcqTBDx5k0FYivJfTC5EK7dJPTIMsS2JJSAf1-smTaXHmvY_5Gp0mxehcjt3R9qWeV_YF1GabVHNaHCzUhFYV2TWVvJ7ghB8nohlAxiGQ2QIcaIU5cjswfKPW2moOMdGwWXVu-GhoEoudtcijlBmgY
+S: ▲在康尼机电智能化车间里,“工人”正在生产制造城轨机构组件.南京日报/紫金山新闻记者 徐琦 通讯员 王刚 摄“最强工人”连续作...
+---
+T: MES到底值不值钱?搞懂这六项指标,你就能判断工厂该不该上
+A: 低码纪 | 2026-03-19
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLsJqIslmNOkVkaY3faWaIdFqXa8Fplpd95SyFIHO-lGOX7LQCJBvbhkWTblm7IHErf_yPw_I4MX-Saus0GOqKZlDbuG-kmNFcWMPBgX_zP02TvJQfNrwu9NtLLQg3AOrA8XKcpV-CKbLEIY9D7imjhE-ORjHqxM2iOYyUYqJ78YfLqn78UeYrExX5voXLjRbuturGWExLVq
+S: 生产日报永远是昨天的故事真正能做到实时产量统计的工厂,太少... 不用打电话问车间主任＂今天怎么样＂,因为你手机里已经看得一...
+---
+T: 工厂最该盯的5个指标,90%的老板只盯着产量
+A: 史永翔利润管理 | 2026-02-02
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLsJqIslmNOkVkaY3faWaIdFqXa8Fplpd9XtBsl3BoFqaHKNphcCy4pPAwK-i_4MdYAbf0a7Hqv_6olLS8TU3uZlDVflUbUX179x5KNGjwDev203KGwRgLi16ABIsDW0YLMlDW992USTmo0DuHEw6p-DW4tCX4fUKpyZDA2RknsMeAQB_S2TB_5gdJTpQw2u4Lv-mTLZUI6T
+S: 传统的车间指标只能衡量工人的动作,而老板真正要盯的,是衡量... 生产日报靠班组长手写,统计员第二天录入Excel,等财务算出损...
+---
+T: 专版!平顶山日报整版报道《隆鑫机车:打造中国最大的三轮车出口生产基地 》
+A: 叶县今朝 | 2021-05-07
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLsJqIslmNOkVkaY3faWaIdFqXa8Fplpd9jbg_-WoNB5TdxQEEl251kZfcTotVLZPxOTC8ac8hi8-AxsAUkjgwzl8MHaSi9FsZiS--l9fM8ElJK_IhfNMOCM8zV-qm3f-NyfNVff-taULHlsjo5XDUqbsDqbDBGUr7KqM2vj_x-DFbggowNbP36vOizDQEn_6g0aDyZxKymF
+S: 工人们正在生产线上忙碌着.“我们的产品多被运到青岛、连云港... “该系统录入了各个车间人员及生产线的参数,一个订单下来输入...
+---
+T: 案例分享|一张表,管住一座工厂:腾讯文档 * WorkBuddy 的现代农业数字化答卷
+A: 腾讯文档 | 2026-09-09
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLsJqIslmNOkVkaY3faWaIdFqXa8Fplpd9S6-X_2tPe8rjxDOHVUq3viwRSoQCIYhDbW5UWOe4hX37ct0npVyQTCQj8u-F0NkooRd9eAhPmf5586Nu39CMVbE1eP8SqcfBGUjkCWUA33JLZoYIYoMx9LvksKGg4pFk4PKu_wNHeH53MO3U2Jx19jxQQwXDG0lq-Dup5AT-Rw
+S: 工人填、主任抄、生产办公室汇总可以更省:同一组数据在工人、... 数据实时录入系统数据库环节二 · 车间管理:人工抄录升级为系...
+---
+T: 青海日报 | 从田野到盐湖:15封感谢信的千里回响
+A: 青海盐湖股份 | 2026-03-27
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLsJqIslmNOkVkaY3faWaIdFqXa8Fplpd9Ijq_d4QRhl_fcvR_e0MpZlygGMAZ1f9Mbj2AV3_daysaVBwKjQrw732S8_Y4xFDwMzx4a_r_SFghelLbuXNb6n_ddou4b0xy_UEy8yienILH_HZFpi8tvn8vUwK4a7o_eHg6TAg0LsX5SIJUULVyWXbjF0iFFDAoIBxv3Ye6sP
+S: 盐湖股份智运物流钾成品货运车间报表员马伟紧张地录入报表中.青海日报融媒体记者 张鹏 摄同一时间,45节火车车厢旁,45辆叉车...
+---
+T: 上级媒体聚焦 |  防疫生产“两不误” 不负发展不负春!
+A: 宣城发布 | 2022-04-24
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLsJqIslmNOkVkaY3faWaIdFqXa8Fplpd9mMcoQ32KUI9zkaJKQFKn7VuQjCaHGrWJKdy5GzuNbXaCcUbtKwqPJjq71FzSXf5vwuDWeXwyLTFga6v6NN9s9E9CPoSvVJoE3aeN-Dm8GWOmVJLmlwKiAF0lJAaCaXMWvJZ4EXIdVtCtyirjep29Pv5kAg6eQ0xlm18udm7pU_
+S: 安徽日报宣城市宣州经开区全力做好防疫和生产工作 连日来,宣... 提醒企业督促职工登陆个人所得税APP,及时录入专项附加扣除信...
+---
+T: 【诸暨人才网】电商客服、老板司机、双休人事岗、普工技工……诸暨多企多岗热招中!
+A: 诸暨直聘 | 2023-08-11
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLsJqIslmNOkVkaY3faWaIdFqXa8Fplpd9iPaUN58l45IJkheRxfMXfI3OYkDYqm8yB4NGM5OqCzNNu0All1fJYYSWhcu9kMZVG02dSWRDa2IUUO_rgv3nG0Q5ckso-zAtVCuofFhwfPZvMbhhXhYPGytyxX4gkvP5FSGlP9RUcW7ksEs6e9iP7BWeAIrR4jW7MsYZShX4U7
+S: 跟进生产车间每日加工进程,填写《生产日报》表并做最终核对,... 会用智能手机即可,凌晨1点半到7点半左右,夫妻工最好,前期刚...
+---
+count 10

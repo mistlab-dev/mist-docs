@@ -244,6 +244,6 @@ CREATE TABLE IF NOT EXISTS `md_webhook_logs` (
 -- 默认部门
 INSERT IGNORE INTO md_departments (id, name, sort_order) VALUES ('dept_default', '默认部门', 0);
 
--- 默认管理员（密码: Admin@2026，需首次启动后通过API设置）
+-- 默认管理员（密码由首次启动后的初始化流程 / API 设置，不在此写入明文）
 INSERT IGNORE INTO md_users (id, username, password, name, department_id, role) 
 VALUES ('u_admin', 'admin', '$2a$10$placeholder_need_reset', '超级管理员', 'dept_default', 'super_admin');

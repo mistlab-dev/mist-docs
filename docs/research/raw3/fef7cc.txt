@@ -1,0 +1,52 @@
+########## Q: 生产 进度 看板 小厂 表格
+T: 从＂凭感觉排产＂到＂系统排产＂:这家 50 人小厂的订单准时率从 60% 提到 95%
+A: 大易企业信息化 | 2026-09-21
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLWd_tIBcQeb9kaY3faWaIdFqXa8Fplpd9Xd73DH1WaRlFjzXx-oK83s_kiUzf4w4Rmk7yMl3mGBK1pzxlzLyATjUEmevI17p-kys1DAK1BgN1guZKaTenMNwBYRbtNefyzreixzInZqZK_uzDsaoFYQBJpi8Sl7PNfYxUQ5NjSqvosuOlIg5QDBaEXWyOcKM7CK84Cark2Y
+S: 排产员不用再到处打电话问进度、不用手工调整 Excel 表格,系统... 车间大屏数据看板5小厂上系统的三个关键经验回顾整个过程,有...
+---
+T: “世界工厂”里小企业的数字化“大收获”
+A: 羊城晚报 | 2023-10-16
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLWd_tIBcQeb9kaY3faWaIdFqXa8Fplpd9HxklRBxVyXU9GaZJebEAPlV_Nsm7eOB-gyNfUhHZLogWu4SEIpaAChcjCpwvwDP0m05nRTO475QnvapbCyU-N6xVT4TyZlBFNbkcJULLLLTeZL7d0r_Z9N2T-oer4-Wpq7826hFKdo8B3OscErkdxdHi3sm0HboOPhCmQimQRZ
+S: 2023年开始,钇虹精密通过企业微信的“自建应用”搭建了“委外工单进度看板”,生产全流程放到线上,生产主管能清晰看到与外部...
+---
+T: 两小时,我搭了一套MES系统,用一张二维码打通生产管理上下游!
+A: 老陈的生产系统笔记 | 2026-03-07
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLWd_tIBcQeb9kaY3faWaIdFqXa8Fplpd9V8pQrqYXF1RvlGAPTO-RckxP7DL4qr6bLhFI-emgCqyvcYsBxkKlxTPwzc42Q253ubJdp79SWuytsBOv0mkhxvOu9njBeoB2lIVRN0TuJaVPeheWUDtXBzeK8K31ZRacdhCtCVax9R_nms1vp0lFdx2nGAskXoET245dJE-w0t
+S: 上礼拜我去家小厂,花俩小时,用一张二维码搭了套轻量MES.... 产量、进度、工时、设备、人员,全自动生成,一个字不用填....
+---
+T: 免费开源的 MES 系统,简单但很能打
+A: 程序员技术宝库 | 2026-09-12
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLWd_tIBcQeb9kaY3faWaIdFqXa8Fplpd9m9BmQ0ntFdV7G7cRjy0iDYNNaTyF_kxtMiT_mnsneg9L_BJuK--9GF0uDVLnJBAzpOEKj6Ys88qo_H5wCAmfESGpbmfY-LTcFNvk9RiVoyDb9iakjFKzAHW85btvSlEeDkt8uVggDT1vBCiOTMja8qcgs47YhkVDbZVFvdh4mt
+S: 排产、纸质记录质检、靠微信群问进度,那它值得看一看.03 核... 数据看板实时生产数据可视化,用图表展示关键指标,管理层看数...
+---
+T: 印刷色彩品质控制的一堂MBA管理课
+A: 色彩标准化 | 2018-07-29
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLWd_tIBcQeb9kaY3faWaIdFqXa8Fplpd9iJ8Lu44zCCgU36JrkqQwITVxmCeDYDLfPip1SHOUgiCbb_vmwZprCINqKCzUQIoHvBR00LAbO_bw-FpaDI_g5xWmaf6bUHb2DaYNR9E-zEkTcZmIc5QxpLPyU9FJoAT1WLjJciQfWOkH_B_IJJDdbpKosQO2iJXJ3kWxiXuQxC
+S: 造成生产效率急剧下降,生产成本也被迫提高.据笔者了解,这是... 比一般小厂的机长更具有标准化的意识等.但是这种依靠技术骨干...
+---
+T: 中线学社:十位技术大咖、开启全新使命
+A: 线束中国 | 2021-01-06
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLWd_tIBcQeb9kaY3faWaIdFqXa8Fplpd92DsUhlvZTmXlfbm5otxnwMq2n3XbQc8fcrvckJqV_S02mHXRukVwVgoz41eJI-r-_-SZXt2qhaHR9rfQzW_IEB2PjqppjLsDw92AMeU7SFo_wjAhrfTYGhhS17GQ-0NHfMXf2R9fMXpQRUnHX04Q4paXJwE8cF-Dp7GAalrlzL
+S: 生产现场问题解决、管理看板、目视化管理、现场库存建立管理、... ∷大厂模式和小厂模式是如何形成的?1、材料性能测试2、线束关...
+---
+T: 金牌人才网 2023年6月26日 更新招聘信息
+A: 金牌招聘 | 2023-06-26
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLWd_tIBcQeb9kaY3faWaIdFqXa8Fplpd9L0ruZfk7TkOy2zSh-AjyG2zoJHjKtXYRHRCUe5qtTHUgb83hu2NMxRycFmcA-CUDcARZ1slFjgA_ZdIff4u4IdgwkLkDYITLqTEvNfQnz6nquWh0B5rt92xgykuTsqvWPBoxYY0Q3xmsg2gEMBQiionbZ1REE4l5vFRniJrhnT
+S: 排单、打单、跟进进度、发货、收货、配合主管工作.业务员:多... 促进TPS(拉动式生产与看板管理)在制造系统建立;6、负责精...
+---
+T: 被盯着的时候,人人都能干得更好——霍桑效应
+A: 台州啊哦呃我的宝贝啦啦啦AOE | 2026-09-13
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLWd_tIBcQeb9kaY3faWaIdFqXa8Fplpd9zPesL-guqo7Q0UNMz_pmbf_r1FwXSphzntHWVmBWONSrvdasaskDvrwWAbPGTuBHL8sAxXsLT6XNJmhXOBuKyPuC2OXHcvTYtdg63gzjavEUEoCcDnrmY3rt0yGgR6BNQlJki33h_lqCSqhiBKNrD07DBkIRokNi6xHvskI0v2
+S: 所以你的动作得换:这个月的看板挂产量,下个月挂交付准时率;这周站会报进度,下周站会报客户反馈;复盘会的形式,也可以从会...
+---
+T: 别再瞎上ERP了!供应链6大阶段迭代逻辑,搞懂少走5年弯路(附落地手册+Excel模板+AI工具包)
+A: 成长实践炼金术 | 2026-03-09
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLWd_tIBcQeb9kaY3faWaIdFqXa8Fplpd9Be8w6ZwH2M4TvDWs9AKoYlowUU0iWJ6RvHltQkrOiqAuXNxeIh1GBQB0ACSbhN650oxaOkQ4jwvaNtZbPjcZopBr9wNCQVwAU6DvzVCVAwhkIpvqXiO807nVxv8a4iW-8gJ2dg_KLep8P4WGcOYxAaG3p-YDW7R9Mj6lSeii4w
+S: 比如销售接单后必须同步给生产计划,生产完工数据必须同步给仓库和财务,杜绝信息孤岛.AI赋能:用AI搭建部门协同看板,自动同...
+---
+T: 5月14日安吉最新招聘信息大汇总【每天中午12点发布好工作/请关注我们】
+A: 安吉第一门户 | 2024-05-14
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLWd_tIBcQeb9kaY3faWaIdFqXa8Fplpd9gQM6rxHUIR1XRpb0OxjKVxUVHVXbOCVMNkuA0lIXwb-OlqxcB6BxcKPkVEyKUUJHfvmKrTdIqU_b42AT7wBLO4fMt29uN4CG63d3v8UL5mJQf9C3K0Fk5Yy8G5gVkWjDVsokfa7PFKTvXw-wK6n-QICthZ-ZoqRH4vxWhAPHYx
+S: 物料请购的下达和进度的跟进; 4.物料交期的跟进; 5.物料品质、... 6.会电脑EXCEl表格操作; 任职要求: 1.对生产现场产品的质量问...
+---
+count 10

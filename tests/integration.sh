@@ -2,7 +2,10 @@
 # MistDocs Integration Test
 set -e
 
-BASE="https://docs.mistlab.dev"
+BASE="${MISTDOCS_BASE:-https://docs.mistlab.dev}"
+ADMIN_USER="${MISTDOCS_ADMIN_USER:-admin}"
+# 管理员密码不写入仓库；运行前导出 MISTDOCS_ADMIN_PASSWORD
+ADMIN_PASS="${MISTDOCS_ADMIN_PASSWORD:?请设置 MISTDOCS_ADMIN_PASSWORD}"
 PASS=0; FAIL=0; TOTAL=0
 
 ok() { PASS=$((PASS+1)); TOTAL=$((TOTAL+1)); echo -e "  \033[32m✅ PASS\033[0m $1"; }
@@ -47,7 +50,7 @@ echo -e "╚══════════════════════�
 # ─── Auth ───
 section "Auth"
 
-LOGIN=$($CURL "$BASE/api/auth/login" -X POST -H 'Content-Type: application/json' -d '{"username":"admin","password":"Admin@2026"}')
+LOGIN=$($CURL "$BASE/api/auth/login" -X POST -H 'Content-Type: application/json' -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}")
 TOKEN=$(echo "$LOGIN" | jf 'token')
 AUTH="Authorization: Bearer $TOKEN"
 

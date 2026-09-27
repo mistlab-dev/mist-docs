@@ -1,0 +1,52 @@
+########## Q: 小工厂 交期 提醒 (p1)
+T: 电源IC缺货殃及充电器工厂,成品交期延迟到45-60天
+A: 充电头网 | 2020-11-19
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2q7w4P9y1MNkaY3faWaIdFqXa8Fplpd9dzNZY2DCwtc4Pi0YDmW3RQIzAvyv6nhidGCZO7re9y2UgGilfuhHVITbOg2oyMav9gmwjBc_4pKqVLc1zruFoMNxvvH-lE2dJaiCG3qJgDJaBl6DfIkm5id-5fD7cjlBn38TVw0-z1OjbcL9rtyFFbZFQYLxN7sDII586DT7Eh
+S: 交期一般都在三个月以上.一方面是持续不断的强劲的市场需求,... 目前已有多家工厂陆续发布通知,提醒订单延期事宜.广东斯泰克...
+---
+T: 一道签字把交期压了三天,工厂流程不是越细越好,要做减法
+A: 海狸聊企业数字化 | 2026-09-11
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2q7w4P9y1MNkaY3faWaIdFqXa8Fplpd9kUxbvIllMm9ZfWrjaIaWRS0akIhzJFJuAssO3UKWlapdmzir4tzhGGAhTkNBzgtudbrU9Xb7C1ftNo9YGFiZo42T7oTcf28hy5KJbwkxVdOaRph4P0RWZ8KZJw2PNnFnqD-UIVnjl64ddpAu6iIH8huRQjLceMYHfnVDBz0XVb
+S: 月底账对不上,也没人提醒,翻回去一张一张补,补单子还是那几个人,熬夜补到十点.数据也一起糊了.交期算不准,大单来了不敢...
+---
+T: PMC(生产与物料控制)完整说明丨工厂PMC如何用ERP?物料、排产、交期
+A: 工厂管理小诸葛 | 2026-09-20
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2q7w4P9y1MNkaY3faWaIdFqXa8Fplpd90REFWp1Q4J-hDkMYgWafi-oO2D1mbnr0sGtWzScfNlaXa_STtFE-ZGe9Rqzcc-7_L3QJ9shhv_ebxTi2zMibksAAJbGeRYXBjSexlBlxWrof14VGnVVu5_ScGa0Xt9qepj0VG4NGijfN6XguoBq2nwJISeCadfDbKKu_Gtqklv
+S: (小工厂可能没有PMC岗位,但一定有PMC的管理过程)一、... 订单交期追踪表ERP+PMC的工作逻辑订单进 ERP → PMC 维护 ...
+---
+T: 佛山一家机械加工厂上ERP后,订单交期准时率从65%提到92%
+A: 进销存ERP研究局 | 2026-09-16
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2q7w4P9y1MNkaY3faWaIdFqXa8Fplpd9bqfRq68bswLazVB_lvoBdpTOaaGkniCMLTYtabnreXs0j-XKy6zXBLEB68EGwYjw2leLEu3jWAhLY23aV539YE6-VfEOLgv4p8uiZto95OULjAAvzLI9tqCwebbm5XKWVbhYazP-5yoNuKgRgVkFJ3O0FVcyV9p-QSVzfTO3zX
+S: 预计回来的日子标红提醒,采购提前两天催,不再临到交期才发现... 采购连夜调货,交期保住了.小工厂什么时候该上ERP,这篇文章...
+---
+T: 小工厂什么时候该上ERP?这5个信号说明该上了
+A: 进销存ERP研究局 | 2026-09-11
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2q7w4P9y1MNkaY3faWaIdFqXa8Fplpd9bqfRq68bswLazVB_lvoBdpTOaaGkniCMLTYtabnreXs0j-XKy6zXBKw1abCRwMnYA9jhhYWebK0ADhKarGMRr3d4ZpEOnb31lVqQzWC5_vic3-ovHLU9qIjD8iUExYrAwox2ZRlVQQl0UQ5CoyxhsiGWWE_-vAXzbGvu3tAjZC
+S: 上系统是把老板从车间解放出来:进度系统盯、异常系统提醒、工... 总结小工厂该上ERP的5个信号:库存账实不符月超3次、交期延误...
+---
+T: 交期40天后,染厂又遇“紧急停缸”,复产时间未知!交期再延!延!延
+A: 轻纺原料网 | 2018-04-25
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2q7w4P9y1MNkaY3faWaIdFqXa8Fplpd9y8IyQD25QZ4D-D3GiwAbzFYZuWChL-7Fr-ooNMiHMpLHC-LLMminapchJAHkxzj1MkuPu_87L6I2kw1M_LiPUaa5_MWT3NgfDAmBe72BtE3G7hLkIxtV4z4CvW3ua8Ul7DT3Zt5YFPY8qjUJpcvlrXe2orHvySK7IxRjtURjzL
+S: 染厂交期、房租水电……都是压在每个纺织人身上的“大山.”... 最后,笔者提醒印染企业,梅雨时节来临,请做好污水处理措施,...
+---
+T: 欧美买手凭什么下单给一家只有10几个人的小工厂?
+A: Sharing和enjoying | 2026-09-09
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2q7w4P9y1MNkaY3faWaIdFqXa8Fplpd9ROSOHGbqSkNtT-vF-jfUAzIFzE7RH4WniHtW9ZgB2N5yQk4Ayb5vjphdxFkfeKJErOQOdRiuRTl5x1peTO1FrlArvik2BvNv7tDQSGGDG3le-CMEcXCintJi5i_NR-5EilLiJjVHSwPrJS7GTQQ_Mm9252959awOKwCkz_IZDF
+S: MOQ、常规交期、完整认证促销订单节日或活动项目大货价格、... 写在最后小工厂、小贸易公司不一定能靠规模赢下欧美客户,但可...
+---
+T: 短视频自然流下滑≠没客户!2026工厂获客,抓准“痛点”比啥都强
+A: 壹玖网络 | 2026-03-21
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2q7w4P9y1MNkaY3faWaIdFqXa8Fplpd9ONQSqy8Rq8Ej7rzxHdBF3QrrH8ffXYMtamiIEIT3TY2tyktw-GSMQyrcsQI8h4Jp4ydxqWmrv1kAfC2afAJ4qkydQW68kDp0ZRHxRR18-SOERO5hHKrMFo563B8xz2u8nrEQeQZbYmsQYIqVch4euoe6K3ICWgET2qJYA2eChk
+S: “如果你也遇到客户砍价、交期慢的问题,评论区扣'1',我把... 重点提醒:别瞎编,用自己工厂的真实案例,哪怕是小订单、小问...
+---
+T: 交小通提醒您,假期打工注意安全
+A: 吉林建筑大学交通科学与工程学院 | 2025-12-24
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2q7w4P9y1MNkaY3faWaIdFqXa8Fplpd9TXqzXCEypmXwQpDGb_oYR-0wpPjZgmy4ZQ-ZCZixnXE5mOsgOUN5YH2yqaXnOmUXh0zL2kKHyI16LV__ErzYx7PT3V0rdVdO2fh5mW7R76ghdrHVvrg-wDV2WGSfognZgRXm-FFOT9NictHHpd_Td80LaawIvUHGUU-By2R6sz
+S: 另外,求职者在求职前或求职过程中,应主动学习一些劳动法规和相关政策,提高自己的求职素质和独立思考的能力.温馨提示路边小...
+---
+T: 工厂找海外社媒代运营,CRM询盘系统到底重不重要?
+A: 励迎出海S | 2026-09-09
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2q7w4P9y1MNkaY3faWaIdFqXa8Fplpd9wKeBOzAPU504U_XMrPgQQTI5FKi8e65pQ3zzx7hf-M3Bv-P06earCWA53SlTSilTzObA4lZor8Gwl11M8-gGy8_er_9fzCbXvMARgJXikUJTFtuN8YGz3aEbUo714fZZ9lkEBWAIrubD4djJOO1nlLWGxKr6KwnDOqVDGkFREH
+S: 这是很大的误解:CRM解决的是线索的收纳、分类、提醒,成交依旧取决于工厂产品、交期、业务员商务谈判能力.二、一套适配B2B...
+---
+count 10

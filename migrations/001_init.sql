@@ -113,6 +113,6 @@ CREATE TABLE IF NOT EXISTS md_audits (
     INDEX idx_time (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 默认超级管理员（密码: Admin@2026）
+-- 默认超级管理员（初始密码占位，首次登录前须通过初始化流程设置）
 INSERT IGNORE INTO md_users (id, username, password, name, role) VALUES
 ('u_admin', 'admin', '$2a$10$placeholder', '超级管理员', 'super_admin');

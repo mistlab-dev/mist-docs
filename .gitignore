@@ -14,3 +14,9 @@ server
 mist-docs-test
 mist-docs
 build/
+
+# Local deploy target (contains production host address)
+scripts/deploy.env
+
+# Local config with real credentials (use config.example.yaml as template)
+configs/config.yaml

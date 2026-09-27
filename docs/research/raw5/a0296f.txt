@@ -1,0 +1,52 @@
+########## Q: 工厂 交期 预警 提醒 系统 小厂
+T: PMC(生产与物料控制)完整说明丨工厂PMC如何用ERP?物料、排产、交期
+A: 工厂管理小诸葛 | 2026-09-20
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2tG5dE3fZKRkaY3faWaIdFqXa8Fplpd90REFWp1Q4J-hDkMYgWafi-oO2D1mbnr0sGtWzScfNlaXa_STtFE-ZGe9Rqzcc-7_L3QJ9shhv_ebxTi2zMibkhAxTMh8C9ppna3K08xFx4T9_UYT4hC6cSXXVfxqKV9cbfrfZ7wXIw-kCPif8FPRxYs1n9bwHdqVZyZ2d9ZsRD
+S: (小工厂可能没有PMC岗位,但一定有PMC的管理过程)一、... 跟踪供应商交期物料齐套管控:上线前检查物料齐套,缺料预警,...
+---
+T: 干了15年工厂,我劝你别急着上智能工厂!(避坑指南)
+A: 纳控极智 | 2026-03-30
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2tG5dE3fZKRkaY3faWaIdFqXa8Fplpd9e2H6VbVHYgVy3FEZSzTxPvbWqcZ0trX5ZNRuhXyPbHgc9p7R0ZiGofz64-u6mTanm_tTS4rfcrW7jZhS3cuU2dt3Cp3NVV0uyjhwFZv_QvV4wUin9uMz3xhTgzkcP-4LZ7dTUUKaqRjqpw353zuE2xha4ZeGdhkJCiNRd08iNf
+S: 还是交期?评论区说说��️ 核心框架:智能工厂五根柱,缺一根... 系统能自动排产、自动预警、自动分析.人从执行者变成监督者—...
+---
+T: 制造业破局利器|PPS计划管理系统,让生产效率翻倍、内耗清零
+A: 沈阳鸿宇智能制造 | 2026-02-24
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2tG5dE3fZKRkaY3faWaIdFqXa8Fplpd9BlpnUT55xOVHTObAbyD0OfnSI6T3p7EnKH3SZbj4ILq-cIYT9mXXOa3o1Zw8gnB0KiMuYIYj2mTE1gxVJDzbP2xU8vNwjw63K3PU8U67UZFYnVpJvgkiH8ge6oMavaClqhlLXM-3gRwYQvragasC5n3GltfjmY5JVu0KpVXEwJ
+S: 许多工厂设备与人员齐全,却因计划混乱、物料脱节、交期延误陷... 系统都会第一时间提醒,让管理人员从“事后救火”转向“事前预...
+---
+T: 每日AI新商业模式(精选)
+A: 之江AI新商业模式 | 2026-09-12
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2tG5dE3fZKRkaY3faWaIdFqXa8Fplpd9uy6FKBFmoCiPaOp8OfP5-klF91jdDarxgyS-IKWZXoSh-GBvBYbvN4DRuSnCDP8TIT68yDF07MFar2sGtYeEu9mZbVotPLWKEIF7pG7gTbplUw18IAz_uW8SmNTDkc_E0YNRFj2txQW716eo_xuES9-3XTtbamoFPs0H96Yn9T
+S: 一句话总结小厂不一定要黑灯工厂,把最拖后腿的换型压下来,急单和利润就回来了.案例二:无锡30人厂用企微管生产3个月交期准...
+---
+T: 2026年,不懂“看牢”供应商的企业,正在被淘汰
+A: 珠海注册记账报税一路通 | 2026-03-30
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2tG5dE3fZKRkaY3faWaIdFqXa8Fplpd9tDv_12doV1yI0QUG47-9myS9xqv3mHbD7I5MGc2YYYsBOays7rH2VKK-9lxVaz-XFx2ibXF9cVOIrohDMcEi7SnlL4dEG3Lz1Gt4P2LzjYm8BSTK7kN0ZkafTNAlgDSJbebjgXuBKaK5YqwMI8V8_7_jiis6UA0V7MEEKNsiCZ
+S: 卖方应承担货物从工厂到装运港口的运输费用.没有运输发票,意... 下一秒,预警系统就亮红灯.系统会交叉比对什么?——票据流:...
+---
+T: 销售一走,客户跟着走
+A: 聚优创AI赋能 | 2026-09-11
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2tG5dE3fZKRkaY3faWaIdFqXa8Fplpd9Yv0xN327Bzv2g5vwVbaEBpwtfqzafavVZ_VQvtT3oWZAYoxdpHwS4j6n15m23bV1HkF1s_QWqmlFqRK0D_oehNQOBxEQNVZpS3dN5pcB56ieB_dssf8Pp55HMq9DnvtxijXEtjV3y5s9ejA_E7P1Cd9GvpWvX7DSakjM-Nk1gn
+S: 小厂要做,从哪一步开始?客户管理这件事,不用一步到位买大系... 交期到了、保修快到期、该回访了,系统自动提醒.复购往往就藏...
+---
+T: 2017年1月5日周四读报
+A: 多活十年 | 2017-01-04
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6ft3wfAVofsP5Peu-UiA4DAN1N0M970ygs-2vlA8KQ5KVgrFeYQugDkCTpTlxA2x4Ja3DsDtnnSKI5wD0Tu7PMCrKneM7t4eafoAaf9yhy7IOydPiWsCSxAzkv8vZnX6HvARdXkqno6__tFVSCaoL1s-6yZkigfvjj6RnDkBm3PVX7rnntlqyXLB84QvGFTATpWE9fGL4PEJahS39ty17LDw9ZOnAqcFazpJIYkg6p3
+S: 最高续驶里程超700公里,内华达工厂一期建设已完成;今年3月推... (唯一一场和棋是因棋手掉线系统自动判和).10)英特尔发布第...
+---
+T: 用龙虾 AI 打造 “永不打烊” 的数字获客体系
+A: 机械加工订单外发 | 2026-03-04
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2tG5dE3fZKRkaY3faWaIdFqXa8Fplpd9w_vkLJQW1cZyqtxnLJpaExlWCY6wz6a-YX_3pP4LBaPOnwbcuprJlAypU3585QOm1W1GzDqvuVJsh3Vt_UyhyTkJiD9MxGE--FXYPYdwvOe_EK1KGxa7biqSfokJTofatI8q-kr8AS34CRzUZlr6aHhPz4ZYBhrzgWd_mi8uGe
+S: 工厂能力数字化标签化(AI 懂你,才能帮你接单)落地动作:录入... 价格、交期、设备、打样、售后、运输.自动判客:区分实单、询...
+---
+T: 《“碳”索4》精选连载 | 第十二章:变革与改善——关于组织进化的系统思考
+A: 中环寰慧集团 | 2026-03-02
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2tG5dE3fZKRkaY3faWaIdFqXa8Fplpd9a2FJ1qW6qaq0fjkYFDZSoHEPhCAR0eD2H8ihZBffRaHwDQ6xH5Ja1mKKts0PcOsCvkOADJyX_FiRAjFkXDgoC_97--4q3nk_pEqP1ijgY4lGN_mlD215dAEr99OW7KOe123hPMW7xSS4WURlFGIpjQqLRU2VYaPtS6_fg7p3M0
+S: 也有豪迈集团“改善即创新”的实践启示,更系统阐述了中环寰慧... 关闭冗余工厂,退还闲置工业用地,裁员7万人,确立“产品领先...
+---
+T: 新能源汽车的残酷内卷,似乎到了至暗的黎明前
+A: ADFeed | 2026-09-19
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLL2tG5dE3fZKRkaY3faWaIdFqXa8Fplpd96VVl-uYHhyh-OrAjZrqkiWseKIEi97wpEgz1_vYsHJUVHUCgDzjBERtPPIT86H1xSuF9RzoGblld-CC5TyEAUGtU9Vqjtl9yNK7H6WJ2HaCxgBvcG7c2LYp0VIdyD19IC-eq_nsVzppMg0HYZGafniQHDdvN1WC6eTFYYAtcBv
+S: 6月库存预警指数57.2%,远超警戒线.过去五年全国近1.5万家4S... 你也可以想象一下浙江某做冲压件的小厂老板.工厂三十几个人,...
+---
+count 10

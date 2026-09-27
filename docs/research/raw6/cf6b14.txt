@@ -1,0 +1,52 @@
+########## Q: 小工厂 排产系统 价格 一年
+T: 小工厂上AI,先别动机器:从报价单和排产表开始
+A: 邹火火的AI日志 | 2026-09-11
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLJdP_fFvCJXJkaY3faWaIdFqXa8Fplpd9Fn9cerScpHgFVDgywjoRebXZdngzLAS5xYmSi6v17dMo5416WMfZprtTombtwYp67X3xID4NCyj8-rCVAcrHcooesA-owo0pfX5C_3itYoVxTSgYVQDxtea27xM8Uyjv52DWa6Xcq8ig1yBOL-Xr42utwh7AMpzEsKlCLsrTAj
+S: 最终价格、汇率、运费、付款条件和特殊工艺,仍由业务员确认.原则只有一句:查不到的数据留空,不替工厂猜.排产表:先给建议...
+---
+T: 深度 | 上汽通用给凯迪拉克工厂排产装上了“决策大脑”
+A: 杉数科技 | 2022-03-15
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLJdP_fFvCJXJkaY3faWaIdFqXa8Fplpd9zsfk2-qnznLASeD7iLULr5opsbw5YjY6k3CFmkUNnw0fwnkSRwnEYSbokopVYyBTFfyCWOHGIREIgHlKPRUISkUli7ysWw2OA9eZE0ecjhrMYYwbrrRbpfy_uxr-7ZsFLVrvqT_TXVhWMgLccM5Gy4ZeUS00hyw00GkxYfSAE9
+S: 整车数字化排产系统应用让上汽通用凯迪拉克工厂实现更精准、更... 去年以来,汽车零部件原材料价格已经出现多轮上涨,海运费用同...
+---
+T: 拼价格的时代宣告结束,印刷包装行业正式开启AI军备新赛道
+A: 包装地带superpack.cn | 2026-09-20
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLJdP_fFvCJXJkaY3faWaIdFqXa8Fplpd92O2R2xZTmUTQVoD8A5zuAEOW5EGdHMl1YXUk4s59KpJSJvyxNPBbSNZIILkSPWHXF7mvaebG-OWhkuWEooqwhRFL2QGX5LDRT8C1jkM0aMRV3VLi-n5Ab22F4OboGOYEkxATPSmWwHudkrdKMw1XWlCYq8ytVW_RT7knH3ouZR
+S: 其AI智能排产系统可实时对接ERP、WMS数据,同时处理超2000... 当价格竞争的天花板已触手可及,AI军备竞赛的起跑线才刚刚划定...
+---
+T: 打破纸板厂生产难题,给你一份“货真价实”的计划排产方案!
+A: 东经易网 | 2021-09-06
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLJdP_fFvCJXJkaY3faWaIdFqXa8Fplpd9jXZGPwPAVWdHJYsw_6TlkIPdFphPb3fYJzJxGIwo78Vgz4lsKhP1qpWUHb5c3h4BWOzEPfjp8KFGOzRwlTsH-5tqFn1f4B7O_5xWXR_vcoYE-grUVUzExWzL1q3DXpBcHqlISuxSfIZlVy1d7U1UONJuKbq2UAkFak_FzykA17
+S: 但现在不一样了,用了东经智能排产系统后,鼠标轻轻一点,通过... 交期达成率达98%以上,一年下来,能够帮工厂轻松省下50万元成...
+---
+T: 老师傅排产变算法排产:计划、采购、跟单三岗去向
+A: Aden的AI落地局 | 2026-09-13
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLJdP_fFvCJXJkaY3faWaIdFqXa8Fplpd9K_J1aFWTeBjITngynTLHB0RlfBSHLJ0Bt_K4qCeYt-rFymqXf8enwqfnO41nu9-2hoj4r_WekG22qh-3YUQkTF673th4X320i-8fkGI1uhOemvB0HdP-FjjYyiSbJBeMYoOe4f74-4oGY1428R2QkZOT9XUS6IJ3cul9xF2St9
+S: 之后,排产表由系统自动生成,老师傅只看＂哪些是异常＂——这... (绩效评估、备选体系、价格谈判)编制变化: 100-300 人工厂采...
+---
+T: 小批量订单怎么谈?先听懂工厂说＂做不了＂时的潜台词
+A: 现来货道 | 2026-09-09
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLJdP_fFvCJXJkaY3faWaIdFqXa8Fplpd9rdlksp4VtXahK3YrSxy_w8ePZ10mCoh0biOfcwfR2sWVMCJUPCcnGVFaZUd_xQVbjf-sKL_FdogvN6EZZqidNj8HZOI1IE2FTZz1t2AFr-rXvMi9Xgqc-76u4EsxVKViYOJEljtl8_KNcNQF9e6I7rtH91EHTTgrC65EwjO52Q
+S: 是挤牙膏式询价——今天问价格,明天补材质,后天加数量,每挤... 主动提出首批按翻单的节奏排产.工厂要的不是承诺,是这单背后...
+---
+T: 订单一插队,整张生产计划全乱?AI排产40秒搞定
+A: 微醺风控所 | 2026-03-28
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLJdP_fFvCJXJkaY3faWaIdFqXa8Fplpd9EoMjsOwRsKVPBktjwqiYfZeU_b03CjL47Gk8VyGWF8uAxiyNkNHDG7fdCfuRx0ZxR2FudM4-WxLb33WrNPP7vWklU-sXMFansuCClqXmTHmEEstqACRA-ml3pU567Hmhn6Zag6zcutyJ2uc3lrGh5bR2GY4QYDdaxQechH4-J3
+S: ＂丢了两个客户,我算了算,一年少300万营业额.＂后来上了... 智能排产系统APS软件界面,工厂生产计划甘特图排产难在哪?...
+---
+T: 小工厂上AI最省钱的入口,不是质检
+A: 邹泓泓的AI日志 | 2026-09-20
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLJdP_fFvCJXJkaY3faWaIdFqXa8Fplpd9Fn9cerScpHgFVDgywjoRebXZdngzLAS5xYmSi6v17dMo5416WMfZpjjK9JJQ4elE0v07iDnb5OGbxaMHtBZpl62yttb27jYSkftZIyW-YOoKzD_As-mFc1ryr7-1IevpUiSMi9msMj9lXNmVyl4zzJlSIIu2UFbsyz7jsNz4TW
+S: 小工厂更省钱的入口,通常藏在办公室里:询盘、报价、订单和排... 如果一年只做两次,再聪明的系统也省不回建设成本.第二,结果...
+---
+T: 全国先进制造业大会之后,一个更难的问题来了:AI让工厂更能生产,谁来消化新增产能?
+A: 半糖君 | 2026-09-21
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLJdP_fFvCJXJkaY3faWaIdFqXa8Fplpd9MA6fT1rLh0_XGXNKcnrlWtUobBs00FUOVIlyC0OVmc4KpbGS9gsk7Dd1zYgT_5t3JrXl4DpKg-_x2F4EoEzry4mVKsIQZl86F-xikroVeUADnp943n5eC92i7MxEBHDe90KZ3Rf1py9BvohwFPGN9sAd6flzk7KnD4NJ1KgSr8
+S: •产品价格也下降了;•单件利润未必提高;•前期购买设备和系... 重点经常是把已有需求数字化之后交给工厂:客户下单,系统排产...
+---
+T: 生意下滑利润薄,印包厂如何用一套系统破局?
+A: 迅越印刷ERP | 2026-09-11
+U: https://weixin.sogou.com/link?url=dn9a_-gY295K0Rci_xozVXfdMkSQTLW6cwJThYulHEtVjXrGTiVgS9vj77TvILLLJdP_fFvCJXJkaY3faWaIdFqXa8Fplpd9rfXhvGte-RulJsFEYb3G2oBq4AK9FSYIeHZIOgUeLaNfIuiNJ42NWFN3OavaVArxwhXWTHmzVTwQZT7HXr2jmVR5tZ3LIMFGoiBYTzterD-BIj8T9k_SZHwdhUQ4Ih2gjIS63w8YSXtRrOx4WQNdNxSBMIRdWzWwg8wcaaQerk
+S: 但客户要求却越来越高——交期更急、规格更多、批量更小、价格... ERP&MES一体化系统:让排产、报工、成本实时透明智能排产: ...
+---
+count 10
