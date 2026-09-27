@@ -2312,7 +2312,7 @@ function computeSparkline(data: number[], type: string): string {
 function increaseIndent() { if (!selection.value) return; pushUndo(); applyToSelection('indent', (getMetaProp('indent') || 0) + 1) }
 function decreaseIndent() { if (!selection.value) return; const cur = getMetaProp('indent') || 0; if (cur <= 0) return; pushUndo(); applyToSelection('indent', cur - 1) }
 
-// ─── Export xlsx placeholder (frontend only, exports CSV) ───
+// ─── Export CSV (client side only; there is no .xlsx export yet) ───
 function exportCSV() {
   let csv = ''
   for (let r = 0; r < rows.value.length; r++) {

@@ -1908,7 +1908,6 @@ func TestViewerCannotUpload(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	// TODO: handler 已加入 viewer 权限检查
 	if w.Code != 403 {
 		t.Errorf("viewer should be denied, got %d", w.Code)
 	}
