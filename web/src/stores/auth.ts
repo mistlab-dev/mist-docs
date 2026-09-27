@@ -56,11 +56,6 @@ export const useAuthStore = defineStore('auth', () => {
   // editor and up: may create/edit team content
   const canEditTeam = computed(() => canEditRole(currentTeamRole.value))
 
-  // DEPRECATED: local login no longer supported
-  async function login(_username: string, _password: string) {
-    throw new Error('请通过 mistlab.dev 登录')
-  }
-
   // SSO: redirect to Portal login
   function redirectToPortalLogin() {
     const current = window.location.origin
@@ -116,6 +111,6 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     token, refreshToken, user, currentTeamId, currentTeamRole,
     isLoggedIn, isAdmin, isTeamAdmin, canEditTeam,
-    login, redirectToPortalLogin, handleSSOCallback, logout, fetchMe, setTeam
+    redirectToPortalLogin, handleSSOCallback, logout, fetchMe, setTeam
   }
 })
