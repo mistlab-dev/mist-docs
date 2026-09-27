@@ -178,12 +178,12 @@ func attachOwnerNames(items []*model.Deadline) {
 	if len(ids) == 0 {
 		return
 	}
+	// The shared users table has display_name / username, not "name": the
+	// old query failed for every row, so the board showed 未指派 for
+	// orders that did have an owner.
 	names := map[string]string{}
 	for id := range ids {
-		var name string
-		if err := database.DB.QueryRow(`SELECT name FROM users WHERE id = ?`, id).Scan(&name); err == nil {
-			names[id] = name
-		}
+		names[id] = userDisplayName(id)
 	}
 	for _, d := range items {
 		d.OwnerName = names[d.OwnerID]

@@ -57,3 +57,27 @@ func TestDeadlinePartialUpdateKeepsFields(t *testing.T) {
 		t.Fatalf("progress events = %d, want 1 (40 → 0)", n)
 	}
 }
+
+// The board and list show the owner's name. The old lookup selected a
+// "name" column the shared users table does not have, so every order
+// looked unassigned.
+func TestDeadlineOwnerNameShown(t *testing.T) {
+	w := request("POST", teamPath("/deadlines"), map[string]interface{}{
+		"order_no": "SO-OWNER", "title": "负责人显示", "due_date": time.Now().AddDate(0, 0, 2).Format("2006-01-02"),
+	}, editorToken)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create: %d", w.Code)
+	}
+	id := getString(parseJSON(t, w)["id"])
+	defer database.DB.Exec(`DELETE FROM md_deadlines WHERE id=?`, id)
+	defer database.DB.Exec(`DELETE FROM md_deadline_events WHERE deadline_id=?`, id)
+
+	w = request("GET", teamPath("/deadlines?q=SO-OWNER"), nil, viewerToken)
+	list, _ := parseJSON(t, w)["data"].([]interface{})
+	if len(list) != 1 {
+		t.Fatalf("list = %v", list)
+	}
+	if got := getString(list[0].(map[string]interface{})["owner_name"]); got != "编辑者" {
+		t.Fatalf("owner_name = %q, want 编辑者 (the creator is the default owner)", got)
+	}
+}
