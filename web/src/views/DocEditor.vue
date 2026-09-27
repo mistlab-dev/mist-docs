@@ -1363,6 +1363,16 @@ function initEditor(initialContent: string) {
           nextTick(refreshCursors)
         }
       }
+      wsProvider.onAccessRevoked = () => {
+        clearTimeout(autoSaveTimer)
+        dataLoaded = false
+        editor.value?.setEditable(false)
+        if (doc.value) doc.value.permission = 'none'
+        collabStatus.value = 'disconnected'
+        ElMessageBox.alert(t('docEditor.accessRevoked'), { type: 'warning' })
+          .catch(() => {})
+          .finally(() => router.push('/docs'))
+      }
       wsProvider.onClients = (users) => { collabUsers.value = users.filter((u: CollabUser) => u.id !== currentUserId.value) }
       wsProvider.bind()
 

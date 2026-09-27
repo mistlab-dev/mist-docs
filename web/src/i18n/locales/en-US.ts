@@ -237,6 +237,7 @@ export default {
     back: 'Back',
     notFound: 'Document not found',
     readOnly: 'View only',
+    accessRevoked: 'You no longer have access to this document (removed from the team or permission withdrawn).',
     saving: 'Saving...',
     saved: 'Saved',
     saveFailed: 'Save failed',

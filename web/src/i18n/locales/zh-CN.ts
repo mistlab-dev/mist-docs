@@ -347,6 +347,7 @@ export default {
     back: '返回',
     notFound: '文档不存在',
     readOnly: '只读',
+    accessRevoked: '你已不能访问这篇文档（可能已被移出团队或收回权限）',
     saving: '保存中...',
     saved: '已保存',
     saveFailed: '保存失败',

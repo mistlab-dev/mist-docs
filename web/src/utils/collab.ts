@@ -8,6 +8,8 @@ const SYNC_UPDATE = 2
 // Reconnect limits
 const MAX_RECONNECT_DELAY = 30000
 const INITIAL_RECONNECT_DELAY = 1000
+// Must match ws.CloseAccessRevoked on the server.
+export const CLOSE_ACCESS_REVOKED = 4403
 
 export interface CollabUser {
   id: string
@@ -35,6 +37,8 @@ export class MistWSProvider {
   public onUserLeave: ((userId: string) => void) | null = null
   public onClients: ((users: CollabUser[]) => void) | null = null
   public onAwareness: ((data: any) => void) | null = null
+  // Server closed with 4403: the user lost access. No reconnect after this.
+  public onAccessRevoked: (() => void) | null = null
 
   constructor(url: string, doc: Y.Doc) {
     this.url = url
@@ -98,9 +102,15 @@ export class MistWSProvider {
       }
     }
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event: CloseEvent) => {
       this.connected = false
       this.synced = false
+      if (event.code === CLOSE_ACCESS_REVOKED) {
+        this.destroyed = true
+        this.pendingLocalUpdates = []
+        this.onAccessRevoked?.()
+        return
+      }
       this.onStatus?.('disconnected')
       this.onSynced?.(false)
       this.scheduleReconnect()
