@@ -137,7 +137,10 @@ func dropColumnIfExists(table, column string) {
 	if !columnExists(table, column) {
 		return
 	}
-	if _, err := database.DB.Exec(fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", table, column)); err != nil {
+	// ALGORITHM=COPY rebuilds the table. An instant DROP leaves the column
+	// behind as hidden metadata on MariaDB 10.4+, and after enough test runs
+	// the next ADD COLUMN fails with "Row size too large" (error 1118).
+	if _, err := database.DB.Exec(fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s, ALGORITHM=COPY", table, column)); err != nil {
 		panic(err)
 	}
 }
