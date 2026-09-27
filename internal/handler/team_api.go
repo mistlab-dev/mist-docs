@@ -18,6 +18,7 @@ import (
 	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/service"
 	"github.com/c-wind/mist-docs/internal/store"
+	"github.com/c-wind/mist-docs/internal/webhook"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -793,7 +794,7 @@ func TeamRestoreFromTrash(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	audit(c, "restore_doc", "document", docID, "", "")
+	audit(c, "restore_doc", "document", docID, "", `{"from":"trash"}`)
 	c.JSON(http.StatusOK, gin.H{"message": "已恢复"})
 }
 
@@ -1090,7 +1091,9 @@ func TeamRestoreVersion(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "内容与当前版本相同，无需恢复", "version": version, "unchanged": true})
 		return
 	}
-	audit(c, "restore", "document", docID, "", fmt.Sprintf(`{"version":%d,"new_version":%d}`, req.Version, version))
+	// D10: one action name for restores; the filter still matches the
+	// historical "restore" rows.
+	audit(c, "restore_doc", "document", docID, "", fmt.Sprintf(`{"from":"version","version":%d,"new_version":%d}`, req.Version, version))
 	c.JSON(http.StatusOK, gin.H{"message": "已恢复", "version": version})
 }
 
@@ -1149,6 +1152,10 @@ func TeamCreateShare(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "create_share", "document", docID, "", auditDetail(gin.H{
+		"share_id": id, "permission": req.Permission, "expires_in_hours": hours,
+		"expires": req.Expires, "has_password": req.Password != "",
+	}))
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"id": id, "token": token, "permission": req.Permission, "share_url": shareURL,
 	}})
@@ -1272,6 +1279,9 @@ func TeamAddCollaborator(c *gin.Context) {
 		return
 	}
 	notifyDocAccessChanged(docID)
+	audit(c, "add_collaborator", "document", docID, "", auditDetail(gin.H{
+		"target_id": req.TargetID, "target_name": userDisplayName(req.TargetID), "permission": perm,
+	}))
 	c.JSON(http.StatusOK, gin.H{"message": "已添加", "permission": perm, "role": service.FrontendRole(perm)})
 }
 
@@ -1334,6 +1344,9 @@ func TeamCreateComment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "create_comment", "document", docID, "", auditDetail(gin.H{
+		"comment_id": id, "parent_id": req.ParentID, "excerpt": excerpt(req.Content, 80),
+	}))
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"id": id, "content": req.Content, "user_id": userID, "user_name": userName,
 	}})
@@ -1368,7 +1381,11 @@ func TeamExportDocument(c *gin.Context) {
 func buildAuditFilter(action, userName, startDate, endDate string) (string, []interface{}) {
 	where := ""
 	args := []interface{}{}
-	if validAuditAction(action) {
+	switch {
+	case action == "restore_doc" || action == "restore":
+		// D10: version restores used to be written as "restore".
+		where += " AND a.action IN ('restore_doc','restore')"
+	case validAuditAction(action):
 		where += " AND a.action=?"
 		args = append(args, action)
 	}
@@ -1405,8 +1422,15 @@ func validAuditAction(action string) bool {
 	return true
 }
 
+const auditNameExpr = `COALESCE(NULLIF(a.resource_name,''), ad.title, af.name, '')`
+
 func auditFromClause() string {
-	return ` FROM md_audits a LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id WHERE a.team_id=?`
+	// md_documents/md_team_folders fill in names for older rows that were
+	// written without one (they showed "—").
+	return ` FROM md_audits a LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id
+		LEFT JOIN md_documents ad ON a.resource_type = 'document' AND ad.id = a.resource_id
+		LEFT JOIN md_team_folders af ON a.resource_type = 'folder' AND af.id = a.resource_id
+		WHERE a.team_id=?`
 }
 
 func TeamListAudits(c *gin.Context) {
@@ -1435,7 +1459,7 @@ func TeamListAudits(c *gin.Context) {
 	listArgs := append([]interface{}{teamID}, filterArgs...)
 	listArgs = append(listArgs, pageSize, offset)
 	rows, err := database.DB.Query(
-		`SELECT a.id, a.user_id, a.action, a.resource_type, a.resource_id, a.resource_name, a.detail, IFNULL(a.ip,''), a.created_at,
+		`SELECT a.id, a.user_id, a.action, a.resource_type, a.resource_id, `+auditNameExpr+`, IFNULL(a.detail,''), IFNULL(a.ip,''), a.created_at,
 		 COALESCE(NULLIF(u.display_name,''), NULLIF(a.user_name,''), '') as user_name`+
 			auditFromClause()+filter+` ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
 		listArgs...)
@@ -1474,7 +1498,7 @@ func TeamExportAudits(c *gin.Context) {
 	args := append([]interface{}{teamID}, filterArgs...)
 	rows, err := database.DB.Query(
 		`SELECT a.created_at, COALESCE(NULLIF(u.display_name,''), NULLIF(a.user_name,''), ''),
-		 a.action, a.resource_type, IFNULL(a.resource_name,''), IFNULL(a.detail,''), IFNULL(a.ip,'')`+
+		 a.action, a.resource_type, `+auditNameExpr+`, IFNULL(a.detail,''), IFNULL(a.ip,'')`+
 			auditFromClause()+filter+` ORDER BY a.created_at DESC LIMIT 10000`, args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1933,13 +1957,68 @@ func TeamListWebhooks(c *gin.Context) {
 		rows.Scan(&id, &name, &url, &events, &enabled, &createdAt, &updatedAt)
 		webhooks = append(webhooks, map[string]interface{}{
 			"id": id, "name": name, "url": url, "events": events,
-			"enabled": enabled, "created_at": createdAt, "updated_at": updatedAt,
+			"event_list": canonicalEventList(events),
+			"enabled":    enabled, "created_at": createdAt, "updated_at": updatedAt,
 		})
 	}
 	if webhooks == nil {
 		webhooks = []map[string]interface{}{}
 	}
-	c.JSON(http.StatusOK, gin.H{"data": webhooks})
+	c.JSON(http.StatusOK, gin.H{"data": webhooks, "available_events": webhook.Events})
+}
+
+// canonicalEventList turns a stored events field (JSON array or legacy CSV
+// of audit action names) into the dotted names the settings page shows.
+func canonicalEventList(field string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, e := range webhook.ParseEvents(field) {
+		e = webhook.Canonical(e)
+		if !seen[e] {
+			seen[e] = true
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// parseEventsInput accepts events as a JSON array or a string (JSON array or
+// comma-separated) and returns the canonical JSON array to store. Unknown
+// names are an error; an empty selection is an error too (a hook that never
+// fires is almost certainly a mistake).
+func parseEventsInput(raw json.RawMessage) (string, error) {
+	var list []string
+	var str string
+	switch {
+	case len(raw) == 0 || string(raw) == "null":
+		list = webhook.DefaultEvents
+	case json.Unmarshal(raw, &list) == nil:
+	case json.Unmarshal(raw, &str) == nil:
+		if strings.TrimSpace(str) == "" {
+			list = webhook.DefaultEvents
+		} else {
+			list = webhook.ParseEvents(str)
+		}
+	default:
+		return "", fmt.Errorf("events 格式错误")
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	for _, e := range list {
+		e = webhook.Canonical(strings.TrimSpace(e))
+		if !webhook.Valid(e) {
+			return "", fmt.Errorf("未知事件: %s", e)
+		}
+		if !seen[e] {
+			seen[e] = true
+			out = append(out, e)
+		}
+	}
+	if len(out) == 0 {
+		return "", fmt.Errorf("至少选择一个事件")
+	}
+	b, _ := json.Marshal(out)
+	return string(b), nil
 }
 
 func TeamCreateWebhook(c *gin.Context) {
@@ -1949,9 +2028,9 @@ func TeamCreateWebhook(c *gin.Context) {
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 	var req struct {
-		Name   string `json:"name" binding:"required"`
-		URL    string `json:"url" binding:"required"`
-		Events string `json:"events"`
+		Name   string          `json:"name" binding:"required"`
+		URL    string          `json:"url" binding:"required"`
+		Events json.RawMessage `json:"events"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -1961,18 +2040,82 @@ func TeamCreateWebhook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook 地址必须是 http 或 https"})
 		return
 	}
-	if req.Events == "" {
-		req.Events = `["document.created","document.updated"]`
+	events, err := parseEventsInput(req.Events)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 	id := uuid.New().String()
-	_, err := database.DB.Exec(
+	_, err = database.DB.Exec(
 		`INSERT INTO md_webhooks (id, team_id, name, url, events, enabled, created_by) VALUES (?, ?, ?, ?, ?, 1, ?)`,
-		id, teamID, req.Name, req.URL, req.Events, userID)
+		id, teamID, req.Name, req.URL, events, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "name": req.Name, "url": req.URL}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "name": req.Name, "url": req.URL, "event_list": canonicalEventList(events)}})
+}
+
+// TeamUpdateWebhook PUT /teams/:team_id/webhooks/:id
+// Changes name, URL, subscribed events and/or enabled; omitted fields stay.
+func TeamUpdateWebhook(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
+	id := c.Param("id")
+	teamID := getTeamID(c)
+	var n int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM md_webhooks WHERE id=? AND team_id=?`, id, teamID).Scan(&n)
+	if n == 0 {
+		denyNotFound(c, "Webhook 不存在")
+		return
+	}
+	var req struct {
+		Name    *string         `json:"name"`
+		URL     *string         `json:"url"`
+		Events  json.RawMessage `json:"events"`
+		Enabled *bool           `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	sets, args := []string{}, []interface{}{}
+	if req.Name != nil {
+		if strings.TrimSpace(*req.Name) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "名称不能为空"})
+			return
+		}
+		sets, args = append(sets, "name=?"), append(args, strings.TrimSpace(*req.Name))
+	}
+	if req.URL != nil {
+		if !validWebhookURL(*req.URL) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook 地址必须是 http 或 https"})
+			return
+		}
+		sets, args = append(sets, "url=?"), append(args, *req.URL)
+	}
+	if len(req.Events) > 0 && string(req.Events) != "null" {
+		events, err := parseEventsInput(req.Events)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		sets, args = append(sets, "events=?"), append(args, events)
+	}
+	if req.Enabled != nil {
+		sets, args = append(sets, "enabled=?"), append(args, *req.Enabled)
+	}
+	if len(sets) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "没有要修改的内容"})
+		return
+	}
+	args = append(args, id, teamID)
+	if _, err := database.DB.Exec(`UPDATE md_webhooks SET `+strings.Join(sets, ", ")+` WHERE id=? AND team_id=?`, args...); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已保存"})
 }
 
 func TeamDeleteWebhook(c *gin.Context) {
@@ -2401,6 +2544,7 @@ func TeamDeleteShare(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "delete_share", "document", docID, "", auditDetail(gin.H{"share_id": id}))
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
@@ -2435,6 +2579,10 @@ func TeamUpdateCollaborator(c *gin.Context) {
 		return
 	}
 	notifyDocAccessChanged(resID)
+	target := permissionTarget(id)
+	audit(c, "update_collaborator", "document", resID, "", auditDetail(gin.H{
+		"target_id": target, "target_name": userDisplayName(target), "permission": perm,
+	}))
 	c.JSON(http.StatusOK, gin.H{"message": "已更新"})
 }
 
@@ -2448,12 +2596,16 @@ func TeamRemoveCollaborator(c *gin.Context) {
 	if !requireDoc(c, resID, "write", true) {
 		return
 	}
+	target := permissionTarget(id)
 	_, err := database.DB.Exec(`DELETE FROM md_permissions WHERE id=?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	notifyDocAccessChanged(resID)
+	audit(c, "remove_collaborator", "document", resID, "", auditDetail(gin.H{
+		"target_id": target, "target_name": userDisplayName(target),
+	}))
 	c.JSON(http.StatusOK, gin.H{"message": "已移除"})
 }
 
@@ -2484,11 +2636,14 @@ func TeamDeleteComment(c *gin.Context) {
 	if !commentEditable(c, id) {
 		return
 	}
+	var docID, author string
+	database.DB.QueryRow(`SELECT document_id, user_id FROM md_comments WHERE id=?`, id).Scan(&docID, &author)
 	_, err := database.DB.Exec(`DELETE FROM md_comments WHERE id=?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "delete_comment", "document", docID, "", auditDetail(gin.H{"comment_id": id, "author_id": author}))
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
@@ -2621,11 +2776,9 @@ func TeamDashboardStats(c *gin.Context) {
 
 	// Recent activities
 	auditRows, _ := database.DB.Query(
-		`SELECT a.action, a.resource_name, a.created_at,
-		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), NULLIF(a.user_name,''), '') as user_name
-		 FROM md_audits a
-		 LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id
-		 WHERE a.team_id=? ORDER BY a.created_at DESC LIMIT 10`, teamID)
+		`SELECT a.action, `+auditNameExpr+`, a.created_at,
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), NULLIF(a.user_name,''), '') as user_name`+
+			auditFromClause()+` ORDER BY a.created_at DESC LIMIT 10`, teamID)
 	var recentActivities []map[string]interface{}
 	if auditRows != nil {
 		defer auditRows.Close()

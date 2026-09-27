@@ -113,6 +113,7 @@ func RegisterAPI(r gin.IRouter) {
 				// Webhooks
 				teams.GET("/webhooks", handler.TeamListWebhooks)
 				teams.POST("/webhooks", handler.TeamCreateWebhook)
+				teams.PUT("/webhooks/:id", handler.TeamUpdateWebhook)
 				teams.DELETE("/webhooks/:id", handler.TeamDeleteWebhook)
 				teams.PUT("/webhooks/:id/toggle", handler.TeamToggleWebhook)
 				teams.GET("/webhooks/:id/logs", handler.TeamListWebhookLogs)

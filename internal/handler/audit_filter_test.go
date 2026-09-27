@@ -25,3 +25,12 @@ func TestValidAuditAction(t *testing.T) {
 		t.Fatal("action whitelist mismatch")
 	}
 }
+
+func TestAuditFilterRestoreMatchesLegacy(t *testing.T) {
+	for _, a := range []string{"restore_doc", "restore"} {
+		where, args := buildAuditFilter(a, "", "", "")
+		if where != " AND a.action IN ('restore_doc','restore')" || len(args) != 0 {
+			t.Fatalf("%s: where=%q args=%v", a, where, args)
+		}
+	}
+}
