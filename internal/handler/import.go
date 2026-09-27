@@ -470,7 +470,7 @@ func parseSimpleInt(s string) (int, error) {
 // ─── Text converters ───
 
 func markdownToHTML(md string) string {
-	lines := strings.Split(md, "\n")
+	lines := strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n")
 	var html strings.Builder
 	inCode, inList := false, false
 
@@ -486,7 +486,7 @@ func markdownToHTML(md string) string {
 			continue
 		}
 		if inCode {
-			html.WriteString(line + "\n")
+			html.WriteString(escapeHTML(line) + "\n")
 			continue
 		}
 		if inList && !strings.HasPrefix(strings.TrimSpace(line), "- ") && !strings.HasPrefix(strings.TrimSpace(line), "* ") {
@@ -523,7 +523,7 @@ func markdownToHTML(md string) string {
 }
 
 func textToHTML(txt string) string {
-	lines := strings.Split(txt, "\n")
+	lines := strings.Split(strings.ReplaceAll(txt, "\r\n", "\n"), "\n")
 	var html strings.Builder
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {

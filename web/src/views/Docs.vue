@@ -831,7 +831,13 @@ async function doImport() {
   if (currentFolder.value) fd.append('folder_id', currentFolder.value)
   try {
     const { data } = await teamApi.post('/import', fd)
-    ElMessage.success(data.message || t('docs.importSuccess'))
+    const failed = (data.results || []).filter((r: any) => r.status !== 'created')
+    if (failed.length) {
+      const detail = failed.map((r: any) => `${r.title}（${r.error || r.status}）`).join('，')
+      ElMessage.warning({ message: `${data.message}：${detail}`, duration: 6000 })
+    } else {
+      ElMessage.success(data.message || t('docs.importSuccess'))
+    }
     showImportDialog.value = false
     importFiles.value = []
     loadDocs()

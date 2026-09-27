@@ -132,7 +132,7 @@ func buildPaths() map[string]interface{} {
 	add(team+"/comments/{id}", "put", "更新评论", "")
 	add(team+"/comments/{id}", "delete", "删除评论", "")
 	add(team+"/search-targets", "get", "搜索分享对象", "")
-	add(team+"/import", "post", "导入", "支持 txt、md、html、docx、xlsx。Markdown 导入后仍是 doc。")
+	add(team+"/import", "post", "导入", "multipart 字段 files（可多个，最多 20 个、每个 ≤10MB）或 file。支持 txt、md、html、docx、xlsx；md/txt/docx 转成 HTML 文档，xlsx 转成表格。返回 results 逐个列出结果。")
 	add(team+"/dashboard", "get", "概览", "")
 	add(team+"/system-info", "get", "系统信息", "仅团队管理员。")
 	add(team+"/notifications", "get", "通知", "")

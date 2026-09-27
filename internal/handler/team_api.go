@@ -2592,6 +2592,12 @@ func TeamSystemInfo(c *gin.Context) {
 
 // ==================== Import ====================
 
+// TeamImportDocument POST /teams/:team_id/import
+//
+// Accepts one or more files in the multipart field "files" (what the web UI
+// sends) or a single file in "file" (older API callers). Files are converted
+// to what the editors expect: Markdown, plain text and Word become HTML,
+// Excel becomes sheet JSON.
 func TeamImportDocument(c *gin.Context) {
 	if getTeamRole(c) == "viewer" {
 		denyForbidden(c)
@@ -2600,55 +2606,123 @@ func TeamImportDocument(c *gin.Context) {
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 
-	file, header, err := c.Request.FormFile("file")
+	form, err := c.MultipartForm()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择文件"})
 		return
 	}
-	defer file.Close()
-
-	var content []byte
-	var title string
-	var docType string = "doc"
-
-	// Determine type from extension
-	name := header.Filename
-	if idx := strings.LastIndex(name, "."); idx >= 0 {
-		switch strings.ToLower(name[idx:]) {
-		case ".md", ".txt", ".html":
-			body, _ := io.ReadAll(file)
-			content = body
-			title = name[:idx]
-		case ".xlsx":
-			// For xlsx, store raw bytes
-			body, _ := io.ReadAll(file)
-			content = body
-			title = name[:idx]
-			docType = "sheet"
-		default:
-			body, _ := io.ReadAll(file)
-			content = body
-			title = name[:idx]
-		}
-	} else {
-		body, _ := io.ReadAll(file)
-		content = body
-		title = name
+	files := append(form.File["files"], form.File["file"]...)
+	if len(files) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择文件"})
+		return
 	}
-
+	if len(files) > maxImportFiles {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("最多同时导入%d个文件", maxImportFiles)})
+		return
+	}
 	folderID := c.PostForm("folder_id")
-	docID := uuid.New().String()
-	_, err = database.DB.Exec(
-		`INSERT INTO md_documents (id, team_id, folder_id, department_id, title, type, content_text, status, created_by, updated_by)
-		 VALUES (?, ?, ?, '', ?, ?, ?, 1, ?, ?)`,
-		docID, teamID, folderID, title, docType, string(content), userID, userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if folderID != "" && !folderInTeam(teamID, folderID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件夹不存在"})
 		return
 	}
 
-	if err := writeInitialVersion(docID, userID, content); err != nil {
-		log.Printf("import %s: %v", docID, err)
+	var docCount int
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents WHERE status = 1 AND team_id = ?", teamID).Scan(&docCount)
+	if !service.CheckDocumentLimit(c, docCount+len(files)-1) {
+		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": docID, "title": title, "type": docType}})
+
+	results := make([]BatchImportResult, 0, len(files))
+	var first gin.H
+	for _, fh := range files {
+		ext := strings.ToLower(filepath.Ext(fh.Filename))
+		title := strings.TrimSpace(strings.TrimSuffix(filepath.Base(fh.Filename), filepath.Ext(fh.Filename)))
+		if title == "" {
+			title = fh.Filename
+		}
+		if fh.Size > maxImportFileSize {
+			results = append(results, BatchImportResult{Title: title, Status: "skipped", Error: "文件超过10MB"})
+			continue
+		}
+		src, err := fh.Open()
+		if err != nil {
+			results = append(results, BatchImportResult{Title: title, Status: "error", Error: err.Error()})
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(src, maxImportFileSize+1))
+		src.Close()
+		if err != nil {
+			results = append(results, BatchImportResult{Title: title, Status: "error", Error: err.Error()})
+			continue
+		}
+
+		docType, content, convErr := convertImport(ext, data)
+		if convErr != nil {
+			results = append(results, BatchImportResult{Title: title, Status: "error", Error: convErr.Error()})
+			continue
+		}
+
+		docID := uuid.New().String()
+		if _, err := database.DB.Exec(
+			`INSERT INTO md_documents (id, team_id, folder_id, department_id, title, type, status, created_by, updated_by)
+			 VALUES (?, ?, ?, '', ?, ?, 1, ?, ?)`,
+			docID, teamID, folderID, title, docType, userID, userID); err != nil {
+			results = append(results, BatchImportResult{Title: title, Status: "error", Error: err.Error()})
+			continue
+		}
+		if err := writeInitialVersion(docID, userID, content); err != nil {
+			log.Printf("import %s: %v", docID, err)
+		}
+		audit(c, "import_doc", "document", docID, title, fmt.Sprintf(`{"file":%q}`, fh.Filename))
+		results = append(results, BatchImportResult{Title: title, ID: docID, Type: docType, Status: "created"})
+		if first == nil {
+			first = gin.H{"id": docID, "title": title, "type": docType}
+		}
+	}
+
+	created := 0
+	for _, r := range results {
+		if r.Status == "created" {
+			created++
+		}
+	}
+	msg := fmt.Sprintf("成功导入 %d/%d 个文件", created, len(files))
+	if created == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg, "results": results})
+		return
+	}
+	// data keeps the first created document for single-file API callers;
+	// results lists every file.
+	c.JSON(http.StatusOK, gin.H{"data": first, "results": results, "message": msg})
+}
+
+const (
+	maxImportFiles    = 20
+	maxImportFileSize = 10 * 1024 * 1024
+)
+
+// convertImport turns an uploaded file into (document type, stored content).
+func convertImport(ext string, data []byte) (string, []byte, error) {
+	switch ext {
+	case ".md", ".markdown":
+		return "doc", []byte(markdownToHTML(string(data))), nil
+	case ".txt":
+		return "doc", []byte(textToHTML(string(data))), nil
+	case ".html", ".htm":
+		return "doc", data, nil
+	case ".docx":
+		html, err := docxToHTML(data)
+		if err != nil {
+			return "", nil, fmt.Errorf("Word 解析失败: %w", err)
+		}
+		return "doc", []byte(html), nil
+	case ".xlsx":
+		sheet, err := xlsxToSheet(data)
+		if err != nil {
+			return "", nil, fmt.Errorf("Excel 解析失败: %w", err)
+		}
+		return "sheet", []byte(sheet), nil
+	default:
+		return "", nil, fmt.Errorf("不支持的格式")
+	}
 }
