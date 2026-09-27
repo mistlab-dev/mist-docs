@@ -94,9 +94,8 @@ func TeamFolderTree(c *gin.Context) {
 // CreateTeamFolder POST /teams/:team_id/folders
 func CreateTeamFolder(c *gin.Context) {
 	teamID := getTeamID(c)
-	role := getTeamRole(c)
-	if role != "admin" && role != "editor" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "需要编辑者或管理员权限"})
+	// Folder structure is managed by admins (UNIFIED-AUTH-DESIGN §6.1, D2).
+	if !requireTeamAdmin(c) {
 		return
 	}
 
@@ -106,6 +105,10 @@ func CreateTeamFolder(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if req.ParentID != "" && !folderInTeam(teamID, req.ParentID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "上级文件夹不存在"})
 		return
 	}
 
@@ -128,9 +131,7 @@ func CreateTeamFolder(c *gin.Context) {
 
 // UpdateTeamFolder PUT /teams/:team_id/folders/:id
 func UpdateTeamFolder(c *gin.Context) {
-	role := getTeamRole(c)
-	if role != "admin" && role != "editor" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	if !requireTeamAdmin(c) {
 		return
 	}
 
@@ -166,9 +167,7 @@ func UpdateTeamFolder(c *gin.Context) {
 
 // DeleteTeamFolder DELETE /teams/:team_id/folders/:id
 func DeleteTeamFolder(c *gin.Context) {
-	role := getTeamRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可删除文件夹"})
+	if !requireTeamAdmin(c) {
 		return
 	}
 
@@ -498,9 +497,7 @@ func TeamRecentDocuments(c *gin.Context) {
 // TeamCreateDocument POST /teams/:team_id/documents
 func TeamCreateDocument(c *gin.Context) {
 	teamID := getTeamID(c)
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	if !requireRole(c, RoleEditor) {
 		return
 	}
 
@@ -909,9 +906,7 @@ func TeamListTags(c *gin.Context) {
 }
 
 func TeamCreateTag(c *gin.Context) {
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	if !requireRole(c, RoleEditor) {
 		return
 	}
 	teamID := getTeamID(c)
@@ -934,9 +929,7 @@ func TeamCreateTag(c *gin.Context) {
 }
 
 func TeamDeleteTag(c *gin.Context) {
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	if !requireRole(c, RoleEditor) {
 		return
 	}
 	id := c.Param("id")
@@ -1700,8 +1693,10 @@ func TeamCheckPermission(c *gin.Context) {
 
 func TeamListTemplates(c *gin.Context) {
 	teamID := getTeamID(c)
+	uid := c.GetString("user_id")
+	admin := isTeamAdmin(c)
 	rows, err := database.DB.Query(
-		`SELECT id, name, type, is_public, created_at, updated_at
+		`SELECT id, name, type, is_public, IFNULL(user_id,''), created_at, updated_at
 		 FROM md_templates WHERE team_id=?`, teamID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1710,12 +1705,15 @@ func TeamListTemplates(c *gin.Context) {
 	defer rows.Close()
 	var templates []map[string]interface{}
 	for rows.Next() {
-		var id, name, docType, createdAt, updatedAt string
+		var id, name, docType, owner, createdAt, updatedAt string
 		var isPublic bool
-		rows.Scan(&id, &name, &docType, &isPublic, &createdAt, &updatedAt)
+		rows.Scan(&id, &name, &docType, &isPublic, &owner, &createdAt, &updatedAt)
 		templates = append(templates, map[string]interface{}{
 			"id": id, "name": name, "type": docType,
-			"is_public": isPublic, "created_at": createdAt, "updated_at": updatedAt,
+			"is_public": isPublic, "created_by": owner,
+			"created_at": createdAt, "updated_at": updatedAt,
+			// can_manage lets the UI hide edit/delete it would refuse anyway.
+			"can_manage": admin || (owner != "" && owner == uid && roleAtLeast(c, RoleEditor)),
 		})
 	}
 	if templates == nil {
@@ -1735,7 +1733,11 @@ func TeamGetTemplate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "name": name, "type": docType, "content": content}})
 }
 
+// TeamCreateTemplate: editors and admins (D2).
 func TeamCreateTemplate(c *gin.Context) {
+	if !requireRole(c, RoleEditor) {
+		return
+	}
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 	var req struct {
@@ -1758,8 +1760,27 @@ func TeamCreateTemplate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "name": req.Name}})
 }
 
+// templateManageable: the template exists in this team and the caller is its
+// author (editor or above) or a team admin.
+func templateManageable(c *gin.Context, id string) bool {
+	var owner string
+	err := database.DB.QueryRow(`SELECT IFNULL(user_id,'') FROM md_templates WHERE id=? AND team_id=?`, id, getTeamID(c)).Scan(&owner)
+	if err != nil {
+		denyNotFound(c, "模板不存在")
+		return false
+	}
+	if isTeamAdmin(c) || (owner != "" && owner == c.GetString("user_id") && roleAtLeast(c, RoleEditor)) {
+		return true
+	}
+	denyForbidden(c)
+	return false
+}
+
 func TeamUpdateTemplate(c *gin.Context) {
 	id := c.Param("id")
+	if !templateManageable(c, id) {
+		return
+	}
 	var req struct {
 		Name    string `json:"name"`
 		Content string `json:"content"`
@@ -1778,6 +1799,9 @@ func TeamUpdateTemplate(c *gin.Context) {
 
 func TeamDeleteTemplate(c *gin.Context) {
 	id := c.Param("id")
+	if !templateManageable(c, id) {
+		return
+	}
 	_, err := database.DB.Exec(`DELETE FROM md_templates WHERE id=? AND team_id=?`, id, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -2577,9 +2601,7 @@ func TeamDashboardStats(c *gin.Context) {
 }
 
 func TeamSystemInfo(c *gin.Context) {
-	role := getTeamRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可查看"})
+	if !requireTeamAdmin(c) {
 		return
 	}
 	var dbSize int64
@@ -2599,8 +2621,7 @@ func TeamSystemInfo(c *gin.Context) {
 // to what the editors expect: Markdown, plain text and Word become HTML,
 // Excel becomes sheet JSON.
 func TeamImportDocument(c *gin.Context) {
-	if getTeamRole(c) == "viewer" {
-		denyForbidden(c)
+	if !requireRole(c, RoleEditor) {
 		return
 	}
 	teamID := getTeamID(c)

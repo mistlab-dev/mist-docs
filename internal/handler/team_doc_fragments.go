@@ -81,15 +81,11 @@ func TeamAttachDocFragment(c *gin.Context) {
 		return
 	}
 
-	// 文档属于当前团队
-	var exists int
-	database.DB.QueryRow(
-		`SELECT COUNT(*) FROM md_documents WHERE id=? AND team_id=? AND status=1`,
-		docID, teamID).Scan(&exists)
-	if exists == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "文档不存在"})
+	// 文档属于当前团队，且调用者对它有编辑权（D2）
+	if !requireDoc(c, docID, "write", true) {
 		return
 	}
+	var exists int
 
 	// 片段属于当前团队且未删除
 	database.DB.QueryRow(
@@ -132,6 +128,9 @@ func TeamDetachDocFragment(c *gin.Context) {
 	teamID := getTeamID(c)
 	docID := c.Param("id")
 	fragID := c.Param("fragment_id")
+	if !requireDoc(c, docID, "write", true) {
+		return
+	}
 
 	res, err := database.DB.Exec(
 		`DELETE FROM md_doc_fragments WHERE document_id=? AND fragment_id=? AND team_id=?`,

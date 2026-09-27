@@ -374,12 +374,13 @@ func TestViewerCannotCreateFolder(t *testing.T) {
 	}
 }
 
-func TestEditorCanCreateFolder(t *testing.T) {
+// Folder structure is admin-only (D2, UNIFIED-AUTH-DESIGN §6.1).
+func TestEditorCannotCreateFolder(t *testing.T) {
 	w := request("POST", teamPath("/folders"), map[string]string{
 		"name": "编辑者创建的文件夹",
 	}, editorToken)
-	if w.Code != 200 {
-		t.Errorf("editor should create folder, got %d: %s", w.Code, w.Body.String())
+	if w.Code != 403 {
+		t.Errorf("editor should not create folder, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
