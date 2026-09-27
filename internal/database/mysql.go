@@ -295,6 +295,22 @@ func migrateDeadlines() error {
 		}
 	}
 
+	// 5. md_team_capacity — "orders per day" for the insert preview (D14).
+	// One row per effective date; the latest row on or before a day applies.
+	// key_customers is the team's key-customer list (D16), one name per line,
+	// kept identical on every row of the team.
+	if _, err := DB.Exec(`CREATE TABLE IF NOT EXISTS md_team_capacity (
+		team_id VARCHAR(64) NOT NULL,
+		effective_from DATE NOT NULL,
+		per_day INT NOT NULL DEFAULT 1,
+		key_customers TEXT,
+		updated_by VARCHAR(64) DEFAULT '',
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		PRIMARY KEY (team_id, effective_from)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
+		return fmt.Errorf("create md_team_capacity: %w", err)
+	}
+
 	return nil
 }
 

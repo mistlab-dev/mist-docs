@@ -298,6 +298,18 @@ CREATE TABLE IF NOT EXISTS `md_tags` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 ;
 
+-- table: md_team_capacity
+CREATE TABLE IF NOT EXISTS `md_team_capacity` (
+  `team_id` varchar(64) NOT NULL,
+  `effective_from` date NOT NULL,
+  `per_day` int(11) NOT NULL DEFAULT 1,
+  `key_customers` text DEFAULT NULL,
+  `updated_by` varchar(64) DEFAULT '',
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`team_id`,`effective_from`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+;
+
 -- table: md_team_folders
 CREATE TABLE IF NOT EXISTS `md_team_folders` (
   `id` varchar(36) NOT NULL,

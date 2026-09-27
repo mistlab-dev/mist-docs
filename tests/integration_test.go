@@ -177,6 +177,11 @@ func cleanTestData() {
 	// and every later mutation keeps POSTing the leftovers.
 	db.ExecContext(ctx, "DELETE l FROM md_webhook_logs l INNER JOIN md_webhooks w ON l.webhook_id = w.id WHERE w.team_id LIKE 'test-%'")
 	db.ExecContext(ctx, "DELETE FROM md_webhooks WHERE team_id LIKE 'test-%'")
+	// Deadlines created through the API have UUID ids; clear them by team so
+	// runs do not pile up rows that later tests (e.g. the insert preview) see.
+	for _, t := range []string{"md_deadline_events", "md_reminder_log", "md_reminder_rules", "md_deadlines", "md_team_capacity"} {
+		db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE team_id LIKE 'test-%%'", t))
+	}
 
 	tables := []string{
 		"md_webhook_logs", "md_webhooks",
