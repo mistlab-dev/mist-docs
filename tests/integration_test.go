@@ -16,8 +16,8 @@ import (
 
 	"github.com/c-wind/mist-docs/internal/config"
 	"github.com/c-wind/mist-docs/internal/database"
-	"github.com/c-wind/mist-docs/internal/handler"
 	"github.com/c-wind/mist-docs/internal/middleware"
+	approuter "github.com/c-wind/mist-docs/internal/router"
 	"github.com/c-wind/mist-docs/internal/store"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
@@ -228,152 +228,15 @@ func setupTestData() {
 	db.ExecContext(ctx, `INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'viewer')`, teamID, viewerID)
 }
 
+// buildRouter mounts the production routes (internal/router) with the same
+// CORS and recovery middleware; rate limiting and static files are left out.
 func buildRouter() *gin.Engine {
 	r := gin.New()
 	r.Use(middleware.CORS())
 	r.Use(middleware.Recovery())
-
-	api := r.Group("/api")
-	{
-		// 公开
-		api.POST("/auth/login", handler.Login)
-		api.GET("/s/:token", handler.AccessShare)
-		api.GET("/s/:token/info", handler.AccessShareInfo)
-
-		// 需认证
-		auth := api.Group("")
-		auth.Use(middleware.JWTAuth())
-		{
-			auth.GET("/auth/me", handler.Me)
-
-			// 团队级 API
-			teams := auth.Group("/teams/:team_id")
-			teams.Use(middleware.TeamAuth())
-			{
-				// 文件夹树
-				teams.GET("/folders/tree", handler.TeamFolderTree)
-				teams.POST("/folders", handler.CreateTeamFolder)
-				teams.PUT("/folders/:id", handler.UpdateTeamFolder)
-				teams.DELETE("/folders/:id", handler.DeleteTeamFolder)
-
-				// 文档
-				teams.GET("/documents", handler.TeamListDocuments)
-				teams.GET("/documents/search", handler.TeamSearchDocuments)
-				teams.POST("/documents", handler.TeamCreateDocument)
-				teams.GET("/documents/:id", handler.TeamGetDocument)
-				teams.PUT("/documents/:id", handler.TeamUpdateDocument)
-				teams.DELETE("/documents/:id", handler.TeamDeleteDocument)
-				teams.GET("/documents/:id/content", handler.TeamGetDocumentContent)
-				teams.PUT("/documents/:id/content", handler.TeamSaveDocumentContent)
-				teams.GET("/documents/:id/versions", handler.TeamListVersions)
-				teams.GET("/documents/:id/versions/:ver/content", handler.TeamGetVersionContent)
-				teams.POST("/documents/:id/restore", handler.TeamRestoreVersion)
-				teams.POST("/documents/:id/lock", handler.TeamLockDocument)
-				teams.POST("/documents/:id/unlock", handler.TeamUnlockDocument)
-				teams.POST("/documents/:id/share", handler.TeamCreateShare)
-				teams.GET("/documents/:id/shares", handler.TeamListShares)
-				teams.GET("/documents/:id/collaborators", handler.TeamListCollaborators)
-				teams.POST("/documents/:id/collaborators", handler.TeamAddCollaborator)
-				teams.GET("/documents/:id/comments", handler.TeamListComments)
-				teams.POST("/documents/:id/comments", handler.TeamCreateComment)
-				teams.GET("/documents/:id/export", handler.TeamExportDocument)
-
-				// 回收站
-				teams.GET("/trash", handler.TeamListTrash)
-				teams.POST("/trash/restore/:id", handler.TeamRestoreFromTrash)
-				teams.DELETE("/trash/purge/:id", handler.TeamPurgeFromTrash)
-				teams.DELETE("/trash/empty", handler.TeamEmptyTrash)
-
-				// 标签
-				teams.GET("/tags", handler.TeamListTags)
-				teams.POST("/tags", handler.TeamCreateTag)
-				teams.DELETE("/tags/:id", handler.TeamDeleteTag)
-				teams.GET("/documents/:id/tags", handler.TeamGetDocTags)
-				teams.PUT("/documents/:id/tags", handler.TeamSetDocTags)
-
-				// 权限
-				teams.GET("/permissions", handler.TeamListPermissions)
-				teams.POST("/permissions", handler.TeamSetPermission)
-				teams.DELETE("/permissions/:id", handler.TeamRemovePermission)
-				teams.GET("/permissions/check", handler.TeamCheckPermission)
-
-				// 审计
-				teams.GET("/audits", handler.TeamListAudits)
-				teams.GET("/audits/export", handler.TeamExportAudits)
-				teams.GET("/audits/stats", handler.TeamAuditStats)
-
-				// 收藏
-				teams.GET("/favorites", handler.TeamListFavorites)
-				teams.POST("/favorites/:id", handler.TeamAddFavorite)
-				teams.DELETE("/favorites/:id", handler.TeamRemoveFavorite)
-
-				// 存储
-				teams.GET("/storage/status", handler.TeamStorageStatus)
-
-				// 分享删除
-				teams.DELETE("/shares/:id", handler.TeamDeleteShare)
-
-				// 评论管理
-				teams.PUT("/comments/:id", handler.TeamUpdateComment)
-				teams.DELETE("/comments/:id", handler.TeamDeleteComment)
-
-				// Dashboard
-				teams.GET("/dashboard", handler.TeamDashboardStats)
-				teams.GET("/system-info", handler.TeamSystemInfo)
-
-				// 模板
-				teams.GET("/templates", handler.TeamListTemplates)
-				teams.GET("/templates/:id", handler.TeamGetTemplate)
-				teams.POST("/templates", handler.TeamCreateTemplate)
-				teams.PUT("/templates/:id", handler.TeamUpdateTemplate)
-				teams.DELETE("/templates/:id", handler.TeamDeleteTemplate)
-
-				// Webhooks
-				teams.GET("/webhooks", handler.TeamListWebhooks)
-				teams.POST("/webhooks", handler.TeamCreateWebhook)
-				teams.DELETE("/webhooks/:id", handler.TeamDeleteWebhook)
-				teams.PUT("/webhooks/:id/toggle", handler.TeamToggleWebhook)
-				teams.GET("/webhooks/:id/logs", handler.TeamListWebhookLogs)
-
-				// 文档统计
-				teams.GET("/documents/:id/stats", handler.TeamDocStats)
-
-				// Recent
-				teams.GET("/documents/recent", handler.TeamRecentDocuments)
-
-				// Media
-				teams.POST("/upload", handler.TeamUploadFile)
-				teams.GET("/media", handler.TeamListMedia)
-				teams.GET("/media/:filename", handler.TeamGetMedia)
-				teams.DELETE("/media/:filename", handler.TeamDeleteMedia)
-
-				// Import
-				teams.POST("/import", handler.TeamImportDocument)
-
-				// Search Targets
-				teams.GET("/search-targets", handler.TeamSearchTargets)
-				teams.GET("/members", handler.TeamListMembers)
-
-				// Collaborator 管理
-				teams.PUT("/collaborators/:id", handler.TeamUpdateCollaborator)
-				teams.DELETE("/collaborators/:id", handler.TeamRemoveCollaborator)
-
-				// Tag documents
-				teams.GET("/tags/:id/documents", handler.TeamGetDocsByTag)
-
-				// Notifications
-				teams.GET("/notifications", handler.TeamListNotifications)
-				teams.PUT("/notifications/:id/read", handler.TeamMarkNotificationRead)
-				teams.PUT("/notifications/read-all", handler.TeamMarkAllNotificationsRead)
-				teams.DELETE("/notifications/:id", handler.TeamDeleteNotification)
-				teams.GET("/notifications/unread-count", handler.TeamUnreadCount)
-			}
-		}
-	}
+	approuter.RegisterAPI(r)
 	return r
 }
-
-// HTTP helpers
 
 func teamPath(path string) string {
 	return "/api/teams/" + teamID + path

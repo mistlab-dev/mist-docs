@@ -9,6 +9,7 @@ import (
 
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/middleware"
+	approuter "github.com/c-wind/mist-docs/internal/router"
 	"github.com/c-wind/mist-docs/internal/ws"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -24,7 +25,7 @@ func wsServer(t *testing.T) *httptest.Server {
 		go wsHub.Run()
 	}
 	r := gin.New()
-	r.GET("/ws/teams/:team_id/docs/:doc_id", func(c *gin.Context) { ws.ServeWS(wsHub, c) })
+	approuter.RegisterWS(r, wsHub)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 	return srv
