@@ -88,30 +88,81 @@ func ParseEvents(s string) []string {
 	return result
 }
 
-// Canonical maps audit actions onto the event names the API advertises.
-func Canonical(action string) string {
-	switch action {
-	case "create_doc", "create", "document.created":
-		return "document.created"
-	case "edit_doc", "update_doc", "update", "document.updated":
-		return "document.updated"
-	case "delete_doc", "delete", "document.deleted":
-		return "document.deleted"
-	default:
-		return action
-	}
+// Events is the catalogue of webhook events a team can subscribe to, in the
+// order the settings page shows them. These dotted names are what payloads
+// carry in "event"; older subscriptions may use the audit action names,
+// which Subscribed still accepts.
+var Events = []string{
+	"document.created",
+	"document.updated",
+	"document.deleted",
+	"document.shared",
+	"comment.created",
+	"document.imported",
+	"document.locked",
+	"document.unlocked",
+	"document.restored",
+	"deadline.reminder",
 }
 
+// DefaultEvents is what a new webhook gets when none are chosen.
+var DefaultEvents = []string{"document.created", "document.updated"}
+
+// Valid reports whether e is a known event name (or "*").
+func Valid(e string) bool {
+	if e == "*" {
+		return true
+	}
+	for _, x := range Events {
+		if x == e {
+			return true
+		}
+	}
+	return false
+}
+
+// Canonical maps an audit action (or any alias) onto the advertised dotted
+// event name. Unknown actions are returned unchanged.
+func Canonical(action string) string {
+	for _, g := range aliasGroups {
+		for _, e := range g {
+			if e == action {
+				return g[0]
+			}
+		}
+	}
+	return action
+}
+
+// The first name of each group is the canonical one.
 var aliasGroups = [][]string{
 	{"document.created", "create_doc", "create"},
 	{"document.updated", "edit_doc", "update_doc", "update"},
 	{"document.deleted", "delete_doc", "delete"},
-	{"create_share", "document.shared", "share"},
-	{"create_comment", "comment.created", "comment"},
-	{"import_doc", "document.imported", "import"},
-	{"lock_doc", "document.locked", "lock"},
-	{"unlock_doc", "document.unlocked", "unlock"},
-	{"restore", "restore_doc", "document.restored"},
+	{"document.shared", "create_share", "share"},
+	{"comment.created", "create_comment", "comment"},
+	{"document.imported", "import_doc", "import"},
+	{"document.locked", "lock_doc", "lock"},
+	{"document.unlocked", "unlock_doc", "unlock"},
+	{"document.restored", "restore_doc", "restore"},
+	{"deadline.reminder"},
+}
+
+// ReminderTargets picks the hooks that receive deadline reminders: those
+// subscribed to deadline.reminder. Teams set up before events could be
+// chosen have no hook subscribed to it; they keep the old behaviour (every
+// enabled hook) so their reminders do not silently stop after an upgrade.
+func ReminderTargets(targets []Target) []Target {
+	var picked []Target
+	for _, t := range targets {
+		if Subscribed(t.Events, "deadline.reminder") {
+			picked = append(picked, t)
+		}
+	}
+	if picked == nil {
+		return targets
+	}
+	return picked
 }
 
 // Aliases returns every name that should match event.

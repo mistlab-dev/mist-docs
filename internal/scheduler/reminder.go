@@ -200,13 +200,14 @@ func createInAppNotification(userID, teamID, deadlineID, title string) error {
 	return err
 }
 
-// deliverWebhook posts the reminder to the owning team's enabled webhooks.
+// deliverWebhook posts the reminder to the owning team's enabled webhooks
+// that subscribe to deadline.reminder (see webhook.ReminderTargets).
 // Returns "" on success or a failure detail.
 //
 // The lookup is scoped to teamID: reminders carry order numbers and customer
 // context, so they must never reach another team's endpoints.
 func deliverWebhook(teamID, deadlineID, orderNo, message string) string {
-	targets := webhook.LoadTargets(teamID)
+	targets := webhook.ReminderTargets(webhook.LoadTargets(teamID))
 
 	var (
 		anySent bool
