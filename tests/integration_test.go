@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -48,19 +49,23 @@ var (
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
 
-	dbPassword := os.Getenv("MIST_DOCS_TEST_DB_PASSWORD")
-	if dbPassword == "" {
-		dbPassword = "test-db-password"
+	env := func(key, def string) string {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+		return def
 	}
+	dbPassword := env("MIST_DOCS_TEST_DB_PASSWORD", "test-db-password")
+	dbPort, _ := strconv.Atoi(env("MIST_DOCS_TEST_DB_PORT", "3306"))
 
 	config.C = config.Config{
 		Server: config.ServerConfig{Port: 0},
 		Database: config.DatabaseConfig{
-			Host:         "127.0.0.1",
-			Port:         3306,
-			User:         "mist_team",
+			Host:         env("MIST_DOCS_TEST_DB_HOST", "127.0.0.1"),
+			Port:         dbPort,
+			User:         env("MIST_DOCS_TEST_DB_USER", "mist_team"),
 			Password:     dbPassword,
-			DBName:       "mist_team",
+			DBName:       env("MIST_DOCS_TEST_DB_NAME", "mist_team"),
 			MaxOpenConns: 5,
 			MaxIdleConns: 2,
 		},
