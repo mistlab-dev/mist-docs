@@ -10,6 +10,9 @@
         <el-button @click="loadAll" :loading="loading">
           <el-icon><Refresh /></el-icon>
         </el-button>
+        <el-button @click="openHistory" data-test="proposal-history-btn">
+          <el-icon><Tickets /></el-icon> {{ t('insertPreview.history') }}
+        </el-button>
         <el-button @click="previewVisible = true" data-test="insert-preview-btn">
           <el-icon><DataAnalysis /></el-icon> {{ t('insertPreview.button') }}
         </el-button>
@@ -244,7 +247,35 @@
       </el-tab-pane>
     </el-tabs>
 
-    <InsertPreviewDialog v-model="previewVisible" />
+    <InsertPreviewDialog v-model="previewVisible" @applied="loadAll" />
+
+    <el-drawer v-model="historyVisible" :title="t('insertPreview.history')" size="720px" class="proposal-drawer">
+      <el-table :data="proposals" v-loading="historyLoading" :empty-text="t('insertPreview.histEmpty')">
+        <el-table-column :label="t('insertPreview.colTime')" width="150">
+          <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column :label="t('insertPreview.colTitle')" min-width="200">
+          <template #default="{ row }">
+            <div class="ph-title">{{ row.title }}</div>
+            <div class="ph-sub">
+              {{ row.user_name || '—' }}
+              <template v-if="row.breaches || row.delayed"> · {{ t(summaryKey(row).key, summaryKey(row).args) }}</template>
+            </div>
+            <ul v-if="row.status === 'applied' && row.changes?.length" class="ph-changes">
+              <li v-for="(ch, i) in row.changes" :key="i">{{ ch.field === '__create__' ? '+ ' + (ch.order_no || ch.title) : `${ch.order_no} ${ch.old} → ${ch.new}` }}</li>
+            </ul>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('insertPreview.colStatus')" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" :type="proposalStatusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('insertPreview.colDecided')" width="120">
+          <template #default="{ row }">{{ row.decided_by_name || '—' }}</template>
+        </el-table-column>
+      </el-table>
+    </el-drawer>
 
     <el-dialog v-model="capacityVisible" :title="t('insertPreview.setCapacity')" width="480px">
       <p class="cap-hint">{{ t('insertPreview.capacityHint') }}</p>
@@ -396,10 +427,11 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Search, DataAnalysis } from '@element-plus/icons-vue'
+import { Plus, Refresh, Search, DataAnalysis, Tickets } from '@element-plus/icons-vue'
 import teamApi from '@/utils/team-api'
 import GuardedButton from '@/components/GuardedButton.vue'
 import InsertPreviewDialog from '@/components/InsertPreviewDialog.vue'
+import { conclusionText, proposalStatusType } from '@/utils/insertPreview'
 import { useAuthStore } from '@/stores/auth'
 import { canManageRecord } from '@/utils/roles'
 
@@ -440,6 +472,28 @@ interface Rule {
 
 const tab = ref('board')
 const previewVisible = ref(false)
+const historyVisible = ref(false)
+const historyLoading = ref(false)
+const proposals = ref<any[]>([])
+
+async function openHistory() {
+  historyVisible.value = true
+  historyLoading.value = true
+  try {
+    const { data } = await teamApi.get('/proposals')
+    proposals.value = data.data || []
+  } catch {
+    proposals.value = []
+  } finally {
+    historyLoading.value = false
+  }
+}
+function summaryKey(row: any) {
+  return conclusionText({ new_breaches: new Array(row.breaches || 0), delayed: new Array(row.delayed || 0) } as any)
+}
+function statusLabel(s: string) {
+  return t(({ pending: 'insertPreview.stPending', applied: 'insertPreview.stApplied', rejected: 'insertPreview.stRejected', stale: 'insertPreview.stStale' } as Record<string, string>)[s] || 'insertPreview.stPending')
+}
 const capacityVisible = ref(false)
 const capacity = reactive({ per_day: 1, is_default: true, key_customers: [] as string[] })
 const capacityForm = reactive({ per_day: 1, effective_from: '', key_customers: '' })
@@ -583,6 +637,7 @@ function eventText(tp: string) {
     status_changed: t('deadlines.eventStatusChanged'),
     date_changed: t('deadlines.eventDateChanged'),
     deleted: t('deadlines.eventDeleted'),
+    proposal_applied: t('deadlines.eventProposalApplied'),
   }
   return map[tp] || tp
 }
@@ -1105,6 +1160,9 @@ onMounted(loadAll)
 }
 
 /* 规则 */
+.ph-title { font-weight: 600; color: var(--md-text); }
+.ph-sub { font-size: 12px; color: var(--md-text-slate-dim); margin-top: 2px; }
+.ph-changes { margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--md-text-slate); }
 .capacity-bar {
   display: flex;
   align-items: center;

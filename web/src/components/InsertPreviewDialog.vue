@@ -101,7 +101,21 @@
           </div>
         </el-collapse-item>
       </el-collapse>
-      <slot name="actions" :result="result" :request="lastRequest" />
+      <!-- 两段式：确认才落库（D17 单人确认，编辑者及以上） -->
+      <div v-if="result.proposal_id" class="ip-confirm" data-test="proposal-actions">
+        <div class="ip-sec-title">{{ t('insertPreview.changesTitle') }}</div>
+        <ul class="ip-changes">
+          <li v-for="(ch, i) in result.changes || []" :key="i">{{ changeLine(ch) }}</li>
+        </ul>
+        <div class="ip-confirm-row">
+          <el-tag v-if="stale" type="danger" effect="plain">{{ t('insertPreview.staleTag') }} · {{ t('insertPreview.stale') }}</el-tag>
+          <span class="ip-grow" />
+          <el-button :disabled="deciding || stale" @click="reject">{{ t('insertPreview.reject') }}</el-button>
+          <GuardedButton type="primary" :allowed="canEdit" :reason="t('perm.needEditor')" :loading="deciding" :disabled="stale" data-test="proposal-apply" @click="apply">
+            {{ lastRequest.deadline_id ? t('insertPreview.confirmExisting') : t('insertPreview.confirm') }}
+          </GuardedButton>
+        </div>
+      </div>
     </div>
 
     <template #footer>
@@ -116,11 +130,17 @@ import { ref, reactive, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import teamApi from '@/utils/team-api'
-import { conclusionText, conclusionType, shortDate, flagKey, type PreviewResult } from '@/utils/insertPreview'
+import GuardedButton from '@/components/GuardedButton.vue'
+import { useAuthStore } from '@/stores/auth'
+import { conclusionText, conclusionType, shortDate, flagKey, changeKey, isStaleError, type PreviewResult, type ProposalChange } from '@/utils/insertPreview'
 
 defineProps<{ modelValue: boolean }>()
-const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
+const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void; (e: 'applied'): void }>()
 const { t } = useI18n()
+const auth = useAuthStore()
+const canEdit = computed(() => auth.canEditTeam)
+const deciding = ref(false)
+const stale = ref(false)
 
 interface OpenOrder { id: string; order_no: string; title: string; due_date: string; priority: string; status: string }
 
@@ -152,6 +172,52 @@ function flagLabels(flags?: string[]) {
   return (flags || []).map(flagKey).filter((k): k is string => !!k).map(k => t(k))
 }
 
+function changeLine(ch: ProposalChange) {
+  const order = ch.order_no || ch.title || ''
+  if (ch.field === '__create__') {
+    return t(changeKey(ch.field), { order, priority: priorityLabel(lastRequest.value.priority || 'inserted'), date: shortDate(ch.new) })
+  }
+  if (ch.field === 'priority') {
+    return t(changeKey(ch.field), { order, old: priorityLabel(ch.old || ''), new: priorityLabel(ch.new || '') })
+  }
+  return t(changeKey(ch.field), { order, old: shortDate(ch.old), new: shortDate(ch.new) })
+}
+
+async function apply() {
+  if (!result.value?.proposal_id) return
+  deciding.value = true
+  try {
+    await teamApi.post(`/proposals/${result.value.proposal_id}/apply`, {})
+    ElMessage.success(t('insertPreview.applied'))
+    result.value = null
+    emit('applied')
+    emit('update:modelValue', false)
+  } catch (e: any) {
+    if (isStaleError(e)) {
+      stale.value = true
+      ElMessage.warning(t('insertPreview.stale'))
+    } else {
+      ElMessage.error(e?.response?.data?.error || t('insertPreview.failed'))
+    }
+  } finally {
+    deciding.value = false
+  }
+}
+
+async function reject() {
+  if (!result.value?.proposal_id) return
+  deciding.value = true
+  try {
+    await teamApi.post(`/proposals/${result.value.proposal_id}/reject`, {})
+    ElMessage.info(t('insertPreview.rejected'))
+    result.value = null
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || t('insertPreview.failed'))
+  } finally {
+    deciding.value = false
+  }
+}
+
 async function onOpen() {
   try {
     const { data } = await teamApi.get('/deadlines', { params: { limit: 500, sort: 'due' } })
@@ -181,6 +247,7 @@ async function run() {
     const { data } = await teamApi.post('/deadlines/preview-insert', body)
     result.value = data.data
     lastRequest.value = body
+    stale.value = false
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error || t('insertPreview.failed'))
   } finally {
@@ -227,4 +294,8 @@ defineExpose({ run, result })
 .ip-flag { margin-left: 2px; }
 .ip-quiet { padding: 3px 0; }
 .ip-more { margin-top: 12px; }
+.ip-confirm { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--md-dl-border); }
+.ip-changes { margin: 0 0 10px; padding-left: 18px; font-size: 13px; line-height: 1.8; color: var(--md-text); }
+.ip-confirm-row { display: flex; align-items: center; gap: 8px; }
+.ip-grow { flex: 1; }
 </style>

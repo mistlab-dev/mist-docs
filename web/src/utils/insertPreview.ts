@@ -25,6 +25,32 @@ export interface PreviewResult {
   conclusion: 'breach' | 'delay' | 'none'
   per_day: number
   proposal_id?: string
+  changes?: ProposalChange[]
+}
+
+/** One write that confirming the proposal makes (stored server-side). */
+export interface ProposalChange {
+  deadline_id?: string
+  order_no: string
+  title?: string
+  field: '__create__' | 'due_date' | 'priority'
+  old?: string
+  new?: string
+}
+
+/** i18n key for a change line. */
+export function changeKey(field: ProposalChange['field']): string {
+  return field === '__create__' ? 'insertPreview.chCreate' : field === 'priority' ? 'insertPreview.chPriority' : 'insertPreview.chDue'
+}
+
+/** Status tag type for the proposal history. */
+export function proposalStatusType(s: string): 'warning' | 'success' | 'info' | 'danger' {
+  return s === 'pending' ? 'warning' : s === 'applied' ? 'success' : s === 'stale' ? 'danger' : 'info'
+}
+
+/** True when the API answered 409 because the preview is out of date. */
+export function isStaleError(e: any): boolean {
+  return e?.response?.status === 409
 }
 
 /** Tag type for the conclusion banner. */

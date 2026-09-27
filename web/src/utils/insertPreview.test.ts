@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { conclusionText, conclusionType, shortDate, flagKey, type PreviewResult } from './insertPreview'
+import { conclusionText, conclusionType, shortDate, flagKey, changeKey, proposalStatusType, isStaleError, type PreviewResult } from './insertPreview'
 import zh from '@/i18n/locales/zh-CN'
 import en from '@/i18n/locales/en-US'
 
@@ -39,6 +39,22 @@ describe('insert preview helpers', () => {
       expect(lookup(en, k), k).toBeTypeOf('string')
     }
     expect(flagKey('other')).toBeNull()
+  })
+
+  it('maps changes and proposal states', () => {
+    expect(changeKey('__create__')).toBe('insertPreview.chCreate')
+    expect(changeKey('due_date')).toBe('insertPreview.chDue')
+    expect(changeKey('priority')).toBe('insertPreview.chPriority')
+    expect(proposalStatusType('pending')).toBe('warning')
+    expect(proposalStatusType('applied')).toBe('success')
+    expect(proposalStatusType('rejected')).toBe('info')
+    expect(proposalStatusType('stale')).toBe('danger')
+    expect(isStaleError({ response: { status: 409 } })).toBe(true)
+    expect(isStaleError({ response: { status: 500 } })).toBe(false)
+    for (const k of ['chCreate', 'chDue', 'chPriority', 'stPending', 'stApplied', 'stRejected', 'stStale', 'stale', 'history']) {
+      expect(lookup(zh, 'insertPreview.' + k), k).toBeTypeOf('string')
+      expect(lookup(en, 'insertPreview.' + k), k).toBeTypeOf('string')
+    }
   })
 
   it('never promises a date', () => {
