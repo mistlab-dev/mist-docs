@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/c-wind/mist-docs/internal/config"
 	"github.com/c-wind/mist-docs/internal/crypto"
@@ -47,8 +49,31 @@ func RootPath() string {
 	return r
 }
 
-// DocPath returns the directory for a document's files
+// ErrUnsafePath is returned when a bucket or document id could leave the
+// storage root (path separators, "..", NUL) or the document id is empty.
+var ErrUnsafePath = errors.New("store: unsafe path component")
+
+// safeSegment reports whether s can be used as one path element under the
+// root. Ids are UUIDs or team ids today; this is defence in depth in case a
+// caller ever passes a request value straight through.
+func safeSegment(s string) bool {
+	return s != "." && s != ".." && !strings.ContainsAny(s, "/\\\x00") && !strings.Contains(s, "..")
+}
+
+func checkIDs(deptID, docID string) error {
+	if docID == "" || !safeSegment(docID) || !safeSegment(deptID) {
+		return ErrUnsafePath
+	}
+	return nil
+}
+
+// DocPath returns the directory for a document's files. Unsafe ids are
+// mapped to a quarantine directory inside the root instead of escaping it;
+// the read/write helpers below refuse them outright.
 func DocPath(deptID, docID string) string {
+	if checkIDs(deptID, docID) != nil {
+		return filepath.Join(RootPath(), "_unsafe")
+	}
 	return filepath.Join(RootPath(), deptID, docID)
 }
 
@@ -64,6 +89,9 @@ func CurrentPath(deptID, docID string) string {
 
 // WriteVersion writes encrypted data as a new version file
 func WriteVersion(deptID, docID string, version int, data []byte) (string, int64, error) {
+	if err := checkIDs(deptID, docID); err != nil {
+		return "", 0, err
+	}
 	dir := DocPath(deptID, docID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", 0, fmt.Errorf("create doc dir: %w", err)
@@ -89,6 +117,9 @@ func WriteVersion(deptID, docID string, version int, data []byte) (string, int64
 
 // ReadCurrent reads and decrypts the current version data
 func ReadCurrent(deptID, docID string) ([]byte, error) {
+	if err := checkIDs(deptID, docID); err != nil {
+		return nil, err
+	}
 	path := CurrentPath(deptID, docID)
 	encryptedData, err := os.ReadFile(path)
 	if err != nil {
@@ -106,6 +137,9 @@ func ReadCurrent(deptID, docID string) ([]byte, error) {
 
 // ReadVersion reads and decrypts a specific version
 func ReadVersion(deptID, docID string, version int) ([]byte, error) {
+	if err := checkIDs(deptID, docID); err != nil {
+		return nil, err
+	}
 	path := VersionPath(deptID, docID, version)
 	encryptedData, err := os.ReadFile(path)
 	if err != nil {
