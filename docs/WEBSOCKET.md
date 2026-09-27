@@ -24,6 +24,14 @@ ws(s)://<host>/ws/teams/:team_id/docs/:doc_id?token=<portal_jwt>
 
 ### JSON 消息
 
+JSON 消息也用**二进制帧**发送（UTF-8 编码的 JSON）。第一个字节不是 `0`（sync）的帧按 JSON 解析，见 `web/src/utils/collab.ts`。
+
+**客户端 → 服务端：**
+
+```json
+{"type": "awareness", "data": {...}}
+```
+
 **服务端 → 客户端：**
 
 ```json
@@ -35,7 +43,24 @@ ws(s)://<host>/ws/teams/:team_id/docs/:doc_id?token=<portal_jwt>
 
 // 当前在线用户列表（加入时发送）
 {"type": "clients", "users": [{"id": "xxx", "name": "张三", "color": "#e06c75"}, ...]}
+
+// 其他人的光标/选区
+{"type": "awareness", "user_id": "xxx", "data": {...}}
+
+// 写权限变化（有人加锁/解锁、协作者权限被改）。编辑器据此切换只读
+{"type": "permission", "can_write": false, "locked_by": "u_123", "locked_by_name": "张三"}
+
+// 访问权被收回，随后服务端以关闭码 4403 断开，客户端不再重连
+{"type": "access", "reason": "revoked"}
 ```
+
+## 权限与锁
+
+- **连接时**校验：团队成员、文档属于该团队且未删除、至少有读权限。
+- **定期复查**：每 20 秒按团队角色和文档权限再查一次；另外，距上次检查超过 5 秒时，服务端在接受一条编辑前会先复查。被移出团队、权限被收回或文档被删除时，发送 `access` 消息并以关闭码 **4403** 断开。
+- **即时复查**：HTTP 接口加锁、解锁、修改协作者权限后，服务端立即复查该文档的所有连接（`handler.OnDocAccessChanged` → `Hub.Reauthorize`）。
+- **只读连接**：查看者，或文档被他人锁定时（管理员除外），连接保持、可以跟上同步，但服务端会丢掉他们发出的文档更新，并用 `permission` 消息告诉客户端 `can_write: false` 和锁定人。
+- HTTP 侧：`POST /documents/:id/lock` 被他人占用时返回 409 和 `locked_by` / `locked_by_name`；文档详情也带这两个字段。
 
 ## 前端集成（y-websocket）
 
@@ -45,7 +70,7 @@ import { WebsocketProvider } from 'y-websocket'
 
 const doc = new Y.Doc()
 const wsProvider = new WebsocketProvider(
-  'ws://host:8900/ws',
+  `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/teams/${teamId}`,
   `docs/${docId}?token=${token}`,
   doc,
   { WebSocketPolyfill: ... }
@@ -57,12 +82,12 @@ const wsProvider = new WebsocketProvider(
 
 ## 注意事项
 
-1. 二进制消息用 `WebSocket.BinaryMessage` 发送
-2. JSON 消息用 `WebSocket.TextMessage` 发送
+1. 所有消息（Yjs 与 JSON）都用 `WebSocket.BinaryMessage` 发送
+2. 客户端需设置 `binaryType = 'arraybuffer'`
 3. Go 服务端只做中转，不解析 Yjs 数据内容
 4. 状态持久化每 10 秒自动保存一次
 5. 房间无人时自动持久化并销毁
-6. 连接时校验团队成员、文档归属和读权限。查看者可以跟上同步，服务端会丢掉他们发出的文档更新。之后每 60 秒按团队角色再查一次，权限被收回就断开。
+6. 权限、锁和断开规则见上面的“权限与锁”。
 
 ## 完整前端示例（TipTap + Yjs）
 

@@ -147,6 +147,22 @@ go run ./cmd/devtoken -c configs/config.yaml -user dev-admin
 
 `devtoken` 只能给演示团队 `dev-team` 的成员签 token，对真实 Portal 库无效。演示账号：`dev-admin`（管理员）、`dev-editor`（编辑者）、`dev-viewer`（查看者）。
 
+#### 运行测试
+
+```bash
+go build ./... && go vet ./...
+go test ./internal/...                     # 单元测试，不需要数据库
+
+scripts/dev-db.sh mistdocs_it              # 一个可随意清空的测试库
+export MIST_DOCS_TEST_DB_NAME=mistdocs_it  # 必填；名为 mist_team 或含 prod 的库会被拒绝
+export MIST_DOCS_TEST_DB_USER=... MIST_DOCS_TEST_DB_PASSWORD=...   # 可选：HOST / PORT
+go test ./tests/                           # 集成测试；连不上库直接 FAIL，不会静默 SKIP
+
+cd web && npx vue-tsc --noEmit && npx vitest run && npx vite build
+```
+
+集成测试会建删数据，只能指向专用测试库，绝不要指向共享库或生产库。
+
 修改表结构后重新生成 `init-db.sql`：先让程序对一个本地库跑一遍 Migrate，再执行 `scripts/gen-init-db.sh <库名> > docker/init-db.sql`。
 
 ### 4. 配置
@@ -304,7 +320,7 @@ Nginx 装在宿主机，反代到 Docker 映射的 8900 端口。
 | `md_versions` | 文档版本（恢复历史版本会新增一个版本，不覆盖旧文件） |
 | `md_permissions` | 文档协作者权限 |
 | `md_team_folders` | 团队文件夹 |
-| `md_audits` | 审计日志 |
+| `md_audits` | 审计日志（注意：配置项 `audit.retain_days` 目前**没有**定时任务执行，旧审计不会被自动清理） |
 | `md_keys` | 加密密钥 |
 | `md_shares` | 分享链接 |
 | `md_comments` | 评论 |
@@ -316,6 +332,8 @@ Nginx 装在宿主机，反代到 Docker 映射的 8900 端口。
 | `md_doc_fragments` | 文档与团队片段的关联 |
 | `md_deadlines` / `md_deadline_events` | 交期 / 交期事件 |
 | `md_reminder_rules` / `md_reminder_log` | 提醒规则 / 提醒发送记录 |
+| `md_team_capacity` | 团队每日产能（插单预演用，按天计单数） |
+| `md_proposals` | 插单方案（预演结果，由编辑者确认后应用或驳回；`payload` 为 LONGTEXT JSON） |
 | `md_webhooks` / `md_webhook_logs` | Webhook 配置（按团队、按事件订阅）/ 投递日志 |
 
 来自 Portal 的共享表：`users`、`teams`、`team_members`、`fragments`。
@@ -355,6 +373,14 @@ docker run --rm -v mist-docs_app_data:/data -v $(pwd):/backup alpine \
 ```
 
 ### 手动部署
+
+推荐用 `scripts/backup-md-tables.sh`（只导出 `md_*` 表，`--single-transaction`，输出带 sha256 校验文件）：
+
+```bash
+MYSQL_DEFAULTS=~/.my-mistdocs.cnf scripts/backup-md-tables.sh mist_team /var/backups/mistdocs
+```
+
+等价的手工命令：
 
 ```bash
 # 备份（只备份 md_ 表；共享库里的 Portal 表由 Portal 负责）

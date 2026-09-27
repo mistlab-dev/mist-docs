@@ -20,13 +20,14 @@ docker compose up -d
 - 富文本编辑器（TipTap）
 - 文件夹树形管理
 - 文档移动、批量操作
-- 文档锁定/解锁
+- 文档锁定/解锁（其他人能看到锁定人；锁定后他人的保存和实时编辑都会被拒绝，管理员除外）
 - 自动保存 + 保存状态指示
 
 ### 📥 导入
 - .txt / .md / .html → 文档
 - .docx（Word）→ 文档，保留标题层级
 - .xlsx（Excel）→ 表格
+- 一次最多 20 个文件、每个 ≤10MB；Markdown 转成 HTML 后入库，与编辑器一致
 
 ### 📤 导出
 - HTML / Markdown / 纯文本 / PDF（扩展名与内容一致）
@@ -53,9 +54,9 @@ docker compose up -d
 - 空白 / 会议纪要 / 周报 / 需求文档 / API文档 / README / 故障排查 SOP / 变更运维手册（Runbook）
 
 ### 🔄 版本管理
-- 自动保存版本历史
+- 内容有变化才生成新版本（只打开不修改不会产生版本）
 - 版本对比（diff 红绿高亮）
-- 一键回退
+- 一键回退：恢复旧版本会新增一个版本，不覆盖任何已有版本
 
 ### 📊 文档统计
 - 字数 / 字符数 / 编辑次数
@@ -76,13 +77,22 @@ docker compose up -d
 - 文档变更通知外部系统
 - 默认订阅 `document.created` 与 `document.updated`
 - 创建文档投递 `document.created`，保存文档投递 `document.updated`（审计动作 `create_doc` / `edit_doc` 会映射到这两个名字）
-- 投递日志 + 开关控制
+- 可订阅事件：`document.created/updated/deleted/shared/imported/locked/unlocked/restored`、`comment.created`、`deadline.reminder`、`deadline.proposal_applied`，或 `*`
+- 投递日志 + 开关控制；仅管理员可配置
 
 ### 🔐 权限
 - **团队隔离**：所有业务数据按 `team_id` 划分（`/api/teams/:team_id/**`）
 - 团队成员校验由中间件强制（非成员 → 403）
 - 角色控制（admin / editor / viewer）
 - 文件夹 ACL + 文档级分享（显式分享优先）
+- 被移出团队或权限被收回后，已打开的实时编辑连接会在 20 秒内断开
+
+### 📅 交期看板
+- 交期列表 / 看板 / 变更记录，提醒规则（通知 + Webhook `deadline.reminder`）
+- **插单预演**：按团队每日产能排队，插单前看清哪些单会延误或新增违约（违约金备注、重点客户会标出来）
+- **两段式确认**：预演生成提议，编辑者一人确认后才落库；预演后数据有变化会拒绝执行（409）
+- **交期解释**：说明某张单为什么会晚，列出证据、缺失信息和建议，可一键带入插单预演
+- 以上都是确定性规则，mist-docs 本身不调用 AI；设计见 [DESIGN-DEADLINE-AI.md](DESIGN-DEADLINE-AI.md)
 
 ### 🔗 生态联动
 - 与 MistTerm 团队片段双向联动（文档 ↔ 片段绑定）
@@ -95,7 +105,7 @@ docker compose up -d
 - 大纲导航（标题跳转）
 - 水印
 - 移动端适配
-- API 限流（30 req/s）
+- API 限流（每 IP 30 req/s，突发 60）
 - OpenAPI 3.0 文档
 
 ---
@@ -122,14 +132,18 @@ mist-docs/
 │   ├── config/          # 配置
 │   ├── database/        # 数据库
 │   ├── handler/         # HTTP handlers
-│   ├── middleware/       # 中间件（JWT/CORS/限流）
+│   ├── middleware/      # 中间件（JWT/CORS/限流）
 │   ├── model/           # 数据模型
+│   ├── router/          # 路由注册（服务与集成测试共用）
+│   ├── schedule/        # 插单预演 / 交期解释（纯函数）
+│   ├── webhook/         # Webhook 事件目录与投递
 │   ├── service/         # 业务逻辑
 │   ├── store/           # 文件存储
 │   ├── ws/              # WebSocket
 │   └── crypto/          # 加密
 ├── web/                 # 前端（Vue 3）
-├── migrations/          # 数据库迁移
+├── migrations/          # 历史文件（部门版），新安装用 docker/init-db.sql
+├── tests/               # 集成测试（go test ./tests/，需要专用测试库）
 ├── docker/              # Docker 相关文件
 ├── docs/                # 文档
 ├── Dockerfile
@@ -141,7 +155,7 @@ mist-docs/
 
 ## API 文档
 
-本机进程：`http://127.0.0.1:8900/api/openapi.json`。`POST /auth/login` 已废弃，登录走 Portal。路径前缀是 `/api/teams/{team_id}/...`。
+本机进程：`http://127.0.0.1:8900/api/openapi.json`（`internal/router` 的测试保证它列出全部路由）。`POST /auth/login` 与 `PUT /auth/password` 已废弃，返回 410，登录和改密码走 Portal。路径前缀是 `/api/teams/{team_id}/...`。
 
 或在线查看：导入到 [Swagger Editor](https://editor.swagger.io)
 
@@ -150,6 +164,8 @@ mist-docs/
 ## 相关链接
 
 - [部署指南](DEPLOYMENT.md)
-- [设计文档](DESIGN.md)
+- [设计文档（部门版，已过时）](DESIGN.md)
+- [统一认证设计](UNIFIED-AUTH-DESIGN.md)
+- [交期智能体设计](DESIGN-DEADLINE-AI.md)
 - [WebSocket 协议](WEBSOCKET.md)
 - [GitHub](https://github.com/mistlab-dev/mist-docs)
