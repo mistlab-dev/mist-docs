@@ -107,7 +107,14 @@ func Migrate() error {
 	DB.Exec(`ALTER TABLE md_doc_fragments MODIFY document_id VARCHAR(36) NOT NULL COLLATE utf8mb4_general_ci`)
 
 	// Older installs created these tables before team scope and updated_at.
-	// Adding a missing column keeps existing rows.
+	// Adding a missing column keeps existing rows. Production already has
+	// all of these (added by scripts/migrate-team.sql), so this only heals
+	// databases created from an old init-db.sql; ensureColumn checks first
+	// and skips existing columns and missing tables.
+	for _, table := range []string{"md_documents", "md_audits", "md_shares", "md_comments", "md_notifications", "md_tags"} {
+		ensureColumn(table, "team_id", "team_id VARCHAR(64) DEFAULT ''")
+	}
+	ensureIndex("md_documents", "idx_md_docs_team", "team_id")
 	ensureColumn("md_webhooks", "team_id", "team_id VARCHAR(64) DEFAULT ''")
 	ensureColumn("md_webhooks", "updated_at", "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
 	ensureColumn("md_templates", "team_id", "team_id VARCHAR(64) DEFAULT ''")
@@ -139,7 +146,34 @@ func Migrate() error {
 	return migrateDeadlines()
 }
 
+func tableExists(table string) bool {
+	var n int
+	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?`, table).Scan(&n)
+	return n > 0
+}
+
+// ensureIndex adds a secondary index when the table exists and has no index
+// of that name.
+func ensureIndex(table, name, columns string) {
+	if !tableExists(table) {
+		return
+	}
+	var n int
+	if err := DB.QueryRow(
+		`SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`,
+		table, name,
+	).Scan(&n); err != nil || n > 0 {
+		return
+	}
+	if _, err := DB.Exec(`ALTER TABLE ` + table + ` ADD INDEX ` + name + ` (` + columns + `)`); err != nil {
+		fmt.Printf("migrate index %s.%s: %v\n", table, name, err)
+	}
+}
+
 func ensureColumn(table, column, ddl string) {
+	if !tableExists(table) {
+		return
+	}
 	var n int
 	if err := DB.QueryRow(
 		`SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?`,
