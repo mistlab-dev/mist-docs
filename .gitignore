@@ -6,13 +6,12 @@ dist/
 .env.local
 /configs/config.local.yaml
 secrets/master.key
-mist-docs
-mist-docs-linux
+/mist-docs
+/mist-docs-linux
 
-# Build artifacts
-server
-mist-docs-test
-mist-docs
+# Build artifacts (root only: a bare "server" also ignored cmd/server/)
+/server
+/mist-docs-test
 build/
 
 # Local deploy target (contains production host address)
