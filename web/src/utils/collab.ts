@@ -39,6 +39,9 @@ export class MistWSProvider {
   public onAwareness: ((data: any) => void) | null = null
   // Server closed with 4403: the user lost access. No reconnect after this.
   public onAccessRevoked: (() => void) | null = null
+  // Write access changed while connected (document locked/unlocked by
+  // someone, or permission changed). The server already enforces it.
+  public onPermission: ((p: { can_write: boolean; locked_by: string; locked_by_name: string }) => void) | null = null
 
   constructor(url: string, doc: Y.Doc) {
     this.url = url
@@ -98,6 +101,7 @@ export class MistWSProvider {
           else if (msg.type === 'leave') this.onUserLeave?.(msg.user.id)
           else if (msg.type === 'clients') this.onClients?.(msg.users)
           else if (msg.type === 'awareness') this.onAwareness?.(msg.data)
+          else if (msg.type === 'permission') this.onPermission?.(msg)
         } catch {}
       }
     }
