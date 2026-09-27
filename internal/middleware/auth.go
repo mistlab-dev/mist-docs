@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/config"
@@ -118,37 +120,86 @@ func JWTAuth() gin.HandlerFunc {
 
 // ParseMistLabToken validates a token and returns the user ID.
 // Tries MistLab (Portal) format first, then falls back to legacy MistDocs format.
+//
+// Two transition checks only log for now (see UNIFIED-AUTH-DESIGN, D8/D9):
+//   - a legacy MistDocs token (user_id claim) is still accepted but logged,
+//     so we can see whether anyone still carries one before removing it;
+//   - a Portal token whose iss differs from jwt.issuer is accepted but logged.
 func ParseMistLabToken(tokenStr string) (string, error) {
-	secret := []byte(config.C.JWT.Secret)
-
-	// Try MistLab (Portal) token: { uid: "u_xxx" }
-	token, err := jwt.ParseWithClaims(tokenStr, &MistLabClaims{}, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return secret, nil
-	})
-	if err == nil {
-		if claims, ok := token.Claims.(*MistLabClaims); ok && token.Valid && claims.UserID != "" {
-			return claims.UserID, nil
+	uid, kind, iss, err := parseToken(tokenStr)
+	if err != nil {
+		return "", err
+	}
+	switch kind {
+	case tokenLegacy:
+		authLog.note("legacy:"+uid, "auth: legacy MistDocs token accepted for user %s (D8: logged only, not rejected)", uid)
+	case tokenPortal:
+		if want := config.C.JWT.Issuer; want != "" && iss != want {
+			authLog.note("iss:"+iss, "auth: token issuer %q does not match jwt.issuer %q (D9: logged only, not enforced)", iss, want)
 		}
 	}
-
-	// Fallback: try legacy MistDocs token: { user_id: "xxx", ... }
-	token2, err := jwt.ParseWithClaims(tokenStr, &LegacyClaims{}, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return secret, nil
-	})
-	if err == nil {
-		if claims, ok := token2.Claims.(*LegacyClaims); ok && token2.Valid && claims.UserID != "" {
-			return claims.UserID, nil
-		}
-	}
-
-	return "", fmt.Errorf("invalid token")
+	return uid, nil
 }
+
+type tokenKind int
+
+const (
+	tokenPortal tokenKind = iota + 1
+	tokenLegacy
+)
+
+// parseToken does the signature/expiry check and reports which format matched.
+func parseToken(tokenStr string) (uid string, kind tokenKind, issuer string, err error) {
+	secret := []byte(config.C.JWT.Secret)
+	keyFunc := func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return secret, nil
+	}
+
+	// MistLab (Portal) token: { uid: "u_xxx" }
+	if token, err := jwt.ParseWithClaims(tokenStr, &MistLabClaims{}, keyFunc); err == nil {
+		if claims, ok := token.Claims.(*MistLabClaims); ok && token.Valid && claims.UserID != "" {
+			return claims.UserID, tokenPortal, claims.Issuer, nil
+		}
+	}
+
+	// Legacy MistDocs token: { user_id: "xxx", ... }
+	if token, err := jwt.ParseWithClaims(tokenStr, &LegacyClaims{}, keyFunc); err == nil {
+		if claims, ok := token.Claims.(*LegacyClaims); ok && token.Valid && claims.UserID != "" {
+			return claims.UserID, tokenLegacy, claims.Issuer, nil
+		}
+	}
+
+	return "", 0, "", fmt.Errorf("invalid token")
+}
+
+// throttledLog prints a message at most once per key per interval, so a
+// busy client with an old token does not flood the log.
+type throttledLog struct {
+	mu       sync.Mutex
+	last     map[string]time.Time
+	interval time.Duration
+	printf   func(format string, args ...any)
+}
+
+func (l *throttledLog) note(key, format string, args ...any) {
+	l.mu.Lock()
+	now := time.Now()
+	if t, ok := l.last[key]; ok && now.Sub(t) < l.interval {
+		l.mu.Unlock()
+		return
+	}
+	if len(l.last) > 10000 { // bound memory; worst case we log a key again
+		l.last = map[string]time.Time{}
+	}
+	l.last[key] = now
+	l.mu.Unlock()
+	l.printf(format, args...)
+}
+
+var authLog = &throttledLog{last: map[string]time.Time{}, interval: time.Hour, printf: log.Printf}
 
 func extractToken(c *gin.Context) string {
 	auth := c.GetHeader("Authorization")
