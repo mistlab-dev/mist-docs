@@ -103,6 +103,8 @@ echo "TrustedUserCAKeys /etc/ssh/team-backend-ca.pub,/etc/ssh/team-frontend-ca.p
 
 ### ⏳ 待完成
 
+> 另行跟踪（MistTerm/运维，不在本仓库）：以下事项不属于 mist-docs 代码，2026-09 核对时保持未勾选，不在本仓库推进。
+
 - [ ] 生产机 <prod-host> 配置 CA 信任
 - [ ] 密钥文件备份到安全位置
 - [ ] Vault 审计日志开启

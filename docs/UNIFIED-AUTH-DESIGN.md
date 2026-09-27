@@ -153,10 +153,10 @@ md_departments    — 用 md_team_folders 替代
 
 **API 路由：**
 ```
-POST /api/auth/sso            — SSO token 交换（Portal token → Docs session）
-GET  /api/auth/me             — 当前用户（查 users 表）
+POST /api/auth/sso            — （未实现，见下方说明）
+GET  /api/auth/me             — 当前用户（查 users 表），同时返回 teams 团队列表
 
-GET  /api/teams               — 我的团队列表（查 team_members + teams）
+GET  /api/teams               — （未实现，团队列表由 /api/auth/me 返回）
 GET  /api/teams/:team_id/folders/tree    — 团队文件夹树
 POST /api/teams/:team_id/folders         — 创建文件夹
 PUT  /api/teams/:team_id/folders/:id     — 更新文件夹
@@ -171,6 +171,11 @@ DELETE /api/teams/:team_id/documents/:id — 删除文档
 POST /api/teams/:team_id/documents/:id/share — 分享
 ...（权限、评论、通知等）
 ```
+
+> **实际实现（2026-09 核对）**：没有做 `POST /api/auth/sso` 和 `GET /api/teams`。
+> Portal 登录后带着 token 跳回前端 `/auth/callback?token=...`（可选 `refresh_token`），
+> 前端存下 token，直接用它调 `/api/auth/me`；团队列表在 `/api/auth/me` 的 `teams` 字段里。
+> MistDocs 不再签发自己的会话 token。
 
 ## 5. 认证流程
 
@@ -341,45 +346,47 @@ ALTER TABLE md_audits ADD COLUMN team_id VARCHAR(64) DEFAULT '';
 
 ## 8. 实施计划
 
+> 状态按 2026-09 的代码核对（分支 phase-0 ～ phase-8）。`[x]` 为已完成；未勾选项后面写明原因。
+
 ### Phase 1: 数据库 Schema (1天)
-- [ ] 创建 `md_team_folders`
-- [ ] `md_documents` / `md_folders` / `md_audits` 加 `team_id`
-- [ ] 清理 `md_departments` 重复数据
-- [ ] 编写数据迁移脚本
-- [ ] 验证 migration
+- [x] 创建 `md_team_folders`
+- [x] `md_documents` / `md_folders` / `md_audits` 加 `team_id`（启动时 `database.Migrate` 会补齐缺失的 `team_id` 列）
+- [ ] 清理 `md_departments` 重复数据 —— 不再清理：整张表按 D5 先备份再改名归档，见 `scripts/archive-legacy-tables.sql`
+- [x] 编写数据迁移脚本（`scripts/migrate-team.sql`）
+- [x] 验证 migration（新库由 `scripts/gen-init-db.sh` 生成的 `docker/init-db.sql` 建出，集成测试在其上全部通过）
 
 ### Phase 2: 认证统一 (1天)
-- [ ] MistDocs JWT secret 改为 Portal 相同
-- [ ] 新 `SharedJWTAuth` 中间件
-- [ ] 删除 `Login` handler，加 `Me`（查 users 表）
-- [ ] Portal 登录页支持 redirect 参数
-- [ ] 跨域 token 传递方案实现
-- [ ] 前端 auth store 适配
+- [x] MistDocs JWT secret 改为 Portal 相同（配置项 `jwt.secret`）
+- [x] 新 `SharedJWTAuth` 中间件（实现为 `middleware.JWTAuth`，接受 Portal token；旧 MistDocs token 仍接受但会记日志，D8）
+- [x] 删除 `Login` handler，加 `Me`（查 users 表）—— `POST /api/auth/login` 返回 410；`PUT /api/auth/password` 也返回 410，改密码去 Portal
+- [x] Portal 登录页支持 redirect 参数（Portal 侧；前端跳转时带 `?redirect=`）
+- [x] 跨域 token 传递方案实现 —— 用 `/auth/callback?token=` 代替原设计的 `POST /api/auth/sso`
+- [x] 前端 auth store 适配（团队列表来自 `/api/auth/me`，代替原设计的 `GET /api/teams`）
 
 ### Phase 3: API 改造 (2天)
-- [ ] 所有 MistDocs API 加 `/teams/:team_id` 前缀
-- [ ] 文档查询/创建/删除按 team_id 隔离
-- [ ] 新文件夹 API（md_team_folders CRUD）
-- [ ] 权限检查改用三层模型
-- [ ] 协作者/分享适配
+- [x] 所有 MistDocs API 加 `/teams/:team_id` 前缀（旧的无前缀接口已从代码里删除）
+- [x] 文档查询/创建/删除按 team_id 隔离
+- [x] 新文件夹 API（md_team_folders CRUD）
+- [x] 权限检查改用三层模型（团队角色 + 文件夹 ACL + 文档协作者，`service.HasTeamPermission`；ws 连接同样检查并定期复查）
+- [x] 协作者/分享适配
 
 ### Phase 4: 前端整合 (1.5天)
-- [ ] 团队选择器组件
-- [ ] Docs.vue / DocEditor.vue 适配
-- [ ] 文件夹树管理页面
-- [ ] 删除旧页面（部门管理、用户管理）
-- [ ] 侧栏导航调整
+- [x] 团队选择器组件（顶栏团队切换）
+- [x] Docs.vue / DocEditor.vue 适配
+- [x] 文件夹树管理页面（管理后台 · 文件夹管理）
+- [x] 删除旧页面（部门管理、用户管理）
+- [x] 侧栏导航调整
 
 ### Phase 5: 部署与 Nginx (0.5天)
-- [ ] Nginx 配置 term.mistlab.dev / docs.mistlab.dev
-- [ ] SSL 证书（通配符 *.mistlab.dev 或单独）
-- [ ] 编译部署三个服务
-- [ ] 全流程 E2E 测试
+- [ ] Nginx 配置 term.mistlab.dev / docs.mistlab.dev —— 运维侧维护，本仓库不核对
+- [ ] SSL 证书（通配符 *.mistlab.dev 或单独）—— 同上
+- [x] 编译部署三个服务（MistDocs 见 `scripts/deploy.sh` 与 `docs/DEPLOYMENT.md`）
+- [ ] 全流程 E2E 测试 —— 仓库内有 Go 集成测试（`go test ./tests/`，CI 带 MySQL 8）；跨 Portal 的端到端流程另行跟踪
 
 ### Phase 6: 清理 (0.5天)
-- [ ] 删除 md_users、md_departments
-- [ ] 清理废弃代码
-- [ ] 更新文档
+- [ ] 删除 md_users、md_departments —— 脚本已就绪（`scripts/backup-md-tables.sh`、`scripts/archive-legacy-tables.sql`），先改名归档，观察后再删；尚未在生产执行
+- [x] 清理废弃代码（未挂路由的旧 handler/service 已删除）
+- [x] 更新文档
 
 ## 9. Nginx 配置草案
 

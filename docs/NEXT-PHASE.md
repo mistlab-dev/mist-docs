@@ -53,7 +53,9 @@
 
 ---
 
----
+> 2026-09 整理：原文第二～第四阶段、“验收/发布准则”各出现了两次，且勾选状态互相矛盾，
+> 这里合并为一份，以已完成（✅）的状态为准；原来错放在“验收/发布准则”下面的客户端文件清单
+> 移回第一阶段。第一、二、四阶段属于 MistTerm 客户端 / 运维，不在本仓库，未完成项另行跟踪。
 
 ## 第一阶段：客户端命令审计闭环（P0）
 
@@ -63,55 +65,9 @@
 2. [x] 本地审计文案区分 — 代码已含 "本地检查" / "服务器策略" 文案区分 ✅
 3. [x] Agent 不可用降级提示 — 60s 轮询 + 黄色横幅 + 恢复通知 ✅
 4. [x] 团队设置页 Agent 状态展示 — 列表/状态/心跳/启禁用 ✅
-5. [ ] 实机联调（8 个场景验证）— 等用户手动测试
+5. [ ] 实机联调（8 个场景验证）— 等用户手动测试（MistTerm 客户端，另行跟踪）
 
----
-
-## 第二阶段：片段体验补齐（P1）
-
-6. [x] 异常退出清理编辑锁 — 启动时自动检查 + 清理残留锁 ✅
-7. [x] 团队设置页接存储用量 API — 进度条 + 分项展示 + 动态列 ✅
-
----
-
-## 第三阶段：MistDocs 增强（P2）
-
-8. [x] 文档版本历史 — 已完整实现，无需开发 ✅
-9. [x] 文档评论/批注 — TeamCreateComment 修复 user_name 缺失，CRUD 已验证 ✅
-10. [x] 文档模板 — 内置故障排查/部署手册/架构设计 3 个模板 ✅
-
-### 涉及仓库
-- `/root/work/mist-docs` commit 524556d
-
----
-
-## 第四阶段：运维安全加固（P2）
-
-11. [x] SSH 密码登录关闭 — PasswordAuthentication no，CA cert 验证通过 ✅
-12. [x] 操作审计增强 — audit-archiver.sh 每日归档 SSH/nginx/mist logs + 90天保留 ✅
-13. [x] 监控告警 — monitor.sh 每30分钟检查服务/端口/磁盘/内存/负载/OOM/SSH暴力破解 ✅
-
-### 部署记录（2026-08-24）
-- sshd_config: PasswordAuthentication no, LogLevel VERBOSE
-- crontab: monitor.sh */30 * * * *, audit-archiver.sh 0 2 * * *
-- 脚本: /opt/mistlab/monitor.sh, /opt/mistlab/audit-archiver.sh
-- 日志: /var/log/mistlab-monitor.log, /var/log/mistlab-alerts.log, /var/log/mistlab-archive/
-
-### 涉及文件
-- `scripts/monitor.sh` — 服务/端口/资源监控
-- `scripts/audit-archiver.sh` — 日志归档
-
----
-
-## 验收/发布准则
-
-- 服务端改动：`go build` + `go vet` + `go test`
-- 客户端改动：`cargo build` + `cargo test`
-- 前端改动：`npm run build` + 页面 200 检查
-- 发布前：`git pull --ff-only` + 查最新 tag
-- 部署：`./scripts/deploy.sh`（含版本注入 + healthz 验证）
-
-### 涉及文件
+### 涉及文件（MistTerm 客户端仓库）
 - `src/core/cmd_audit.rs` — ServerAuditProbe + 文案
 - `src/ui/terminal.rs` — PTY feed + pending_server_audit
 - `src/ui/app.rs` — poll_server_audit_from_tabs + handle_server_audit_event
@@ -128,50 +84,49 @@
 
 ## 第二阶段：片段体验补齐（P1）
 
-6. [x] 异常退出清理编辑锁（启动时检查 + 编辑中心跳续锁 30s + TTL 兜底）
-7. [x] 团队设置页接存储用量 API（进度条 + 分项展示）
+6. [x] 异常退出清理编辑锁 — 启动时自动检查 + 清理残留锁 + 编辑中心跳续锁 30s + TTL 兜底 ✅
+7. [x] 团队设置页接存储用量 API — 进度条 + 分项展示 + 动态列 ✅
 
-### 涉及文件
+### 涉及文件（MistTerm 客户端仓库）
 - `src/core/team/service_blocking.rs` — lock/unlock
 - `src/ui/team_fragment_dialog.rs` — 编辑界面心跳
 - `src/ui/team_ui.rs` — 存储用量 UI
-
-### 交付标准
-- `cargo test` 通过
-- UI 截图验证
 
 ---
 
 ## 第三阶段：MistDocs 增强（P2）
 
-8. [x] 文档版本历史（自动保存版本 + diff 查看 + 回滚）— 已完整实现，无需开发
-9. [ ] 文档评论/批注（团队成员可评论回复）— 待启动
-10. [ ] 文档模板（故障排查、部署手册、架构设计预置模板）— 待启动
+8. [x] 文档版本历史（自动保存版本 + diff 查看 + 回滚）— 已完整实现 ✅（2026-09：恢复旧版本改为新增一个版本，不再覆盖文件；内容没变时不再生成新版本）
+9. [x] 文档评论/批注 — TeamCreateComment 修复 user_name 缺失，CRUD 已验证 ✅
+10. [x] 文档模板 — 内置故障排查/部署手册/架构设计 3 个模板 ✅
 
 ### 涉及仓库
-- `/root/work/mist-docs`
-
-### 交付标准
-- `go build` + `npm run build` 通过
-- mist-docs 部署 + 端到端验证
+- `mist-docs`（commit 524556d）
 
 ---
 
 ## 第四阶段：运维安全加固（P2）
 
-11. [ ] SSH 密码登录关闭（前置：确认所有用户已配置 CA 证书）
-12. [ ] 操作审计增强（登录日志、API 调用日志、敏感操作归档）
-13. [ ] 监控告警（服务异常 / DB 断连 / 磁盘 >90% 自动告警）
+11. [x] SSH 密码登录关闭 — PasswordAuthentication no，CA cert 验证通过 ✅
+12. [x] 操作审计增强 — audit-archiver.sh 每日归档 SSH/nginx/mist logs + 90天保留 ✅
+13. [x] 监控告警 — monitor.sh 每30分钟检查服务/端口/磁盘/内存/负载/OOM/SSH暴力破解 ✅
 
-### 交付标准
-- 生产机配置变更 + 告警通知验证
+### 部署记录（2026-08-24）
+- sshd_config: PasswordAuthentication no, LogLevel VERBOSE
+- crontab: monitor.sh */30 * * * *, audit-archiver.sh 0 2 * * *
+- 脚本: /opt/mistlab/monitor.sh, /opt/mistlab/audit-archiver.sh
+- 日志: /var/log/mistlab-monitor.log, /var/log/mistlab-alerts.log, /var/log/mistlab-archive/
+
+### 涉及文件（运维仓库，不在本仓库）
+- `scripts/monitor.sh` — 服务/端口/资源监控
+- `scripts/audit-archiver.sh` — 日志归档
 
 ---
 
 ## 验收/发布准则
 
-- 服务端改动：`go build` + `go vet` + `go test`
+- 服务端改动：`go build` + `go vet` + `go test ./internal/...` + `go test ./tests/`（本地 MySQL/MariaDB 测试库，见 DEPLOYMENT.md）
 - 客户端改动：`cargo build` + `cargo test`
-- 前端改动：`npm run build` + 页面 200 检查
+- 前端改动：`npx vue-tsc --noEmit` + `npx vitest run` + `npm run build` + 页面 200 检查
 - 发布前：`git pull --ff-only` + 查最新 tag
 - 部署：`./scripts/deploy.sh`（含版本注入 + healthz 验证）

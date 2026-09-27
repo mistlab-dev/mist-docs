@@ -86,6 +86,8 @@ MistTerm 从"安全工具"升级为"运维 Copilot"：
 
 ## 七、下一步行动
 
+> 另行跟踪（MistTerm/运维，不在本仓库）：以下事项不属于 mist-docs 代码，2026-09 核对时保持未勾选，不在本仓库推进。
+
 - [ ] 画一张 MistTerm + AI Agent 的完整架构图
 - [ ] 写个 1 周技术验证 demo：在 MistTerm 里加 `/ai` 命令，自然语言输入 → 真的去连机器执行
 - [ ] 列 MVP 的 PRD 草案
