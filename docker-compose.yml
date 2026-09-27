@@ -12,6 +12,10 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/init-db.sql:/docker-entrypoint-initdb.d/001-init.sql
+      # Dev/demo only: minimal Portal tables (users/teams/team_members/fragments)
+      # plus a demo team. Remove this line when MistDocs shares the Portal's DB.
+      # Sign in with: go run ./cmd/devtoken -c <config> -user dev-admin
+      - ./docker/dev-portal-tables.sql:/docker-entrypoint-initdb.d/002-dev-portal.sql
     ports:
       - "${MYSQL_PORT_MAP:-3306}:3306"
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
