@@ -10,9 +10,9 @@
         <el-button @click="loadAll" :loading="loading">
           <el-icon><Refresh /></el-icon>
         </el-button>
-        <el-button type="primary" @click="openCreate">
+        <GuardedButton type="primary" :allowed="canEdit" :reason="t('perm.needEditor')" @click="openCreate">
           <el-icon><Plus /></el-icon> {{ t('deadlines.newDeadline') }}
-        </el-button>
+        </GuardedButton>
       </div>
     </div>
 
@@ -153,7 +153,7 @@
           <el-table-column :label="t('common.operation')" width="120" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openDetail(row)">{{ t('common.detail') }}</el-button>
-              <el-button link @click="openEdit(row)">{{ t('common.edit') }}</el-button>
+              <el-button v-if="canEdit" link @click="openEdit(row)">{{ t('common.edit') }}</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -176,10 +176,11 @@
       <!-- ==================== 提醒规则 ==================== -->
       <el-tab-pane :label="t('deadlines.rules')" name="rules">
         <div class="rules-head">
-          <el-button @click="seedRules">{{ t('deadlines.seedRules') }}</el-button>
-          <el-button type="primary" @click="openRuleCreate">
+          <span v-if="!isAdmin" class="perm-hint">{{ t('perm.needAdmin') }}</span>
+          <GuardedButton :allowed="isAdmin" :reason="t('perm.needAdmin')" @click="seedRules">{{ t('deadlines.seedRules') }}</GuardedButton>
+          <GuardedButton type="primary" :allowed="isAdmin" :reason="t('perm.needAdmin')" @click="openRuleCreate">
             <el-icon><Plus /></el-icon> {{ t('deadlines.newRule') }}
-          </el-button>
+          </GuardedButton>
         </div>
 
         <el-table :data="rules" v-loading="loading" empty-text="—">
@@ -199,10 +200,10 @@
           </el-table-column>
           <el-table-column :label="t('deadlines.enabled')" width="100">
             <template #default="{ row }">
-              <el-switch :model-value="row.enabled" @change="(v: boolean) => toggleRule(row, v)" />
+              <el-switch :model-value="row.enabled" :disabled="!isAdmin" @change="(v: boolean) => toggleRule(row, v)" />
             </template>
           </el-table-column>
-          <el-table-column :label="t('common.edit')" width="140">
+          <el-table-column v-if="isAdmin" :label="t('common.edit')" width="140">
             <template #default="{ row }">
               <el-button size="small" @click="openRuleEdit(row)">{{ t('common.edit') }}</el-button>
               <el-button size="small" type="danger" @click="removeRule(row)">{{ t('common.delete') }}</el-button>
@@ -316,10 +317,10 @@
       </div>
       <template #footer>
         <div class="detail-footer">
-          <el-button type="danger" plain @click="removeDeadline">{{ t('common.delete') }}</el-button>
+          <GuardedButton type="danger" plain :allowed="canDeleteDetail" :reason="canEdit ? t('perm.deadlineDelete') : t('perm.needEditor')" @click="removeDeadline">{{ t('common.delete') }}</GuardedButton>
           <span class="footer-gap" />
           <el-button @click="detailVisible = false">{{ t('common.close') }}</el-button>
-          <el-button type="primary" @click="openEdit(detail)">{{ t('common.edit') }}</el-button>
+          <GuardedButton type="primary" :allowed="canEdit" :reason="t('perm.needEditor')" @click="openEdit(detail)">{{ t('common.edit') }}</GuardedButton>
         </div>
       </template>
     </el-dialog>
@@ -364,8 +365,16 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import teamApi from '@/utils/team-api'
+import GuardedButton from '@/components/GuardedButton.vue'
+import { useAuthStore } from '@/stores/auth'
+import { canManageRecord } from '@/utils/roles'
 
 const { t } = useI18n()
+const auth = useAuthStore()
+// Mirrors the API (D2): editors create/update, admins manage rules,
+// delete is the creator, the 负责人 or an admin.
+const canEdit = computed(() => auth.canEditTeam)
+const isAdmin = computed(() => auth.isTeamAdmin)
 
 interface Deadline {
   id: string
@@ -379,6 +388,7 @@ interface Deadline {
   progress: number
   priority: string
   owner_id?: string
+  created_by?: string
   owner_name?: string
   remark?: string
   days_left: number
@@ -425,6 +435,8 @@ const formVisible = ref(false)
 const detailVisible = ref(false)
 const ruleVisible = ref(false)
 const detail = ref<Deadline | null>(null)
+const canDeleteDetail = computed(() =>
+  !!detail.value && canManageRecord(auth.currentTeamRole, auth.user?.id, detail.value.created_by, detail.value.owner_id))
 
 const emptyForm = () => ({
   id: '',
@@ -1045,6 +1057,7 @@ onMounted(loadAll)
   align-items: center;
   width: 100%;
 }
+.perm-hint { color: var(--el-text-color-secondary); font-size: 12px; margin-right: 12px; }
 .detail-footer .footer-gap {
   flex: 1;
 }

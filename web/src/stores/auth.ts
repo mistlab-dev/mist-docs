@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import http from '@/utils/http'
+import { canEditRole, isAdminRole } from '@/utils/roles'
 
 interface Team {
   team_id: string
@@ -49,8 +50,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const isLoggedIn = computed(() => !!token.value)
-  const isAdmin = computed(() => user.value?.is_admin || currentTeamRole.value === 'admin')
-  const isTeamAdmin = computed(() => currentTeamRole.value === 'admin')
+  const isAdmin = computed(() => user.value?.is_admin || isAdminRole(currentTeamRole.value))
+  // owner has every admin right (D4)
+  const isTeamAdmin = computed(() => isAdminRole(currentTeamRole.value))
+  // editor and up: may create/edit team content
+  const canEditTeam = computed(() => canEditRole(currentTeamRole.value))
 
   // DEPRECATED: local login no longer supported
   async function login(_username: string, _password: string) {
@@ -111,7 +115,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     token, refreshToken, user, currentTeamId, currentTeamRole,
-    isLoggedIn, isAdmin, isTeamAdmin,
+    isLoggedIn, isAdmin, isTeamAdmin, canEditTeam,
     login, redirectToPortalLogin, handleSSOCallback, logout, fetchMe, setTeam
   }
 })

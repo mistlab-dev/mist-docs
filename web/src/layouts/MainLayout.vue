@@ -149,7 +149,9 @@
                 <el-dropdown-item command="theme-system">
                   <span class="theme-item"><el-icon><Monitor /></el-icon>{{ t('mainLayout.themeSystem') }}<span v-if="themeMode === 'system'" class="theme-check">✓</span></span>
                 </el-dropdown-item>
-                <el-dropdown-item command="password">{{ t('mainLayout.changePassword') }}</el-dropdown-item>
+                <el-dropdown-item command="account" divided>
+                  <span class="theme-item"><el-icon><User /></el-icon>{{ t('mainLayout.accountSettings') }}<span class="menu-ext">↗</span></span>
+                </el-dropdown-item>
                 <el-dropdown-item command="logout" divided>{{ t('mainLayout.logout') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -161,21 +163,6 @@
       </el-main>
     </el-container>
 
-    <!-- 修改密码对话框 -->
-    <el-dialog v-model="showPasswordDialog" :title="t('mainLayout.changePassword')" width="400">
-      <el-form :model="passwordForm" label-width="80px">
-        <el-form-item :label="t('mainLayout.oldPassword')">
-          <el-input v-model="passwordForm.old" type="password" show-password />
-        </el-form-item>
-        <el-form-item :label="t('mainLayout.newPassword')">
-          <el-input v-model="passwordForm.new_" type="password" show-password />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showPasswordDialog = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="changePassword">{{ t('common.confirm') }}</el-button>
-      </template>
-    </el-dialog>
 
     <!-- 通知面板 -->
     <el-drawer v-model="showNotifications" :title="t('mainLayout.notifications')" size="360px">
@@ -239,7 +226,6 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
-import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
 import LangSwitch from '@/components/LangSwitch.vue'
 
@@ -289,8 +275,8 @@ function onMenuSelect() {
   if (window.innerWidth <= 768) mobileMenu.value = false
 }
 
-const showPasswordDialog = ref(false)
-const passwordForm = ref({ old: '', new_: '' })
+// Accounts (password, email, sign-in methods) live in the Portal (D1).
+const portalUrl = import.meta.env.VITE_PORTAL_URL || 'https://mistlab.dev'
 
 // Notifications
 const showNotifications = ref(false)
@@ -344,26 +330,13 @@ function handleCommand(cmd: string) {
   if (cmd === 'logout') {
     auth.logout()
     auth.redirectToPortalLogin()
-  } else if (cmd === 'password') {
-    showPasswordDialog.value = true
+  } else if (cmd === 'account') {
+    window.open(portalUrl, '_blank', 'noopener')
   } else if (cmd === 'theme-light' || cmd === 'theme-dark' || cmd === 'theme-system') {
     setThemeMode(cmd.slice('theme-'.length) as ThemeMode)
   }
 }
 
-async function changePassword() {
-  try {
-    await http.put('/auth/password', {
-      old_password: passwordForm.value.old,
-      new_password: passwordForm.value.new_,
-    })
-    ElMessage.success(t('mainLayout.passwordChanged'))
-    showPasswordDialog.value = false
-    passwordForm.value = { old: '', new_: '' }
-  } catch {
-    ElMessage.error(t('mainLayout.passwordChangeFailed'))
-  }
-}
 
 onMounted(() => {
   const setVh = () => document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`)
@@ -476,6 +449,7 @@ onMounted(() => {
 .portal-link-mark { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
 .user-area { display: flex; align-items: center; gap: 16px; }
 .theme-item { display: inline-flex; align-items: center; gap: 8px; min-width: 140px; }
+.menu-ext { margin-left: auto; opacity: .6; }
 .theme-check { margin-left: auto; color: var(--md-link-ep, #409eff); }
 .team-chip { max-width: 180px; }
 .team-switch {
