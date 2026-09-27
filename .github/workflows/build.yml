@@ -22,26 +22,18 @@ jobs:
 
       - name: Install Frontend Dependencies
         working-directory: web
-        run: |
-          npm install --legacy-peer-deps
-          ls node_modules/.bin/vite || echo "vite not found in .bin"
-          ls node_modules/vite/package.json || echo "vite package not found"
+        run: npm ci
 
-      - name: Lint Frontend (vue-tsc)
+      - name: Type-check Frontend (vue-tsc)
         working-directory: web
-        run: |
-          npx vue-tsc --noEmit --skipLibCheck 2>&1 | grep -E 'SheetEditor|DocEditor|Docs\.vue' || true
-          # Check SheetEditor specifically - fail on undefined template refs
-          ERRORS=$(npx vue-tsc --noEmit --skipLibCheck 2>&1 | grep 'SheetEditor' || true)
-          if [ -n "$ERRORS" ]; then
-            echo "::error::SheetEditor has TypeScript errors:"\n"$ERRORS"
-            exit 1
-          fi
-          echo "✅ SheetEditor type check passed"
+        run: npx vue-tsc --noEmit
 
-      - name: Test Frontend formulas
+      - name: Test Frontend
         working-directory: web
         run: npx vitest run
+
+      - name: Vet Backend
+        run: go vet ./...
 
       - name: Test Backend
         run: go test ./internal/...
@@ -60,7 +52,7 @@ jobs:
           mkdir -p release/web
           cp mist-docs release/
           cp -r web/dist/* release/web/
-          cp configs/config.yaml release/config.yaml.example
+          cp configs/config.example.yaml release/config.yaml.example
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
