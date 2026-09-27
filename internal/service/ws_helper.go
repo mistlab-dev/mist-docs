@@ -74,9 +74,3 @@ func yjsBucket(departmentID, teamID string) string {
 	}
 	return teamID
 }
-
-// ==================== 简化权限检查（WS 用） ====================
-
-func CheckPermissionSimple(ctx context.Context, userID, deptID, docID string) (string, error) {
-	return CheckPermission(ctx, userID, deptID, "document", docID)
-}

@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -120,63 +119,6 @@ func ReadVersion(deptID, docID string, version int) ([]byte, error) {
 	}
 
 	return data, nil
-}
-
-// DeleteDoc removes all files for a document
-func DeleteDoc(deptID, docID string) error {
-	dir := DocPath(deptID, docID)
-	return os.RemoveAll(dir)
-}
-
-// MoveToTrash moves document files to trash
-func MoveToTrash(deptID, docID string) error {
-	src := DocPath(deptID, docID)
-	trashDir := filepath.Join(RootPath(), "_trash", docID)
-	if err := os.MkdirAll(filepath.Dir(trashDir), 0755); err != nil {
-		return err
-	}
-	return os.Rename(src, trashDir)
-}
-
-// RestoreFromTrash restores from trash back to original location
-func RestoreFromTrash(deptID, docID string) error {
-	trashPath := filepath.Join(RootPath(), "_trash", docID)
-	dst := DocPath(deptID, docID)
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return err
-	}
-	return os.Rename(trashPath, dst)
-}
-
-// PurgeFromTrash permanently deletes from trash
-func PurgeFromTrash(docID string) error {
-	trashPath := filepath.Join(RootPath(), "_trash", docID)
-	return os.RemoveAll(trashPath)
-}
-
-// CopyVersion makes a copy of a version file (for snapshot/restore)
-func CopyVersion(deptID, docID string, fromVersion, toVersion int) error {
-	src := VersionPath(deptID, docID, fromVersion)
-	dst := VersionPath(deptID, docID, toVersion)
-
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return err
-	}
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, srcFile)
-	return err
 }
 
 // MaxFileSize returns configured max file size

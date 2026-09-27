@@ -269,35 +269,3 @@ func TestServeDocumentExportRejectsDocx(t *testing.T) {
 		t.Fatal("docx rejection must not set a download name")
 	}
 }
-
-// ==================== wrapWordHTML 测试 ====================
-
-func TestWrapWordHTML_ChineseFont(t *testing.T) {
-	html := wrapWordHTML("中文文档", "<p>内容</p>")
-	if !strings.Contains(html, "SimSun") && !strings.Contains(html, "Microsoft YaHei") {
-		t.Error("missing Chinese font")
-	}
-}
-
-// ==================== sanitizeFilename 测试 ====================
-
-func TestSanitizeFilename_Basic(t *testing.T) {
-	tests := []struct {
-		in, out string
-	}{
-		{"simple.txt", "simple.txt"},
-		{"file name.doc", "file_name.doc"},
-		{"中文标题", "____"},
-		{"file<>:\"/\\|?*.txt", "file_________.txt"},
-	}
-
-	for _, tt := range tests {
-		out := sanitizeFilename(tt.in)
-		if out != tt.out {
-			t.Errorf("sanitizeFilename(%s) = %s, want %s", tt.in, out, tt.out)
-		}
-		if len(out) > 100 {
-			t.Errorf("filename too long: %d", len(out))
-		}
-	}
-}

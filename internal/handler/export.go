@@ -7,50 +7,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/service"
-	"github.com/c-wind/mist-docs/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/jung-kurt/gofpdf"
 )
-
-// ExportDocument exports a document in the specified format.
-// GET /docs/documents/:id/export?format=markdown|html|txt|pdf
-// Word (.docx) is not produced; requesting it returns 400.
-func ExportDocument(c *gin.Context) {
-	format := c.DefaultQuery("format", "html")
-
-	docID := c.Param("id")
-
-	// Get document info
-	var title, docType, deptID, teamID string
-	err := database.DB.QueryRow(
-		"SELECT title, type, department_id, team_id FROM md_documents WHERE id = ? AND status = 1",
-		docID,
-	).Scan(&title, &docType, &deptID, &teamID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "文档不存在"})
-		return
-	}
-	bucket := teamID
-	if bucket == "" {
-		bucket = deptID
-	}
-
-	// Read content
-	content, err := store.ReadCurrent(bucket, docID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文档内容失败"})
-		return
-	}
-
-	if !serveDocumentExport(c, title, string(content), format) {
-		return
-	}
-
-	userName, _ := c.Get("username")
-	audit(c, "export", "document", docID, title, fmt.Sprintf("%s 导出文档 (%s, %s)", userName, format, docType))
-}
 
 // serveDocumentExport writes one of markdown, html, txt, or pdf.
 // The download extension matches the body. docx is rejected: this server
@@ -490,20 +450,6 @@ func wrapHTML(title, body string) string {
 		`</h1>` + body + `</body></html>`
 }
 
-func sanitizeFilename(name string) string {
-	s := strings.ReplaceAll(name, " ", "_")
-	s = strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.' {
-			return r
-		}
-		return '_'
-	}, s)
-	if len(s) > 100 {
-		s = s[:100]
-	}
-	return s
-}
-
 // ==================== PDF Conversion ====================
 
 // htmlToPDF converts HTML content to PDF using gofpdf.
@@ -553,23 +499,4 @@ func truncateUTF8(s string, maxRunes int) string {
 		return s
 	}
 	return string(runes[:maxRunes]) + "..."
-}
-
-// ==================== Word HTML ====================
-
-// wrapWordHTML generates Word-compatible HTML that Microsoft Word and WPS can open natively
-func wrapWordHTML(title, body string) string {
-	css := "body{font-family:SimSun,Microsoft YaHei,sans-serif;font-size:12pt;line-height:1.8;color:#333}"
-	css += "h1{font-size:22pt;text-align:center;margin:20pt 0}"
-	css += "h2{font-size:16pt;margin-top:16pt;border-bottom:1pt solid #ccc}"
-	css += "h3{font-size:14pt;margin-top:12pt}"
-	css += "table{border-collapse:collapse;width:100%}th,td{border:1pt solid #999;padding:4pt 8pt}"
-	css += "th{background:#f0f0f0;font-weight:bold}"
-	css += "code{font-family:Consolas,monospace;background:#f4f4f4;padding:1pt 3pt}"
-	css += "pre{background:#f4f4f4;padding:8pt}"
-	css += "blockquote{border-left:3pt solid #ccc;padding-left:10pt;color:#666}"
-	css += "img{max-width:100%}"
-	return `<html><head><meta charset="UTF-8"><title>` + title +
-		`</title><style>` + css + `</style></head><body><h1>` + title +
-		`</h1>` + body + `</body></html>`
 }
