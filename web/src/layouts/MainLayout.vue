@@ -226,6 +226,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatRelative } from '@/utils/time'
 import { ref, onMounted, computed } from 'vue'
 import { Sunny, Moon, Folder, FolderOpened, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled, Calendar, Lock, Link } from '@element-plus/icons-vue'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
@@ -238,7 +239,7 @@ import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
 import LangSwitch from '@/components/LangSwitch.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -331,15 +332,8 @@ function notifLabel(type: string) {
   return map[type] || type
 }
 
-function formatTime(time: string) {
-  if (!time) return ''
-  const d = new Date(time)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  if (diff < 60000) return t('common.justNow')
-  if (diff < 3600000) return t('common.minutesAgo', [Math.floor(diff / 60000)])
-  if (diff < 86400000) return t('common.hoursAgo', [Math.floor(diff / 3600000)])
-  return d.toLocaleDateString()
+function formatTime(ts: string): string {
+  return formatRelative(ts, t, { locale: locale.value })
 }
 
 function handleCommand(cmd: string) {

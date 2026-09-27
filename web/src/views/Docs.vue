@@ -385,6 +385,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatRelative } from '@/utils/time'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -393,7 +394,7 @@ import { Star, StarFilled, Clock, Files, MoreFilled, Operation, Monitor, List } 
 import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const treeData = ref<any[]>([])
 const docs = ref<any[]>([])
@@ -512,15 +513,7 @@ function setDocs(list: any[]) {
 }
 
 function formatTime(ts: string): string {
-  if (!ts) return ''
-  const d = new Date(ts)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  if (diff < 60000) return t('common.justNow')
-  if (diff < 3600000) return t('common.minutesAgo', [Math.floor(diff / 60000)])
-  if (diff < 86400000) return t('common.hoursAgo', [Math.floor(diff / 3600000)])
-  if (diff < 604800000) return t('common.daysAgo', [Math.floor(diff / 86400000)])
-  return d.toLocaleDateString('zh-CN')
+  return formatRelative(ts, t, { locale: locale.value })
 }
 
 async function loadTree() {

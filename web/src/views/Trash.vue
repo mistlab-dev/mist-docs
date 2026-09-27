@@ -77,13 +77,14 @@
 </template>
 
 <script setup lang="ts">
+import { formatRelative } from '@/utils/time'
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const trash = ref<any[]>([])
 const searchKey = ref('')
@@ -128,15 +129,7 @@ async function emptyTrash() {
 }
 
 function formatTime(ts: string): string {
-  if (!ts) return ''
-  const d = new Date(ts)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  if (diff < 60000) return t('common.justNow')
-  if (diff < 3600000) return t('common.minutesAgo', [Math.floor(diff / 60000)])
-  if (diff < 86400000) return t('common.hoursAgo', [Math.floor(diff / 3600000)])
-  if (diff < 604800000) return t('common.daysAgo', [Math.floor(diff / 86400000)])
-  return d.toLocaleDateString('zh-CN')
+  return formatRelative(ts, t, { locale: locale.value })
 }
 
 onMounted(load)

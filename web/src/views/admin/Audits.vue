@@ -46,7 +46,7 @@
           <template #default="{ row }">
             <div class="time-cell">
               <el-icon :size="14" color="var(--md-text-dim)"><Clock /></el-icon>
-              <span>{{ row.created_at }}</span>
+              <span :title="row.created_at">{{ formatDateTime(row.created_at) }}</span>
             </div>
           </template>
         </el-table-column>
@@ -111,6 +111,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/time'
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
