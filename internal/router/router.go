@@ -179,6 +179,8 @@ func RegisterAPI(r gin.IRouter) {
 
 // RegisterWS mounts the collaboration websocket served by hub.
 func RegisterWS(r gin.IRouter, hub *ws.Hub) {
+	// Lock/unlock and permission changes re-check open sessions immediately.
+	handler.OnDocAccessChanged = hub.Reauthorize
 	r.GET("/ws/teams/:team_id/docs/:doc_id", func(c *gin.Context) {
 		ws.ServeWS(hub, c)
 	})

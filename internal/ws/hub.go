@@ -143,9 +143,9 @@ func (c *Client) authorize() error {
 		return err
 	}
 
-	var docTeamID string
+	var docTeamID, lockedBy string
 	err = database.DB.QueryRowContext(ctx,
-		`SELECT team_id FROM md_documents WHERE id = ? AND status = 1`, c.DocID).Scan(&docTeamID)
+		`SELECT team_id, IFNULL(locked_by, '') FROM md_documents WHERE id = ? AND status = 1`, c.DocID).Scan(&docTeamID, &lockedBy)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && docTeamID != c.TeamID) {
 		return errAccessRevoked
 	}
@@ -157,9 +157,59 @@ func (c *Client) authorize() error {
 	if perm == "none" || perm == "" {
 		return errAccessRevoked
 	}
-	c.canWrite.Store(service.PermAtLeast(perm, "write"))
+	// A lock held by someone else makes the document read-only for everyone
+	// except the holder and team admins, in the live session as over REST.
+	lockedByOther := lockedBy != "" && lockedBy != c.UserID && role != "admin" && role != "owner"
+	canWrite := service.PermAtLeast(perm, "write") && !lockedByOther
+	if prev := c.canWrite.Swap(canWrite); prev != canWrite {
+		c.notifyPermission(canWrite, lockedBy)
+	}
 	c.lastAuth.Store(time.Now().UnixNano())
 	return nil
+}
+
+// notifyPermission tells the client its write access changed (lock taken or
+// released, permission changed) so the editor can switch modes.
+func (c *Client) notifyPermission(canWrite bool, lockedBy string) {
+	var lockedByName string
+	if lockedBy != "" {
+		database.DB.QueryRow(
+			`SELECT COALESCE(NULLIF(display_name,''), NULLIF(username,''), '') FROM users WHERE id = ?`, lockedBy,
+		).Scan(&lockedByName)
+	}
+	msg, _ := json.Marshal(map[string]interface{}{
+		"type": "permission", "can_write": canWrite,
+		"locked_by": lockedBy, "locked_by_name": lockedByName,
+	})
+	c.mu.Lock()
+	c.Conn.SetWriteDeadline(time.Now().Add(writeDeadline))
+	c.Conn.WriteMessage(websocket.BinaryMessage, msg)
+	c.mu.Unlock()
+}
+
+// Reauthorize re-checks every live session of docID right away. Handlers call
+// it (through handler.OnDocAccessChanged) after a lock or permission change so
+// people do not keep typing into a document for up to one check interval.
+func (h *Hub) Reauthorize(docID string) {
+	h.mu.RLock()
+	room, ok := h.rooms[docID]
+	h.mu.RUnlock()
+	if !ok {
+		return
+	}
+	room.mu.RLock()
+	clients := make([]*Client, 0, len(room.Clients))
+	for _, cl := range room.Clients {
+		clients = append(clients, cl)
+	}
+	room.mu.RUnlock()
+	for _, cl := range clients {
+		go func(cl *Client) {
+			if err := cl.authorize(); errors.Is(err, errAccessRevoked) {
+				cl.revoke()
+			}
+		}(cl)
+	}
 }
 
 // revoke tells the client why and closes the connection. Safe to call twice.
@@ -620,6 +670,13 @@ func ServeWS(hub *Hub, c *gin.Context) {
 	}
 	client.canWrite.Store(canWrite)
 	client.lastAuth.Store(time.Now().UnixNano())
+	if canWrite {
+		var lockedBy string
+		database.DB.QueryRow(`SELECT IFNULL(locked_by, '') FROM md_documents WHERE id = ?`, docID).Scan(&lockedBy)
+		if lockedBy != "" && lockedBy != userID && role != "admin" && role != "owner" {
+			client.canWrite.Store(false)
+		}
+	}
 
 	hub.register <- client
 

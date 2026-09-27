@@ -579,12 +579,14 @@ func TeamGetDocument(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "文档不存在"})
 		return
 	}
+	lock := loadDocLock(docID)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"id": id, "team_id": teamID2, "folder_id": folderID,
 		"title": title, "type": docType, "file_size": fileSize,
 		"version": version, "created_by": createdBy, "updated_by": updatedBy,
 		"created_at": createdAt, "updated_at": updatedAt,
 		"permission": docPermission(c, docID),
+		"locked_by":  lock.By, "locked_by_name": lock.ByName, "locked_at": lock.At,
 	}})
 }
 
@@ -682,10 +684,12 @@ func TeamGetDocumentContent(c *gin.Context) {
 
 	content := readDocContent(docID)
 	audit(c, "view", "document", docID, title, "")
+	lock := loadDocLock(docID)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"content": string(content), "version": version,
 		"title": title, "type": docType, "updated_at": updatedAt,
 		"permission": docPermission(c, docID),
+		"locked_by":  lock.By, "locked_by_name": lock.ByName, "locked_at": lock.At,
 	}})
 }
 
@@ -697,12 +701,7 @@ func TeamSaveDocumentContent(c *gin.Context) {
 	}
 	userID := c.GetString("user_id")
 
-	// Check lock
-	var lockedBy string
-	database.DB.QueryRow("SELECT locked_by FROM md_documents WHERE id=?", docID).Scan(&lockedBy)
-	role := getTeamRole(c)
-	if lockedBy != "" && lockedBy != userID && role != "admin" && role != "owner" {
-		c.JSON(http.StatusConflict, gin.H{"error": "文档已被锁定"})
+	if lockedAgainst(c, docID) {
 		return
 	}
 
@@ -1070,6 +1069,9 @@ func TeamRestoreVersion(c *gin.Context) {
 		return
 	}
 	userID := c.GetString("user_id")
+	if lockedAgainst(c, docID) {
+		return
+	}
 
 	content, err := store.ReadVersion(docBucket(docID), docID, req.Version)
 	if err != nil {
@@ -1093,33 +1095,6 @@ func TeamRestoreVersion(c *gin.Context) {
 }
 
 // ==================== 锁定 ====================
-
-func TeamLockDocument(c *gin.Context) {
-	docID := c.Param("id")
-	if !requireDoc(c, docID, "write", true) {
-		return
-	}
-	userID := c.GetString("user_id")
-	_, err := database.DB.Exec(`UPDATE md_documents SET locked_by=?, locked_at=NOW() WHERE id=? AND team_id=?`, userID, docID, getTeamID(c))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "已锁定"})
-}
-
-func TeamUnlockDocument(c *gin.Context) {
-	docID := c.Param("id")
-	if !requireDoc(c, docID, "write", true) {
-		return
-	}
-	_, err := database.DB.Exec(`UPDATE md_documents SET locked_by='', locked_at=NULL WHERE id=? AND team_id=?`, docID, getTeamID(c))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "已解锁"})
-}
 
 // ==================== 分享 ====================
 
@@ -1296,6 +1271,7 @@ func TeamAddCollaborator(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	notifyDocAccessChanged(docID)
 	c.JSON(http.StatusOK, gin.H{"message": "已添加", "permission": perm, "role": service.FrontendRole(perm)})
 }
 
@@ -1640,6 +1616,9 @@ func TeamSetPermission(c *gin.Context) {
 	}
 	audit(c, "set_permission", req.ResourceType, req.ResourceID, resourceTitle(teamID, req.ResourceType, req.ResourceID),
 		fmt.Sprintf(`{"target_id":"%s","permission":"%s"}`, req.TargetID, req.Permission))
+	if req.ResourceType == "document" {
+		notifyDocAccessChanged(req.ResourceID)
+	}
 	c.JSON(http.StatusOK, gin.H{"data": req})
 }
 
@@ -1671,6 +1650,9 @@ func TeamRemovePermission(c *gin.Context) {
 		return
 	}
 	audit(c, "remove_permission", resType, resID, name, "")
+	if resType == "document" {
+		notifyDocAccessChanged(resID)
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
@@ -2431,6 +2413,7 @@ func TeamUpdateCollaborator(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	notifyDocAccessChanged(resID)
 	c.JSON(http.StatusOK, gin.H{"message": "已更新"})
 }
 
@@ -2449,6 +2432,7 @@ func TeamRemoveCollaborator(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	notifyDocAccessChanged(resID)
 	c.JSON(http.StatusOK, gin.H{"message": "已移除"})
 }
 
