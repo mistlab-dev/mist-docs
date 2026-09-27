@@ -10,6 +10,9 @@
         <el-button @click="loadAll" :loading="loading">
           <el-icon><Refresh /></el-icon>
         </el-button>
+        <el-button @click="previewVisible = true" data-test="insert-preview-btn">
+          <el-icon><DataAnalysis /></el-icon> {{ t('insertPreview.button') }}
+        </el-button>
         <GuardedButton type="primary" :allowed="canEdit" :reason="t('perm.needEditor')" @click="openCreate">
           <el-icon><Plus /></el-icon> {{ t('deadlines.newDeadline') }}
         </GuardedButton>
@@ -175,6 +178,15 @@
 
       <!-- ==================== 提醒规则 ==================== -->
       <el-tab-pane :label="t('deadlines.rules')" name="rules">
+        <div class="capacity-bar">
+          <span class="cap-label">{{ t('insertPreview.capacity') }}</span>
+          <b>{{ t('insertPreview.capacityLine', { n: capacity.per_day }) }}</b>
+          <el-tag v-if="capacity.is_default" size="small" effect="plain">{{ t('insertPreview.capacityDefault') }}</el-tag>
+          <span class="cap-sep">·</span>
+          <span class="cap-label">{{ t('insertPreview.keyCustomers') }}</span>
+          <span>{{ capacity.key_customers.length ? capacity.key_customers.join('、') : t('insertPreview.noKeyCustomers') }}</span>
+          <GuardedButton size="small" :allowed="isAdmin" :reason="t('perm.needAdmin')" class="cap-btn" @click="openCapacity">{{ t('insertPreview.setCapacity') }}</GuardedButton>
+        </div>
         <div class="rules-head">
           <span v-if="!isAdmin" class="perm-hint">{{ t('perm.needAdmin') }}</span>
           <GuardedButton :allowed="isAdmin" :reason="t('perm.needAdmin')" @click="seedRules">{{ t('deadlines.seedRules') }}</GuardedButton>
@@ -231,6 +243,27 @@
         </el-table>
       </el-tab-pane>
     </el-tabs>
+
+    <InsertPreviewDialog v-model="previewVisible" />
+
+    <el-dialog v-model="capacityVisible" :title="t('insertPreview.setCapacity')" width="480px">
+      <p class="cap-hint">{{ t('insertPreview.capacityHint') }}</p>
+      <el-form label-width="96px">
+        <el-form-item :label="t('insertPreview.perDay')">
+          <el-input-number v-model="capacityForm.per_day" :min="1" :max="1000" /> <span class="cap-unit">{{ t('insertPreview.perDayUnit') }}</span>
+        </el-form-item>
+        <el-form-item :label="t('insertPreview.effectiveFrom')">
+          <el-date-picker v-model="capacityForm.effective_from" type="date" value-format="YYYY-MM-DD" />
+        </el-form-item>
+        <el-form-item :label="t('insertPreview.keyCustomers')">
+          <el-input v-model="capacityForm.key_customers" type="textarea" :rows="4" :placeholder="t('insertPreview.keyCustomersHint')" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="capacityVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="saveCapacity">{{ t('common.save') }}</el-button>
+      </template>
+    </el-dialog>
 
     <!-- ==================== 新建 / 编辑 ==================== -->
     <el-dialog v-model="formVisible" :title="form.id ? t('deadlines.editDeadline') : t('deadlines.newDeadline')" width="620px">
@@ -363,9 +396,10 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Plus, Refresh, Search, DataAnalysis } from '@element-plus/icons-vue'
 import teamApi from '@/utils/team-api'
 import GuardedButton from '@/components/GuardedButton.vue'
+import InsertPreviewDialog from '@/components/InsertPreviewDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { canManageRecord } from '@/utils/roles'
 
@@ -405,6 +439,38 @@ interface Rule {
 }
 
 const tab = ref('board')
+const previewVisible = ref(false)
+const capacityVisible = ref(false)
+const capacity = reactive({ per_day: 1, is_default: true, key_customers: [] as string[] })
+const capacityForm = reactive({ per_day: 1, effective_from: '', key_customers: '' })
+
+async function loadCapacity() {
+  try {
+    const { data } = await teamApi.get('/deadlines/capacity')
+    Object.assign(capacity, { per_day: data.data.per_day, is_default: data.data.is_default, key_customers: data.data.key_customers || [] })
+  } catch { /* keep defaults */ }
+}
+function openCapacity() {
+  Object.assign(capacityForm, { per_day: capacity.per_day, effective_from: '', key_customers: capacity.key_customers.join('\n') })
+  capacityVisible.value = true
+}
+async function saveCapacity() {
+  saving.value = true
+  try {
+    const { data } = await teamApi.put('/deadlines/capacity', {
+      per_day: capacityForm.per_day,
+      effective_from: capacityForm.effective_from || undefined,
+      key_customers: capacityForm.key_customers.split('\n'),
+    })
+    Object.assign(capacity, { per_day: data.data.per_day, is_default: data.data.is_default, key_customers: data.data.key_customers || [] })
+    capacityVisible.value = false
+    ElMessage.success(t('insertPreview.capacitySaved'))
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || t('deadlines.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
 const loading = ref(false)
 const saving = ref(false)
 
@@ -586,7 +652,7 @@ async function loadLog() {
 async function loadAll() {
   loading.value = true
   try {
-    await Promise.all([loadBoard(), loadList(), loadRules(), loadLog()])
+    await Promise.all([loadBoard(), loadList(), loadRules(), loadLog(), loadCapacity()])
   } finally {
     loading.value = false
   }
@@ -1039,6 +1105,24 @@ onMounted(loadAll)
 }
 
 /* 规则 */
+.capacity-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: var(--md-dl-surface);
+  border: 1px solid var(--md-dl-border);
+  font-size: 13px;
+  color: var(--md-text);
+}
+.cap-label { color: var(--md-text-slate-dim); }
+.cap-sep { color: var(--md-text-slate-dim); margin: 0 4px; }
+.cap-btn { margin-left: auto; }
+.cap-hint { margin: -6px 0 14px; color: var(--md-text-slate); font-size: 13px; }
+.cap-unit { margin-left: 8px; color: var(--md-text-slate); }
 .rules-head {
   display: flex;
   gap: 8px;
