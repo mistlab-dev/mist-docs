@@ -237,6 +237,21 @@ func TestRoleOwnRecords(t *testing.T) {
 	}
 
 	_, fn := upload(t, editorToken, "mine.png")
+	// The media library renders name/url/type and uses can_delete.
+	w := request("GET", teamPath("/media"), nil, editor2Tok)
+	var seen bool
+	for _, it := range parseJSON(t, w)["data"].([]interface{}) {
+		m := it.(map[string]interface{})
+		if m["filename"] == fn {
+			seen = true
+			if m["name"] != "mine.png" || m["type"] != "image" || getString(m["url"]) == "" || m["can_delete"] != false {
+				t.Fatalf("media item for another editor = %v", m)
+			}
+		}
+	}
+	if !seen {
+		t.Fatalf("uploaded file %s not listed", fn)
+	}
 	if w := request("DELETE", teamPath("/media/"+fn), nil, editor2Tok); w.Code != 403 {
 		t.Fatalf("other editor must not delete my upload: %d", w.Code)
 	}

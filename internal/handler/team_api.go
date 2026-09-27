@@ -2180,6 +2180,18 @@ func TeamUploadFile(c *gin.Context) {
 	}})
 }
 
+// mediaKind groups a stored file for the media library filter.
+func mediaKind(filename string) string {
+	switch strings.ToLower(filepath.Ext(filename)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp":
+		return "image"
+	case ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".md", ".csv":
+		return "document"
+	default:
+		return "other"
+	}
+}
+
 func TeamListMedia(c *gin.Context) {
 	teamID := getTeamID(c)
 	dir := fmt.Sprintf("%s/%s/media", store.RootPath(), teamID)
@@ -2215,7 +2227,16 @@ func TeamListMedia(c *gin.Context) {
 		}
 		info, _ := e.Info()
 		r := known[e.Name()]
+		name := r.original
+		if name == "" {
+			name = e.Name()
+		}
 		files = append(files, map[string]interface{}{
+			// name/url/type are what the editor's media library renders;
+			// the list used to return only filename, so it showed blanks.
+			"name":             name,
+			"url":              "/api/teams/" + teamID + "/media/" + e.Name(),
+			"type":             mediaKind(e.Name()),
 			"filename":         e.Name(),
 			"original":         r.original,
 			"size":             info.Size(),
