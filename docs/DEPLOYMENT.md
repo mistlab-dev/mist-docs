@@ -114,19 +114,40 @@ cd ..
 
 ### 3. 准备数据库
 
+MistDocs 和 MistLab Portal 共用同一个库：账号、团队、成员在 Portal 的 `users` / `teams` / `team_members` 表里，MistDocs 只建 `md_*` 表。
+
 ```bash
 # 登录 MySQL
 mysql -u root -p
 
-# 创建数据库和用户
-CREATE DATABASE mist_docs CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'mist_docs'@'localhost' IDENTIFIED BY 'your_password';
-GRANT ALL PRIVILEGES ON mist_docs.* TO 'mist_docs'@'localhost';
-FLUSH PRIVILEGES;
+# 生产：直接用 Portal 所在的库，给 MistDocs 一个账号
+GRANT ALL PRIVILEGES ON mist_team.* TO 'mist_docs'@'localhost' IDENTIFIED BY 'your_password';
 
-# 导入表结构
-mysql -u mist_docs -p mist_docs < docker/init-db.sql
+# 导入 md_* 表结构（全新安装）
+mysql -u mist_docs -p mist_team < docker/init-db.sql
 ```
+
+程序启动时 `database.Migrate` 会幂等地补齐缺失的表和列，所以老库升级也只需要替换二进制。
+
+| 文件 | 用途 |
+|------|------|
+| `docker/init-db.sql` | 全新安装用的 `md_*` 表结构（由 `scripts/gen-init-db.sh` 从迁移后的库生成） |
+| `docker/dev-portal-tables.sql` | **仅开发/演示**：Portal 表的最小结构 + 演示团队，生产不要导入 |
+| `scripts/migrate-team.sql` | 一次性升级脚本，只给团队化之前建的老库用 |
+| `migrations/001_init.sql` | 历史文件（部门版表结构），不要再用 |
+
+#### 本地开发 / 演示（没有 Portal）
+
+```bash
+scripts/dev-db.sh mistdocs_dev            # 建库 + init-db.sql + dev-portal-tables.sql
+go run ./cmd/server -c configs/config.yaml
+go run ./cmd/devtoken -c configs/config.yaml -user dev-admin
+# 打开输出里的 http://localhost:8900/auth/callback?token=... 即以演示管理员登录
+```
+
+`devtoken` 只能给演示团队 `dev-team` 的成员签 token，对真实 Portal 库无效。演示账号：`dev-admin`（管理员）、`dev-editor`（编辑者）、`dev-viewer`（查看者）。
+
+修改表结构后重新生成 `init-db.sql`：先让程序对一个本地库跑一遍 Migrate，再执行 `scripts/gen-init-db.sh <库名> > docker/init-db.sql`。
 
 ### 4. 配置
 
@@ -279,22 +300,27 @@ Nginx 装在宿主机，反代到 Docker 映射的 8900 端口。
 
 | 表名 | 说明 |
 |------|------|
-| `md_departments` | 部门 |
-| `md_users` | 用户 |
-| `md_folders` | 文件夹 |
-| `md_documents` | 文档 |
-| `md_versions` | 文档版本 |
-| `md_permissions` | 权限 |
+| `md_documents` | 文档（`team_id` 归属团队） |
+| `md_versions` | 文档版本（恢复历史版本会新增一个版本，不覆盖旧文件） |
+| `md_permissions` | 文档协作者权限 |
+| `md_team_folders` | 团队文件夹 |
 | `md_audits` | 审计日志 |
 | `md_keys` | 加密密钥 |
 | `md_shares` | 分享链接 |
 | `md_comments` | 评论 |
 | `md_notifications` | 通知 |
-| `md_tags` | 标签 |
-| `md_doc_tags` | 文档标签关联 |
+| `md_tags` / `md_doc_tags` | 标签 / 文档标签关联 |
 | `md_favorites` | 收藏 |
-| `md_webhooks` | Webhook 配置 |
-| `md_webhook_logs` | Webhook 投递日志 |
+| `md_templates` | 模板 |
+| `md_media` | 媒体库（上传者） |
+| `md_doc_fragments` | 文档与团队片段的关联 |
+| `md_deadlines` / `md_deadline_events` | 交期 / 交期事件 |
+| `md_reminder_rules` / `md_reminder_log` | 提醒规则 / 提醒发送记录 |
+| `md_webhooks` / `md_webhook_logs` | Webhook 配置（按团队、按事件订阅）/ 投递日志 |
+
+来自 Portal 的共享表：`users`、`teams`、`team_members`、`fragments`。
+
+旧版遗留表 `md_users`、`md_departments`、`md_folders` 已不再使用，新安装不会创建。老库里的这几张表不要直接删除：先备份，再改名归档，确认无影响后再删。
 
 ### 表前缀
 
@@ -325,14 +351,22 @@ docker run --rm -v mist-docs_app_data:/data -v $(pwd):/backup alpine \
 ### 手动部署
 
 ```bash
-# 备份
-mysqldump -u mist_docs -p mist_docs > backup.sql
+# 备份（只备份 md_ 表；共享库里的 Portal 表由 Portal 负责）
+mysqldump --single-transaction mist_team $(mysql -N -e "SHOW TABLES LIKE 'md\_%'" mist_team) > backup.sql
 tar czf files_backup.tar.gz /var/lib/mist-docs/files/
 
 # 恢复
-mysql -u mist_docs -p mist_docs < backup.sql
+mysql mist_team < backup.sql
 tar xzf files_backup.tar.gz -C /
 ```
+
+### 用 scripts/deploy.sh 发布时的备份与回滚
+
+`scripts/deploy.sh` 每次发布前自动：
+
+- 数据库：把 `md_*` 表 dump 到服务器 `/var/backups/mistdocs/`（需要服务器上有 `/etc/mistdocs/backup.cnf`，内容是 `[client]` 段的 user/password，权限 600）。也可单独执行 `scripts/deploy.sh --backup-db`。
+- 后端：新二进制先传到 `*.new`，原子替换并保留 `.bak`，`/healthz` 检查失败自动换回旧二进制。
+- 前端：把线上 `web/` 复制为 `web.bak-<时间>`（保留最近 3 份），出问题执行 `scripts/deploy.sh --rollback-web`。
 
 ### 自动备份（cron）
 
