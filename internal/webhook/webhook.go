@@ -103,6 +103,7 @@ var Events = []string{
 	"document.unlocked",
 	"document.restored",
 	"deadline.reminder",
+	"deadline.proposal_applied",
 }
 
 // DefaultEvents is what a new webhook gets when none are chosen.
@@ -146,6 +147,7 @@ var aliasGroups = [][]string{
 	{"document.unlocked", "unlock_doc", "unlock"},
 	{"document.restored", "restore_doc", "restore"},
 	{"deadline.reminder"},
+	{"deadline.proposal_applied"},
 }
 
 // ReminderTargets picks the hooks that receive deadline reminders: those

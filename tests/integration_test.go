@@ -179,7 +179,7 @@ func cleanTestData() {
 	db.ExecContext(ctx, "DELETE FROM md_webhooks WHERE team_id LIKE 'test-%'")
 	// Deadlines created through the API have UUID ids; clear them by team so
 	// runs do not pile up rows that later tests (e.g. the insert preview) see.
-	for _, t := range []string{"md_deadline_events", "md_reminder_log", "md_reminder_rules", "md_deadlines", "md_team_capacity"} {
+	for _, t := range []string{"md_deadline_events", "md_reminder_log", "md_reminder_rules", "md_deadlines", "md_team_capacity", "md_proposals"} {
 		db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE team_id LIKE 'test-%%'", t))
 	}
 

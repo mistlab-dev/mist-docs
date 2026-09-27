@@ -311,6 +311,31 @@ func migrateDeadlines() error {
 		return fmt.Errorf("create md_team_capacity: %w", err)
 	}
 
+	// 6. md_proposals — two-step "preview, then confirm" for schedule changes
+	// (D19: lives in mist-docs next to the only write path). payload holds the
+	// preview result and the exact changes apply will make; baseline holds the
+	// fingerprint of the open orders the preview was computed from, so apply
+	// can refuse (409, status stale) when the data moved in between.
+	// LONGTEXT rather than JSON: identical on MariaDB and MySQL.
+	if _, err := DB.Exec(`CREATE TABLE IF NOT EXISTS md_proposals (
+		id VARCHAR(36) PRIMARY KEY,
+		team_id VARCHAR(64) NOT NULL,
+		user_id VARCHAR(64) NOT NULL,
+		kind VARCHAR(32) NOT NULL DEFAULT 'insert' COMMENT 'insert|date_change|explain',
+		title VARCHAR(255) NOT NULL DEFAULT '',
+		payload LONGTEXT NOT NULL,
+		baseline LONGTEXT NOT NULL,
+		status VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending|applied|rejected|stale',
+		decided_by VARCHAR(64) DEFAULT '',
+		decided_at DATETIME NULL,
+		reason TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		INDEX idx_team_time (team_id, created_at),
+		INDEX idx_team_status (team_id, status)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
+		return fmt.Errorf("create md_proposals: %w", err)
+	}
+
 	return nil
 }
 

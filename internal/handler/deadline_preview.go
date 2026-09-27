@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"database/sql"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -65,10 +67,19 @@ func splitNames(s string) []string {
 	return out
 }
 
-// loadOpenOrders returns the team's orders that still need producing.
-func loadOpenOrders(teamID string) ([]schedule.Order, error) {
-	rows, err := database.DB.Query(`SELECT `+deadlineColumns+` FROM md_deadlines
-		WHERE team_id=? AND status <> 'done' AND deleted_at IS NULL`, teamID)
+type querier interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
+// loadOpenOrders returns the team's orders that still need producing. With
+// forUpdate (inside a transaction) the rows stay locked until commit.
+func loadOpenOrders(q querier, teamID string, forUpdate bool) ([]schedule.Order, error) {
+	query := `SELECT ` + deadlineColumns + ` FROM md_deadlines
+		WHERE team_id=? AND status <> 'done' AND deleted_at IS NULL ORDER BY id`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+	rows, err := q.Query(query, teamID)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +113,7 @@ func buildPreview(teamID string, in previewInput) (schedule.Input, schedule.Resu
 	if !validPriorities[in.Priority] {
 		return schedule.Input{}, zero, http.StatusBadRequest, "无效的优先级"
 	}
-	orders, err := loadOpenOrders(teamID)
+	orders, err := loadOpenOrders(database.DB, teamID, false)
 	if err != nil {
 		return schedule.Input{}, zero, http.StatusInternalServerError, err.Error()
 	}
@@ -138,19 +149,31 @@ func buildPreview(teamID string, in previewInput) (schedule.Input, schedule.Resu
 
 // TeamPreviewInsert POST /teams/:team_id/deadlines/preview-insert
 //
-// Any team member may run it (design §8: preview is read-only).
+// Any team member may run it (design §8: preview is read-only). It never
+// touches the deadline tables; it stores a pending row in md_proposals.
 func TeamPreviewInsert(c *gin.Context) {
 	var in previewInput
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	_, res, code, msg := buildPreview(getTeamID(c), in)
+	teamID := getTeamID(c)
+	sin, res, code, msg := buildPreview(teamID, in)
 	if code != http.StatusOK {
 		c.JSON(code, gin.H{"error": msg})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": res})
+	// Every preview is also a pending proposal (phase 5): confirming it
+	// applies exactly these changes, if nothing moved in between.
+	out := gin.H{"insert": res.Insert, "new_breaches": res.NewBreaches, "delayed": res.Delayed,
+		"unaffected": res.Unaffected, "started": res.Started, "conclusion": res.Conclusion, "per_day": res.PerDay}
+	if id, changes, err := createProposal(teamID, c.GetString("user_id"), in, sin, res); err == nil {
+		out["proposal_id"] = id
+		out["changes"] = changes
+	} else {
+		log.Printf("preview-insert: store proposal: %v", err)
+	}
+	c.JSON(http.StatusOK, gin.H{"data": out})
 }
 
 // TeamGetCapacity GET /teams/:team_id/deadlines/capacity

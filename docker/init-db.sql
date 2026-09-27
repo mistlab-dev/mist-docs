@@ -228,6 +228,26 @@ CREATE TABLE IF NOT EXISTS `md_permissions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 ;
 
+-- table: md_proposals
+CREATE TABLE IF NOT EXISTS `md_proposals` (
+  `id` varchar(36) NOT NULL,
+  `team_id` varchar(64) NOT NULL,
+  `user_id` varchar(64) NOT NULL,
+  `kind` varchar(32) NOT NULL DEFAULT 'insert' COMMENT 'insert|date_change|explain',
+  `title` varchar(255) NOT NULL DEFAULT '',
+  `payload` longtext NOT NULL,
+  `baseline` longtext NOT NULL,
+  `status` varchar(16) NOT NULL DEFAULT 'pending' COMMENT 'pending|applied|rejected|stale',
+  `decided_by` varchar(64) DEFAULT '',
+  `decided_at` datetime DEFAULT NULL,
+  `reason` text DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_team_time` (`team_id`,`created_at`),
+  KEY `idx_team_status` (`team_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+;
+
 -- table: md_reminder_log
 CREATE TABLE IF NOT EXISTS `md_reminder_log` (
   `id` varchar(36) NOT NULL,
