@@ -112,8 +112,12 @@
                     v-for="tm in teamChoices"
                     :key="tm.team_id"
                     :command="tm.team_id"
-                    :disabled="tm.team_id === auth.currentTeamId"
-                  >{{ tm.team_name || tm.team_id }}</el-dropdown-item>
+                    :class="{ 'team-option--current': tm.team_id === auth.currentTeamId }"
+                    :aria-current="tm.team_id === auth.currentTeamId ? 'true' : undefined"
+                  >
+                    <span class="team-option-check">{{ tm.team_id === auth.currentTeamId ? '✓' : '' }}</span>
+                    {{ tm.team_name || tm.team_id }}
+                  </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -531,4 +535,16 @@ onMounted(() => {
   .portal-link { font-size: 12px; }
 }
 
+
+/* 团队切换：当前团队加粗并打勾，而不是灰掉（灰掉看起来像不可用） */
+:global(.team-option-check) {
+  display: inline-block;
+  width: 1.2em;
+  color: var(--md-accent, var(--el-color-primary));
+  font-weight: 700;
+}
+:global(.el-dropdown-menu__item.team-option--current) {
+  font-weight: 600;
+  color: var(--md-text-ink, var(--el-text-color-primary));
+}
 </style>
