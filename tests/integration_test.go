@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +56,18 @@ func TestMain(m *testing.M) {
 		}
 		return def
 	}
+	// The suite creates and deletes rows, so it must point at a throwaway
+	// database. No default name: an unset variable is a setup error (D7: a
+	// missing database fails the run instead of silently skipping it).
+	dbName := os.Getenv("MIST_DOCS_TEST_DB_NAME")
+	if dbName == "" {
+		fmt.Println("FAIL: set MIST_DOCS_TEST_DB_NAME to a throwaway test database (see scripts/dev-db.sh)")
+		os.Exit(1)
+	}
+	if dbName == "mist_team" || strings.Contains(dbName, "prod") {
+		fmt.Printf("FAIL: refusing to run integration tests against %q\n", dbName)
+		os.Exit(1)
+	}
 	dbPassword := env("MIST_DOCS_TEST_DB_PASSWORD", "test-db-password")
 	dbPort, _ := strconv.Atoi(env("MIST_DOCS_TEST_DB_PORT", "3306"))
 
@@ -65,7 +78,7 @@ func TestMain(m *testing.M) {
 			Port:         dbPort,
 			User:         env("MIST_DOCS_TEST_DB_USER", "mist_team"),
 			Password:     dbPassword,
-			DBName:       env("MIST_DOCS_TEST_DB_NAME", "mist_team"),
+			DBName:       dbName,
 			MaxOpenConns: 5,
 			MaxIdleConns: 2,
 		},
@@ -91,8 +104,8 @@ func TestMain(m *testing.M) {
 	config.C.Storage.Root = tmpDir
 
 	if err := database.Init(config.C.Database); err != nil {
-		fmt.Printf("SKIP: cannot connect database: %v\n", err)
-		os.Exit(0)
+		fmt.Printf("FAIL: cannot connect test database %q: %v\n", dbName, err)
+		os.Exit(1)
 	}
 	defer database.Close()
 
