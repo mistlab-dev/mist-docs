@@ -550,11 +550,11 @@ func TeamCreateDocument(c *gin.Context) {
 		return
 	}
 
-	// Save initial content
+	// Save initial content as version 1
 	if req.Content != "" {
-		database.DB.Exec(`UPDATE md_documents SET content_text=? WHERE id=?`, req.Content, docID)
-		// Write file
-		writeDocContent(docID, []byte(req.Content))
+		if err := writeInitialVersion(docID, userID, []byte(req.Content)); err != nil {
+			log.Printf("create doc %s: %v", docID, err)
+		}
 	}
 
 	audit(c, "create_doc", "document", docID, req.Title, fmt.Sprintf(`{"type":"%s"}`, req.Type))
@@ -700,14 +700,6 @@ func TeamSaveDocumentContent(c *gin.Context) {
 	}
 	userID := c.GetString("user_id")
 
-	// Resolve storage bucket
-	var teamID, deptID string
-	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
-	bucket := teamID
-	if bucket == "" {
-		bucket = deptID
-	}
-
 	// Check lock
 	var lockedBy string
 	database.DB.QueryRow("SELECT locked_by FROM md_documents WHERE id=?", docID).Scan(&lockedBy)
@@ -732,26 +724,15 @@ func TeamSaveDocumentContent(c *gin.Context) {
 		contentBody = []byte(contentReq.Content)
 	}
 
-	// Increment version
-	var version int
-	database.DB.QueryRow("SELECT version FROM md_documents WHERE id=?", docID).Scan(&version)
-	version++
-
-	_, err = database.DB.Exec(
-		`UPDATE md_documents SET content_text=?, version=?, updated_by=?, updated_at=NOW() WHERE id=? AND team_id=?`,
-		string(contentBody), version, userID, docID, getTeamID(c))
+	version, changed, err := saveDocVersion(docID, getTeamID(c), userID, contentBody)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	writeDocContent(docID, contentBody)
-
-	// Save version record
-	versionPath := store.VersionPath(bucket, docID, version)
-	database.DB.Exec(`INSERT INTO md_versions (id, document_id, version, file_path, file_size, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
-		uuid.New().String(), docID, version, versionPath, int64(len(contentBody)), userID)
-	service.PruneDocumentVersions(docID)
+	if !changed {
+		c.JSON(http.StatusOK, gin.H{"message": "内容无变化", "version": version, "unchanged": true})
+		return
+	}
 
 	audit(c, "edit_doc", "document", docID, "", fmt.Sprintf(`{"version":%d}`, version))
 	c.JSON(http.StatusOK, gin.H{"message": "已保存", "version": version})
@@ -1095,27 +1076,25 @@ func TeamRestoreVersion(c *gin.Context) {
 	}
 	userID := c.GetString("user_id")
 
-	// Read version from file store
-	var teamID, deptID string
-	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
-	bucket := teamID
-	if bucket == "" {
-		bucket = deptID
-	}
-	content, err := store.ReadVersion(bucket, docID, req.Version)
+	content, err := store.ReadVersion(docBucket(docID), docID, req.Version)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "版本不存在"})
 		return
 	}
 
-	writeDocContent(docID, content)
-	var version int
-	database.DB.QueryRow("SELECT version FROM md_documents WHERE id=?", docID).Scan(&version)
-	version++
-	database.DB.Exec(`UPDATE md_documents SET content_text=?, version=?, updated_by=?, updated_at=NOW() WHERE id=? AND team_id=?`,
-		string(content), version, userID, docID, getTeamID(c))
-	audit(c, "restore", "document", docID, "", fmt.Sprintf(`{"version":%d}`, req.Version))
-	c.JSON(http.StatusOK, gin.H{"message": "已恢复"})
+	// Restoring creates a new version with the old content; the existing
+	// version files, including the newest one, stay as they are.
+	version, changed, err := saveDocVersion(docID, getTeamID(c), userID, content)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !changed {
+		c.JSON(http.StatusOK, gin.H{"message": "内容与当前版本相同，无需恢复", "version": version, "unchanged": true})
+		return
+	}
+	audit(c, "restore", "document", docID, "", fmt.Sprintf(`{"version":%d,"new_version":%d}`, req.Version, version))
+	c.JSON(http.StatusOK, gin.H{"message": "已恢复", "version": version})
 }
 
 // ==================== 锁定 ====================
@@ -2088,26 +2067,6 @@ func TeamDocStats(c *gin.Context) {
 
 // ==================== Helpers ====================
 
-func writeDocContent(docID string, content []byte) {
-	var teamID, deptID string
-	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
-	bucket := teamID
-	if bucket == "" {
-		bucket = deptID // fallback for legacy docs
-	}
-
-	var version int
-	database.DB.QueryRow("SELECT version FROM md_documents WHERE id=?", docID).Scan(&version)
-	if version < 1 {
-		version = 1
-	}
-
-	_, _, err := store.WriteVersion(bucket, docID, version, content)
-	if err != nil {
-		log.Printf("writeDocContent error: %v", err)
-	}
-}
-
 // teamStorageBytes matches the storage page: active documents, extra versions, and media files.
 // Trash is excluded, same as TeamStorageStatus.
 func teamStorageBytes(teamID string) int64 {
@@ -2688,6 +2647,8 @@ func TeamImportDocument(c *gin.Context) {
 		return
 	}
 
-	writeDocContent(docID, content)
+	if err := writeInitialVersion(docID, userID, content); err != nil {
+		log.Printf("import %s: %v", docID, err)
+	}
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": docID, "title": title, "type": docType}})
 }

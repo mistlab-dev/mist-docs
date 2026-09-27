@@ -784,6 +784,9 @@ const saveStatus = ref('') // '', 'saving', 'saved', 'error'
 let saveTimer: any = null
 let autoSaveTimer: any = null
 let dataLoaded = false // 防止加载数据前自动保存空内容
+// 最近一次已保存（或刚加载）的内容。打开文档时编辑器会把同样的内容再触发一次
+// onUpdate，内容没变就不保存，避免每次打开都多出一个版本。
+let lastSavedContent: string | null = null
 
 // 分享 & 协作
 const showShareDialog = ref(false)
@@ -1295,6 +1298,7 @@ async function loadDoc() {
   if (doc.value?.type === 'sheet') {
     sheetData.value = doc.value?.content || '{}'
   }
+  lastSavedContent = doc.value?.content ?? null
   // 数据加载完成，允许自动保存
   nextTick(() => { dataLoaded = true })
 }
@@ -1444,6 +1448,7 @@ function initEditor(initialContent: string) {
           if (yXmlFragment.length === 0 && initialContent && initialContent !== '{}') {
             editor.value?.commands.setContent(initialContent)
           }
+          markContentBaseline()
           updateOutline()
           wsProvider!.onSynced = null
         })
@@ -1491,6 +1496,11 @@ function initEditor(initialContent: string) {
 
   // Fallback: local mode (no collab)
   createLocalEditor(initialContent)
+}
+
+// 以编辑器当前内容（经 tiptap 规范化后的 HTML）作为"已保存"基线
+function markContentBaseline() {
+  if (editor.value) lastSavedContent = editor.value.getHTML()
 }
 
 function createLocalEditor(content: string) {
@@ -1545,6 +1555,7 @@ function createLocalEditor(content: string) {
       scheduleAutoSave()
       updateOutline()
     },
+    onCreate: () => { markContentBaseline() },
   })
 }
 
@@ -1631,19 +1642,17 @@ async function doSave() {
   if (!dataLoaded || !canEdit.value) return
   let content = ''
   if (doc.value?.type === 'sheet') {
-    const refVal = sheetRef.value
-    console.log('[SAVE] sheetRef.value type:', typeof refVal, 'keys:', refVal ? Object.keys(refVal) : 'null')
-    console.log('[SAVE] getData exists:', typeof refVal?.getData)
-    content = refVal?.getData?.() || '{}'
-    console.log('[SAVE] sheet content len:', content.length, 'isEmpty:', content === '{}')
+    content = sheetRef.value?.getData?.() || '{}'
   } else if (editor.value) {
     content = editor.value.getHTML()
   }
-  if (!content || content === '{}') { console.warn('[SAVE] blocked: no content or empty'); return }
+  if (!content || content === '{}') return // 不保存空内容
+  if (content === lastSavedContent) return // 内容没变，不产生新版本
   saving.value = true
   saveStatus.value = 'saving'
   try {
     await teamApi.put(`/documents/${docId}/content`, { content })
+    lastSavedContent = content
     saveStatus.value = 'saved'
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => { saveStatus.value = '' }, 3000)
@@ -1713,14 +1722,16 @@ function selectRestoreVersion(ver: number) {
   ).then(async () => {
     versionDialog.loading = true
     try {
-      await teamApi.post(`/documents/${docId}/restore`, { version: ver })
-      ElMessage.success(t('common.restoreSuccess', [ver]))
+      const { data: res } = await teamApi.post(`/documents/${docId}/restore`, { version: ver })
+      if (res?.unchanged) ElMessage.info(res.message)
+      else ElMessage.success(t('common.restoreSuccess', [ver]))
       versionDialog.show = false
       await loadDoc()
       await loadVersions()
       if (doc.value?.type === 'doc' && editor.value) {
         const content = doc.value?.content || ''
         editor.value.commands.setContent(content === '{}' ? '' : content)
+        markContentBaseline()
       } else if (doc.value?.type === 'sheet') {
         sheetData.value = doc.value?.content || '{}'
       }
@@ -1731,7 +1742,7 @@ function selectRestoreVersion(ver: number) {
   }).catch(() => {})
 }
 
-function onSheetChange() { console.log('[SAVE] onSheetChange triggered, dataLoaded:', dataLoaded); scheduleAutoSave() }
+function onSheetChange() { scheduleAutoSave() }
 
 // === 分享 & 协作 ===
 function roleLabel(role: string) {
