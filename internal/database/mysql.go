@@ -61,7 +61,7 @@ func Migrate() error {
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			INDEX idx_user (user_id),
 			INDEX idx_dept (department_id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`)
 	}
 
 	// Auto-migrate: md_team_folders table (team-scoped folder tree)
@@ -78,7 +78,7 @@ func Migrate() error {
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			INDEX idx_team (team_id),
 			INDEX idx_parent (parent_id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`)
 	}
 
 	// Auto-migrate: md_doc_fragments 关联表（文档 ↔ 团队片段）
@@ -98,7 +98,7 @@ func Migrate() error {
 			INDEX idx_doc (document_id),
 			INDEX idx_frag (fragment_id),
 			CONSTRAINT fk_docfrag_doc FOREIGN KEY (document_id) REFERENCES md_documents(id) ON DELETE CASCADE
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`)
 	}
 
 	// Auto-migrate: 对齐 md_doc_fragments 关联字段 collation，避免与 fragments/源表 JOIN 冲突
@@ -172,7 +172,7 @@ func migrateDeadlines() error {
 			INDEX idx_owner (team_id, owner_id),
 			INDEX idx_status (team_id, status),
 			INDEX idx_order (team_id, order_no)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
 			return fmt.Errorf("create md_deadlines: %w", err)
 		}
 	}
@@ -192,7 +192,7 @@ func migrateDeadlines() error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			INDEX idx_team (team_id, enabled)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
 			return fmt.Errorf("create md_reminder_rules: %w", err)
 		}
 	}
@@ -216,7 +216,7 @@ func migrateDeadlines() error {
 			UNIQUE KEY uk_once (rule_id, deadline_id),
 			INDEX idx_deadline (deadline_id),
 			INDEX idx_team_time (team_id, sent_at)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
 			return fmt.Errorf("create md_reminder_log: %w", err)
 		}
 	}
@@ -240,7 +240,7 @@ func migrateDeadlines() error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			INDEX idx_deadline (deadline_id, created_at),
 			INDEX idx_team (team_id, created_at)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
 			return fmt.Errorf("create md_deadline_events: %w", err)
 		}
 	}

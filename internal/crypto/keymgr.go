@@ -333,7 +333,7 @@ func InitKeyTables(ctx context.Context) error {
 			rotated_from VARCHAR(36) DEFAULT NULL,
 			created_by VARCHAR(100) DEFAULT 'system',
 			INDEX idx_type_status (type, status)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 	`)
 	return err
 }
