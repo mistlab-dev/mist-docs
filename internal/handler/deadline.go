@@ -291,7 +291,14 @@ func TeamUpdateDeadline(c *gin.Context) {
 	userID := c.GetString("user_id")
 	id := c.Param("id")
 
-	var in deadlineInput
+	// Progress and start date are pointers so an omitted field keeps its
+	// value. With plain fields a partial update (e.g. only due_date) reset
+	// progress to 0 and cleared the start date.
+	var in struct {
+		deadlineInput
+		Progress  *int    `json:"progress"`
+		StartDate *string `json:"start_date"`
+	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
 		return
@@ -350,10 +357,18 @@ func TeamUpdateDeadline(c *gin.Context) {
 		next.DueDate = due
 	}
 	var startDate any
-	if in.StartDate != "" {
-		if sd, err := time.ParseInLocation(dateLayout, in.StartDate, time.Local); err == nil {
+	if cur.StartDate != nil {
+		startDate = cur.StartDate.Format(dateLayout)
+	}
+	if in.StartDate != nil {
+		startDate = nil // "" clears the start date
+		if sd, err := time.ParseInLocation(dateLayout, *in.StartDate, time.Local); err == nil {
 			startDate = sd.Format(dateLayout)
 		}
+	}
+	progress := cur.Progress
+	if in.Progress != nil {
+		progress = clampProgress(*in.Progress)
 	}
 
 	_, err = database.DB.ExecContext(c.Request.Context(), `
@@ -363,7 +378,7 @@ func TeamUpdateDeadline(c *gin.Context) {
 			remark = ?, updated_by = ?
 		WHERE id = ? AND team_id = ?`,
 		next.OrderNo, next.Title, next.Customer, next.Quantity, startDate,
-		next.DueDate.Format(dateLayout), next.Status, clampProgress(in.Progress),
+		next.DueDate.Format(dateLayout), next.Status, progress,
 		next.Priority, next.OwnerID, next.Remark, userID, id, teamID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -382,9 +397,9 @@ func TeamUpdateDeadline(c *gin.Context) {
 	if cur.OwnerID != next.OwnerID {
 		recordDeadlineEvent(teamID, id, "updated", "owner_id", cur.OwnerID, next.OwnerID, in.Reason, userID)
 	}
-	if cur.Progress != in.Progress && in.Progress != 0 {
+	if cur.Progress != progress {
 		recordDeadlineEvent(teamID, id, "updated", "progress",
-			strconv.Itoa(cur.Progress), strconv.Itoa(clampProgress(in.Progress)), in.Reason, userID)
+			strconv.Itoa(cur.Progress), strconv.Itoa(progress), in.Reason, userID)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true})
