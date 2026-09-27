@@ -5,12 +5,13 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
+	"github.com/c-wind/mist-docs/internal/config"
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/service"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // ==================== 认证 ====================
@@ -78,35 +79,24 @@ func Me(c *gin.Context) {
 	}})
 }
 
-type ChangePasswordReq struct {
-	OldPassword string `json:"old_password" binding:"required"`
-	NewPassword string `json:"new_password" binding:"required,min=6"`
+// ChangePassword PUT /api/auth/password
+//
+// Accounts live in the Portal (shared users table, SSO; GitHub/Google users
+// have no password at all). The old handler read the legacy md_users table,
+// so it could never succeed for a Portal account. Answer 410 Gone with the
+// place to manage the account instead (D1).
+func ChangePassword(c *gin.Context) {
+	c.JSON(http.StatusGone, gin.H{
+		"error":      "MistDocs 不再管理密码，请在 Portal 的账号设置中修改",
+		"portal_url": portalURL(),
+	})
 }
 
-func ChangePassword(c *gin.Context) {
-	var req ChangePasswordReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
-		return
+func portalURL() string {
+	if u := strings.TrimRight(config.C.Portal.URL, "/"); u != "" {
+		return u
 	}
-
-	userID := c.GetString("user_id")
-	user, err := service.GetUserByID(c.Request.Context(), userID)
-	if err != nil || user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.OldPassword)); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "原密码错误"})
-		return
-	}
-
-	if err := service.ResetPassword(c.Request.Context(), userID, req.NewPassword); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "修改失败"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "密码已修改"})
+	return "https://mistlab.dev"
 }
 
 // ==================== 部门 ====================
