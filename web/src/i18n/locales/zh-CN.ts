@@ -1133,6 +1133,7 @@ export default {
     mediaDelete: '只有上传者或管理员可以删除',
     readOnlyDoc: '你对该文档只有查看权限',
     lockedBy: '已被 {name} 锁定，暂时只读',
+    lockedByShort: '已被 {name} 锁定',
     lockedByYou: '你已锁定此文档，其他人暂时只读',
     lockedTitle: '文档已锁定',
     lockedAdminNote: '你是管理员，仍可编辑',

@@ -31,7 +31,7 @@
           <el-tooltip :content="t('perm.lockedBy', { name: lockHolderName })" placement="bottom">
             <el-tag type="warning" effect="plain" class="lock-tag">
               <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg>
-              {{ t('perm.lockedBy', { name: lockHolderName }) }}
+              {{ t('perm.lockedByShort', { name: lockHolderName }) }}
             </el-tag>
           </el-tooltip>
           <el-button v-if="isTeamAdmin" size="small" type="warning" plain @click="unlockDoc">{{ t("docEditor.unlockBtn") }}</el-button>
@@ -99,7 +99,7 @@
     </div>
 
     <el-alert v-if="lockedByOther" type="warning" show-icon :closable="false" class="lock-banner"
-      :title="t('perm.lockedBy', { name: lockHolderName })"
+      :title="isTeamAdmin ? t('perm.lockedByShort', { name: lockHolderName }) : t('perm.lockedBy', { name: lockHolderName })"
       :description="isTeamAdmin ? t('perm.lockedAdminNote') : undefined" />
 
         <!-- TipTap 工具栏 -->
@@ -450,7 +450,7 @@
             <button class="media-del" @click.stop="deleteMedia(item)">×</button>
           </el-tooltip>
           <div class="media-preview">
-            <img v-if="item.type === 'image'" :src="item.url" :alt="item.name" />
+            <img v-if="item.type === 'image' && mediaThumbs[item.filename]" :src="mediaThumbs[item.filename]" :alt="item.name" />
             <div v-else class="media-file-icon">{{ item.type === 'document' ? '📄' : '📦' }}</div>
           </div>
           <div class="media-name" :title="item.name">{{ item.name }}</div>
@@ -1303,7 +1303,22 @@ async function loadMedia() {
     mediaItems.value = data.data || []
   } catch { mediaItems.value = [] }
   mediaLoading.value = false
+  loadMediaThumbs()
 }
+
+// Media files need the Authorization header, which <img src> cannot send,
+// so thumbnails are fetched with it and shown as blob URLs.
+const mediaThumbs = reactive<Record<string, string>>({})
+async function loadMediaThumbs() {
+  for (const m of mediaItems.value) {
+    if (m.type !== 'image' || mediaThumbs[m.filename]) continue
+    try {
+      const { data } = await http.get(m.url.replace(/^\/api/, ''), { responseType: 'blob' })
+      mediaThumbs[m.filename] = URL.createObjectURL(data)
+    } catch { /* leave the placeholder */ }
+  }
+}
+onUnmounted(() => { Object.values(mediaThumbs).forEach(u => URL.revokeObjectURL(u)) })
 
 function insertMedia(item: MediaItem) {
   if (item.type === 'image') {

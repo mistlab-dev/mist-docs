@@ -1057,7 +1057,7 @@ onMounted(loadAll)
   align-items: center;
   width: 100%;
 }
-.perm-hint { color: var(--el-text-color-secondary); font-size: 12px; margin-right: 12px; }
+.perm-hint { color: var(--el-text-color-secondary); font-size: 12px; margin-right: 12px; align-self: center; }
 .detail-footer .footer-gap {
   flex: 1;
 }

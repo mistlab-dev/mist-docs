@@ -1133,6 +1133,7 @@ export default {
     mediaDelete: 'Only the uploader or an admin can delete this',
     readOnlyDoc: 'You have read-only access to this document',
     lockedBy: 'Locked by {name}; read-only for now',
+    lockedByShort: 'Locked by {name}',
     lockedByYou: 'You locked this document; others are read-only',
     lockedTitle: 'Document locked',
     lockedAdminNote: 'You are an admin and can still edit',
