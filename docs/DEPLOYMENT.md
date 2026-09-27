@@ -320,7 +320,13 @@ Nginx 装在宿主机，反代到 Docker 映射的 8900 端口。
 
 来自 Portal 的共享表：`users`、`teams`、`team_members`、`fragments`。
 
-旧版遗留表 `md_users`、`md_departments`、`md_folders` 已不再使用，新安装不会创建。老库里的这几张表不要直接删除：先备份，再改名归档，确认无影响后再删。
+旧版遗留表 `md_users`、`md_departments`、`md_folders` 已不再使用，新安装不会创建。老库里的这几张表不要直接删除，按下面的顺序处理：
+
+1. 备份：`MYSQL_DEFAULTS=~/.my-mistdocs.cnf scripts/backup-md-tables.sh <库名> <备份目录>`（`mysqldump --single-transaction`，只导出 `md_*` 表，产物带 sha256）
+2. 只读检查：`mysql --defaults-extra-file=~/.my-mistdocs.cnf <库名> < scripts/archive-legacy-tables.sql`（默认只执行第 1 节：行数、外键、视图/触发器、仍挂在旧文件夹上的文档）
+3. 维护窗口内改名归档：取消该脚本第 2 节的注释执行，表改名为 `_archived_md_users_YYYYMMDD` 等
+4. 观察至少一周；有问题用第 3 节改回原名
+5. 确认无影响、再备份一次后，才执行第 4 节 DROP
 
 ### 表前缀
 

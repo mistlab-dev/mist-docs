@@ -192,7 +192,6 @@ func cleanTestData() {
 		"md_versions", "md_documents",
 		"md_team_folders",
 		"md_keys",
-		"md_users", "md_departments",
 	}
 	for _, t := range tables {
 		db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE id LIKE 'test-%%'", t))
