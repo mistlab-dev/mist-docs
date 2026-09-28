@@ -42,7 +42,8 @@ func buildPaths() map[string]interface{} {
 
 	add("/auth/login", "post", "已废弃", "此登录接口已废弃，请通过 mistlab.dev Portal 登录。调用返回 410。")
 	add("/openapi.json", "get", "本文档", "OpenAPI 3.0 描述，不要求登录。协同编辑的 WebSocket 在 /ws/teams/{team_id}/docs/{doc_id}（不在 /api 下），见 docs/WEBSOCKET.md。")
-	add("/files/{filename}", "get", "旧版上传文件", "旧版公开下载接口，读取存储目录 uploads/ 下的文件，不要求登录。当前版本不再往该目录写文件，团队媒体请用 /teams/{team_id}/media。")
+	add("/files/{filename}", "get", "旧版上传文件", "读取存储目录 uploads/ 下的旧文件，需要 Portal JWT（原先公开，已收紧）。当前版本不再往该目录写文件，团队媒体请用 /teams/{team_id}/media。")
+	add("/media/{team_id}/{filename}", "get", "文档内图片（签名地址）", "不要求登录，但必须带 sig 参数。签名由服务器在返回文档内容、版本、导出、分享内容和上传结果时生成，只对该团队的该文件有效。")
 	add("/auth/logout", "post", "退出", "需要 Portal JWT。")
 	add("/auth/me", "get", "当前用户", "读取 Portal JWT，返回共享 users 表中的用户和团队。")
 	add("/auth/password", "put", "已停用（410）", "密码在 Portal 管理。返回 410 和 portal_url。")

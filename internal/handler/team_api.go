@@ -687,7 +687,7 @@ func TeamGetDocumentContent(c *gin.Context) {
 	audit(c, "view", "document", docID, title, "")
 	lock := loadDocLock(docID)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
-		"content": string(content), "version": version,
+		"content": signMediaURLs(getTeamID(c), string(content)), "version": version,
 		"title": title, "type": docType, "updated_at": updatedAt,
 		"permission": docPermission(c, docID),
 		"locked_by":  lock.By, "locked_by_name": lock.ByName, "locked_at": lock.At,
@@ -1054,7 +1054,7 @@ func TeamGetVersionContent(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "版本不存在"})
 		return
 	}
-	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(signMediaURLs(getTeamID(c), string(content))))
 }
 
 func TeamRestoreVersion(c *gin.Context) {
@@ -1367,7 +1367,7 @@ func TeamExportDocument(c *gin.Context) {
 		return
 	}
 	content := readDocContent(docID)
-	if !serveDocumentExport(c, title, string(content), format) {
+	if !serveDocumentExport(c, title, signMediaURLs(getTeamID(c), string(content)), format) {
 		return
 	}
 	userName, _ := c.Get("username")
@@ -2319,7 +2319,7 @@ func TeamUploadFile(c *gin.Context) {
 		"filename": filename,
 		"original": header.Filename,
 		"size":     size,
-		"url":      "/api/teams/" + teamID + "/media/" + filename,
+		"url":      signedMediaURL(teamID, filename), // works in <img src> and share pages
 	}})
 }
 
@@ -2378,7 +2378,7 @@ func TeamListMedia(c *gin.Context) {
 			// name/url/type are what the editor's media library renders;
 			// the list used to return only filename, so it showed blanks.
 			"name":             name,
-			"url":              "/api/teams/" + teamID + "/media/" + e.Name(),
+			"url":              signedMediaURL(teamID, e.Name()),
 			"type":             mediaKind(e.Name()),
 			"filename":         e.Name(),
 			"original":         r.original,
@@ -2432,6 +2432,7 @@ func TeamGetMedia(c *gin.Context) {
 		return
 	}
 	path := filepath.Join(store.RootPath(), teamID, "media", filename)
+	setMediaHeaders(c)
 	c.File(path)
 }
 
