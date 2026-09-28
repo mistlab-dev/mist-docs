@@ -161,7 +161,10 @@
 - [x] Snippets 权限三级角色生效 —— 模型层 `viewer/editor/admin` 齐备
       （`internal/model/user.go`、`internal/model/fragment.go`），表 `fragment_permissions` 已建
 - [x] Portal 统一管理面板可访问 —— 跨服务跳转已接入（admin 面板内链到 `docs.mistlab.dev`）
-- [ ] 所有 API 有 go test 覆盖 —— 部分覆盖，未全面达标
+- [ ] 所有 API 有 go test 覆盖 —— MistDocs 大部分已覆盖，未到“全部”：2026-09 起 `go test ./tests/`
+      在 CI 的 MySQL 8 上跑 150+ 个集成测试（不再静默跳过），`internal/` 各包有单元测试
+      （排产/预演/解释器、鉴权与团队成员、限流、存储路径安全、加密、配置、webhook、ws）。
+      个别接口（如 `/files/:filename`、`/openapi.json`、标签按文档查询）还没有专门测试，另行跟踪
 - [x] 前端 npm run build 无报错
 - [x] 生产部署 healthz 通过
 
@@ -179,3 +182,6 @@
 - **交期看板**（`docs.mistlab.dev/deadlines`）：台账 + 分级提醒（T-7/T-3/T-1/当天/逾期）
   + 变更留痕 + 30 天准时率，已上线并端到端验证（scheduler 真实出提醒记录）。
   依据 `research/01-中小厂排产交期-需求整理.md` 的方向 A。
+- **插单预演 → 两段式提议 → 交期解释器**（2026-09，phase-4/5/7）：`POST /deadlines/preview-insert`、
+  `GET|PUT /deadlines/capacity`、`GET /proposals`、`POST /proposals/:id/apply|reject`、
+  `GET /deadlines/:id/explain`。设计与最终决定见 `DESIGN-DEADLINE-AI.md`。

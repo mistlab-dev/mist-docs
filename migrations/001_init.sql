@@ -1,3 +1,7 @@
+-- ⚠️ 历史文件 / HISTORICAL — do not use for new installs.
+-- This is the original pre-team (department-based) schema. New installs use
+-- docker/init-db.sql (+ docker/dev-portal-tables.sql for dev/demo). Kept only
+-- as a record of what old databases were created from.
 -- MistDocs 初始化（表名前缀 md_ 避免与 mist_team 表冲突）
 
 CREATE TABLE IF NOT EXISTS md_departments (

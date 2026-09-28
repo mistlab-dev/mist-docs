@@ -61,7 +61,7 @@ func Migrate() error {
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			INDEX idx_user (user_id),
 			INDEX idx_dept (department_id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`)
 	}
 
 	// Auto-migrate: md_team_folders table (team-scoped folder tree)
@@ -78,7 +78,7 @@ func Migrate() error {
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			INDEX idx_team (team_id),
 			INDEX idx_parent (parent_id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`)
 	}
 
 	// Auto-migrate: md_doc_fragments 关联表（文档 ↔ 团队片段）
@@ -98,7 +98,7 @@ func Migrate() error {
 			INDEX idx_doc (document_id),
 			INDEX idx_frag (fragment_id),
 			CONSTRAINT fk_docfrag_doc FOREIGN KEY (document_id) REFERENCES md_documents(id) ON DELETE CASCADE
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`)
 	}
 
 	// Auto-migrate: 对齐 md_doc_fragments 关联字段 collation，避免与 fragments/源表 JOIN 冲突
@@ -107,7 +107,14 @@ func Migrate() error {
 	DB.Exec(`ALTER TABLE md_doc_fragments MODIFY document_id VARCHAR(36) NOT NULL COLLATE utf8mb4_general_ci`)
 
 	// Older installs created these tables before team scope and updated_at.
-	// Adding a missing column keeps existing rows.
+	// Adding a missing column keeps existing rows. Production already has
+	// all of these (added by scripts/migrate-team.sql), so this only heals
+	// databases created from an old init-db.sql; ensureColumn checks first
+	// and skips existing columns and missing tables.
+	for _, table := range []string{"md_documents", "md_audits", "md_shares", "md_comments", "md_notifications", "md_tags"} {
+		ensureColumn(table, "team_id", "team_id VARCHAR(64) DEFAULT ''")
+	}
+	ensureIndex("md_documents", "idx_md_docs_team", "team_id")
 	ensureColumn("md_webhooks", "team_id", "team_id VARCHAR(64) DEFAULT ''")
 	ensureColumn("md_webhooks", "updated_at", "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
 	ensureColumn("md_templates", "team_id", "team_id VARCHAR(64) DEFAULT ''")
@@ -120,10 +127,53 @@ func Migrate() error {
 		fmt.Printf("backfill md_documents.deleted_at: %v\n", err)
 	}
 
+	// md_media records who uploaded each team media file, so the uploader can
+	// delete their own files (D3). Files uploaded before this table have no
+	// row; only admins can delete those.
+	if _, err := DB.Exec(`CREATE TABLE IF NOT EXISTS md_media (
+		filename VARCHAR(100) NOT NULL,
+		team_id VARCHAR(64) NOT NULL,
+		original_name VARCHAR(255) NOT NULL DEFAULT '',
+		uploaded_by VARCHAR(64) NOT NULL,
+		size BIGINT NOT NULL DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (team_id, filename),
+		INDEX idx_uploader (uploaded_by)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
+		fmt.Printf("migrate md_media: %v\n", err)
+	}
+
 	return migrateDeadlines()
 }
 
+func tableExists(table string) bool {
+	var n int
+	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?`, table).Scan(&n)
+	return n > 0
+}
+
+// ensureIndex adds a secondary index when the table exists and has no index
+// of that name.
+func ensureIndex(table, name, columns string) {
+	if !tableExists(table) {
+		return
+	}
+	var n int
+	if err := DB.QueryRow(
+		`SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?`,
+		table, name,
+	).Scan(&n); err != nil || n > 0 {
+		return
+	}
+	if _, err := DB.Exec(`ALTER TABLE ` + table + ` ADD INDEX ` + name + ` (` + columns + `)`); err != nil {
+		fmt.Printf("migrate index %s.%s: %v\n", table, name, err)
+	}
+}
+
 func ensureColumn(table, column, ddl string) {
+	if !tableExists(table) {
+		return
+	}
 	var n int
 	if err := DB.QueryRow(
 		`SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?`,
@@ -172,7 +222,7 @@ func migrateDeadlines() error {
 			INDEX idx_owner (team_id, owner_id),
 			INDEX idx_status (team_id, status),
 			INDEX idx_order (team_id, order_no)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
 			return fmt.Errorf("create md_deadlines: %w", err)
 		}
 	}
@@ -192,7 +242,7 @@ func migrateDeadlines() error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			INDEX idx_team (team_id, enabled)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
 			return fmt.Errorf("create md_reminder_rules: %w", err)
 		}
 	}
@@ -216,7 +266,7 @@ func migrateDeadlines() error {
 			UNIQUE KEY uk_once (rule_id, deadline_id),
 			INDEX idx_deadline (deadline_id),
 			INDEX idx_team_time (team_id, sent_at)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
 			return fmt.Errorf("create md_reminder_log: %w", err)
 		}
 	}
@@ -240,9 +290,50 @@ func migrateDeadlines() error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			INDEX idx_deadline (deadline_id, created_at),
 			INDEX idx_team (team_id, created_at)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
 			return fmt.Errorf("create md_deadline_events: %w", err)
 		}
+	}
+
+	// 5. md_team_capacity — "orders per day" for the insert preview (D14).
+	// One row per effective date; the latest row on or before a day applies.
+	// key_customers is the team's key-customer list (D16), one name per line,
+	// kept identical on every row of the team.
+	if _, err := DB.Exec(`CREATE TABLE IF NOT EXISTS md_team_capacity (
+		team_id VARCHAR(64) NOT NULL,
+		effective_from DATE NOT NULL,
+		per_day INT NOT NULL DEFAULT 1,
+		key_customers TEXT,
+		updated_by VARCHAR(64) DEFAULT '',
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		PRIMARY KEY (team_id, effective_from)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
+		return fmt.Errorf("create md_team_capacity: %w", err)
+	}
+
+	// 6. md_proposals — two-step "preview, then confirm" for schedule changes
+	// (D19: lives in mist-docs next to the only write path). payload holds the
+	// preview result and the exact changes apply will make; baseline holds the
+	// fingerprint of the open orders the preview was computed from, so apply
+	// can refuse (409, status stale) when the data moved in between.
+	// LONGTEXT rather than JSON: identical on MariaDB and MySQL.
+	if _, err := DB.Exec(`CREATE TABLE IF NOT EXISTS md_proposals (
+		id VARCHAR(36) PRIMARY KEY,
+		team_id VARCHAR(64) NOT NULL,
+		user_id VARCHAR(64) NOT NULL,
+		kind VARCHAR(32) NOT NULL DEFAULT 'insert' COMMENT 'insert|date_change|explain',
+		title VARCHAR(255) NOT NULL DEFAULT '',
+		payload LONGTEXT NOT NULL,
+		baseline LONGTEXT NOT NULL,
+		status VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending|applied|rejected|stale',
+		decided_by VARCHAR(64) DEFAULT '',
+		decided_at DATETIME NULL,
+		reason TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		INDEX idx_team_time (team_id, created_at),
+		INDEX idx_team_status (team_id, status)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
+		return fmt.Errorf("create md_proposals: %w", err)
 	}
 
 	return nil

@@ -1,24 +1,16 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
-import router from '@/router'
+import { createRefreshQueue, pickTokens } from '@/utils/tokenRefresh'
 
 const http = axios.create({
   baseURL: '/api',
   timeout: 15000,
 })
 
-// Refresh token state (prevent concurrent refresh requests)
+// One refresh at a time; requests that 401 meanwhile wait in the queue and
+// are retried with the new token, or rejected if the refresh fails.
 let isRefreshing = false
-let refreshSubscribers: Array<(token: string) => void> = []
-
-function onRefreshed(token: string) {
-  refreshSubscribers.forEach(cb => cb(token))
-  refreshSubscribers = []
-}
-
-function addRefreshSubscriber(cb: (token: string) => void) {
-  refreshSubscribers.push(cb)
-}
+const refreshQueue = createRefreshQueue()
 
 http.interceptors.request.use((config) => {
   const auth = useAuthStore()
@@ -46,12 +38,10 @@ http.interceptors.response.use(
 
       // If already refreshing, queue this request
       if (isRefreshing) {
-        return new Promise((resolve) => {
-          addRefreshSubscriber((token: string) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`
-            resolve(http(originalRequest))
-          })
-        })
+        const token = await refreshQueue.wait()
+        originalRequest._retry = true
+        originalRequest.headers.Authorization = `Bearer ${token}`
+        return http(originalRequest)
       }
 
       originalRequest._retry = true
@@ -64,19 +54,20 @@ http.interceptors.response.use(
           refresh_token: refreshToken,
         })
 
-        if (resp.data?.access_token) {
-          const newAccessToken = resp.data.access_token
-          const newRefreshToken = resp.data.refresh_token || refreshToken
+        const tokens = pickTokens(resp.data)
+        if (tokens) {
+          const newAccessToken = tokens.access
 
-          // Update stored tokens
+          // Update stored tokens (store and localStorage stay in sync)
           auth.token = newAccessToken
           localStorage.setItem('mist-docs-token', newAccessToken)
-          if (resp.data.refresh_token) {
-            localStorage.setItem('mist-docs-refresh-token', newRefreshToken)
+          if (tokens.refresh) {
+            auth.refreshToken = tokens.refresh
+            localStorage.setItem('mist-docs-refresh-token', tokens.refresh)
           }
 
           // Retry queued requests
-          onRefreshed(newAccessToken)
+          refreshQueue.resolve(newAccessToken)
 
           // Retry original request
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
@@ -85,7 +76,9 @@ http.interceptors.response.use(
           throw new Error('No access_token in refresh response')
         }
       } catch (refreshErr) {
-        // Refresh failed → clear everything and redirect to Portal login
+        // Refresh failed → fail the queued requests, clear everything and
+        // redirect to Portal login
+        refreshQueue.reject(refreshErr)
         auth.logout()
         localStorage.removeItem('mist-docs-refresh-token')
         auth.redirectToPortalLogin()

@@ -178,12 +178,12 @@ func attachOwnerNames(items []*model.Deadline) {
 	if len(ids) == 0 {
 		return
 	}
+	// The shared users table has display_name / username, not "name": the
+	// old query failed for every row, so the board showed 未指派 for
+	// orders that did have an owner.
 	names := map[string]string{}
 	for id := range ids {
-		var name string
-		if err := database.DB.QueryRow(`SELECT name FROM users WHERE id = ?`, id).Scan(&name); err == nil {
-			names[id] = name
-		}
+		names[id] = userDisplayName(id)
 	}
 	for _, d := range items {
 		d.OwnerName = names[d.OwnerID]
@@ -192,6 +192,9 @@ func attachOwnerNames(items []*model.Deadline) {
 
 // TeamCreateDeadline POST /teams/:team_id/deadlines
 func TeamCreateDeadline(c *gin.Context) {
+	if !requireRole(c, RoleEditor) {
+		return
+	}
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 
@@ -281,11 +284,21 @@ func TeamGetDeadline(c *gin.Context) {
 // Every field change is written to md_deadline_events with the previous value,
 // so "why did this slip" remains answerable months later.
 func TeamUpdateDeadline(c *gin.Context) {
+	if !requireRole(c, RoleEditor) {
+		return
+	}
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 	id := c.Param("id")
 
-	var in deadlineInput
+	// Progress and start date are pointers so an omitted field keeps its
+	// value. With plain fields a partial update (e.g. only due_date) reset
+	// progress to 0 and cleared the start date.
+	var in struct {
+		deadlineInput
+		Progress  *int    `json:"progress"`
+		StartDate *string `json:"start_date"`
+	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
 		return
@@ -344,10 +357,18 @@ func TeamUpdateDeadline(c *gin.Context) {
 		next.DueDate = due
 	}
 	var startDate any
-	if in.StartDate != "" {
-		if sd, err := time.ParseInLocation(dateLayout, in.StartDate, time.Local); err == nil {
+	if cur.StartDate != nil {
+		startDate = cur.StartDate.Format(dateLayout)
+	}
+	if in.StartDate != nil {
+		startDate = nil // "" clears the start date
+		if sd, err := time.ParseInLocation(dateLayout, *in.StartDate, time.Local); err == nil {
 			startDate = sd.Format(dateLayout)
 		}
+	}
+	progress := cur.Progress
+	if in.Progress != nil {
+		progress = clampProgress(*in.Progress)
 	}
 
 	_, err = database.DB.ExecContext(c.Request.Context(), `
@@ -357,7 +378,7 @@ func TeamUpdateDeadline(c *gin.Context) {
 			remark = ?, updated_by = ?
 		WHERE id = ? AND team_id = ?`,
 		next.OrderNo, next.Title, next.Customer, next.Quantity, startDate,
-		next.DueDate.Format(dateLayout), next.Status, clampProgress(in.Progress),
+		next.DueDate.Format(dateLayout), next.Status, progress,
 		next.Priority, next.OwnerID, next.Remark, userID, id, teamID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -376,9 +397,18 @@ func TeamUpdateDeadline(c *gin.Context) {
 	if cur.OwnerID != next.OwnerID {
 		recordDeadlineEvent(teamID, id, "updated", "owner_id", cur.OwnerID, next.OwnerID, in.Reason, userID)
 	}
-	if cur.Progress != in.Progress && in.Progress != 0 {
+	if cur.Progress != progress {
 		recordDeadlineEvent(teamID, id, "updated", "progress",
-			strconv.Itoa(cur.Progress), strconv.Itoa(clampProgress(in.Progress)), in.Reason, userID)
+			strconv.Itoa(cur.Progress), strconv.Itoa(progress), in.Reason, userID)
+	}
+	// Priority and planned start move an order in the queue, so the explainer
+	// needs them in the history too.
+	if cur.Priority != next.Priority {
+		recordDeadlineEvent(teamID, id, "updated", "priority", cur.Priority, next.Priority, in.Reason, userID)
+	}
+	newStart, _ := startDate.(string)
+	if oldStart := fmtDatePtr(cur.StartDate); oldStart != newStart {
+		recordDeadlineEvent(teamID, id, "updated", "start_date", oldStart, newStart, in.Reason, userID)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -390,6 +420,20 @@ func TeamDeleteDeadline(c *gin.Context) {
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 	id := c.Param("id")
+
+	// Creator, the order's owner (负责人) or a team admin (D2).
+	var createdBy, ownerID string
+	if err := database.DB.QueryRowContext(c.Request.Context(),
+		`SELECT created_by, IFNULL(owner_id,'') FROM md_deadlines WHERE id = ? AND team_id = ? AND deleted_at IS NULL`,
+		id, teamID).Scan(&createdBy, &ownerID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "交期记录不存在"})
+		return
+	}
+	mine := userID != "" && (userID == createdBy || userID == ownerID)
+	if !isTeamAdmin(c) && !(mine && roleAtLeast(c, RoleEditor)) {
+		denyForbidden(c)
+		return
+	}
 
 	res, err := database.DB.ExecContext(c.Request.Context(),
 		`UPDATE md_deadlines SET deleted_at = NOW(), updated_by = ? WHERE id = ? AND team_id = ? AND deleted_at IS NULL`,
@@ -550,6 +594,9 @@ func TeamListReminderRules(c *gin.Context) {
 
 // TeamCreateReminderRule POST /teams/:team_id/reminder-rules
 func TeamCreateReminderRule(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 
@@ -600,6 +647,9 @@ func TeamCreateReminderRule(c *gin.Context) {
 
 // TeamUpdateReminderRule PUT /teams/:team_id/reminder-rules/:id
 func TeamUpdateReminderRule(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
 	teamID := getTeamID(c)
 	var in struct {
 		Name       string `json:"name"`
@@ -656,6 +706,9 @@ func TeamUpdateReminderRule(c *gin.Context) {
 
 // TeamDeleteReminderRule DELETE /teams/:team_id/reminder-rules/:id
 func TeamDeleteReminderRule(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
 	teamID := getTeamID(c)
 	res, err := database.DB.ExecContext(c.Request.Context(),
 		`DELETE FROM md_reminder_rules WHERE id = ? AND team_id = ?`, c.Param("id"), teamID)
@@ -673,6 +726,9 @@ func TeamDeleteReminderRule(c *gin.Context) {
 // TeamSeedDeadlineRules POST /teams/:team_id/reminder-rules/seed
 // Installs the default 7/3/1/0/-1 cadence for a team that has no rules yet.
 func TeamSeedDeadlineRules(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 
@@ -750,6 +806,13 @@ func recordDeadlineEvent(teamID, deadlineID, eventType, field, oldValue, newValu
 			(id, team_id, deadline_id, event_type, field, old_value, new_value, reason, actor_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		uuid.New().String(), teamID, deadlineID, eventType, field, oldValue, newValue, reason, actorID)
+}
+
+func fmtDatePtr(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format(dateLayout)
 }
 
 func clampProgress(p int) int {

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import http from '@/utils/http'
+import { canEditRole, isAdminRole } from '@/utils/roles'
 
 interface Team {
   team_id: string
@@ -49,13 +50,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const isLoggedIn = computed(() => !!token.value)
-  const isAdmin = computed(() => user.value?.is_admin || currentTeamRole.value === 'admin')
-  const isTeamAdmin = computed(() => currentTeamRole.value === 'admin')
-
-  // DEPRECATED: local login no longer supported
-  async function login(_username: string, _password: string) {
-    throw new Error('请通过 mistlab.dev 登录')
-  }
+  const isAdmin = computed(() => user.value?.is_admin || isAdminRole(currentTeamRole.value))
+  // owner has every admin right (D4)
+  const isTeamAdmin = computed(() => isAdminRole(currentTeamRole.value))
+  // editor and up: may create/edit team content
+  const canEditTeam = computed(() => canEditRole(currentTeamRole.value))
 
   // SSO: redirect to Portal login
   function redirectToPortalLogin() {
@@ -111,7 +110,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     token, refreshToken, user, currentTeamId, currentTeamRole,
-    isLoggedIn, isAdmin, isTeamAdmin,
-    login, redirectToPortalLogin, handleSSOCallback, logout, fetchMe, setTeam
+    isLoggedIn, isAdmin, isTeamAdmin, canEditTeam,
+    redirectToPortalLogin, handleSSOCallback, logout, fetchMe, setTeam
   }
 })

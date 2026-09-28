@@ -18,6 +18,7 @@ import (
 	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/service"
 	"github.com/c-wind/mist-docs/internal/store"
+	"github.com/c-wind/mist-docs/internal/webhook"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -94,9 +95,8 @@ func TeamFolderTree(c *gin.Context) {
 // CreateTeamFolder POST /teams/:team_id/folders
 func CreateTeamFolder(c *gin.Context) {
 	teamID := getTeamID(c)
-	role := getTeamRole(c)
-	if role != "admin" && role != "editor" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "需要编辑者或管理员权限"})
+	// Folder structure is managed by admins (UNIFIED-AUTH-DESIGN §6.1, D2).
+	if !requireTeamAdmin(c) {
 		return
 	}
 
@@ -106,6 +106,10 @@ func CreateTeamFolder(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if req.ParentID != "" && !folderInTeam(teamID, req.ParentID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "上级文件夹不存在"})
 		return
 	}
 
@@ -128,9 +132,7 @@ func CreateTeamFolder(c *gin.Context) {
 
 // UpdateTeamFolder PUT /teams/:team_id/folders/:id
 func UpdateTeamFolder(c *gin.Context) {
-	role := getTeamRole(c)
-	if role != "admin" && role != "editor" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	if !requireTeamAdmin(c) {
 		return
 	}
 
@@ -166,9 +168,7 @@ func UpdateTeamFolder(c *gin.Context) {
 
 // DeleteTeamFolder DELETE /teams/:team_id/folders/:id
 func DeleteTeamFolder(c *gin.Context) {
-	role := getTeamRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可删除文件夹"})
+	if !requireTeamAdmin(c) {
 		return
 	}
 
@@ -498,9 +498,7 @@ func TeamRecentDocuments(c *gin.Context) {
 // TeamCreateDocument POST /teams/:team_id/documents
 func TeamCreateDocument(c *gin.Context) {
 	teamID := getTeamID(c)
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	if !requireRole(c, RoleEditor) {
 		return
 	}
 
@@ -550,11 +548,11 @@ func TeamCreateDocument(c *gin.Context) {
 		return
 	}
 
-	// Save initial content
+	// Save initial content as version 1
 	if req.Content != "" {
-		database.DB.Exec(`UPDATE md_documents SET content_text=? WHERE id=?`, req.Content, docID)
-		// Write file
-		writeDocContent(docID, []byte(req.Content))
+		if err := writeInitialVersion(docID, userID, []byte(req.Content)); err != nil {
+			log.Printf("create doc %s: %v", docID, err)
+		}
 	}
 
 	audit(c, "create_doc", "document", docID, req.Title, fmt.Sprintf(`{"type":"%s"}`, req.Type))
@@ -582,12 +580,14 @@ func TeamGetDocument(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "文档不存在"})
 		return
 	}
+	lock := loadDocLock(docID)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"id": id, "team_id": teamID2, "folder_id": folderID,
 		"title": title, "type": docType, "file_size": fileSize,
 		"version": version, "created_by": createdBy, "updated_by": updatedBy,
 		"created_at": createdAt, "updated_at": updatedAt,
 		"permission": docPermission(c, docID),
+		"locked_by":  lock.By, "locked_by_name": lock.ByName, "locked_at": lock.At,
 	}})
 }
 
@@ -685,10 +685,12 @@ func TeamGetDocumentContent(c *gin.Context) {
 
 	content := readDocContent(docID)
 	audit(c, "view", "document", docID, title, "")
+	lock := loadDocLock(docID)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"content": string(content), "version": version,
 		"title": title, "type": docType, "updated_at": updatedAt,
 		"permission": docPermission(c, docID),
+		"locked_by":  lock.By, "locked_by_name": lock.ByName, "locked_at": lock.At,
 	}})
 }
 
@@ -700,20 +702,7 @@ func TeamSaveDocumentContent(c *gin.Context) {
 	}
 	userID := c.GetString("user_id")
 
-	// Resolve storage bucket
-	var teamID, deptID string
-	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
-	bucket := teamID
-	if bucket == "" {
-		bucket = deptID
-	}
-
-	// Check lock
-	var lockedBy string
-	database.DB.QueryRow("SELECT locked_by FROM md_documents WHERE id=?", docID).Scan(&lockedBy)
-	role := getTeamRole(c)
-	if lockedBy != "" && lockedBy != userID && role != "admin" && role != "owner" {
-		c.JSON(http.StatusConflict, gin.H{"error": "文档已被锁定"})
+	if lockedAgainst(c, docID) {
 		return
 	}
 
@@ -732,26 +721,15 @@ func TeamSaveDocumentContent(c *gin.Context) {
 		contentBody = []byte(contentReq.Content)
 	}
 
-	// Increment version
-	var version int
-	database.DB.QueryRow("SELECT version FROM md_documents WHERE id=?", docID).Scan(&version)
-	version++
-
-	_, err = database.DB.Exec(
-		`UPDATE md_documents SET content_text=?, version=?, updated_by=?, updated_at=NOW() WHERE id=? AND team_id=?`,
-		string(contentBody), version, userID, docID, getTeamID(c))
+	version, changed, err := saveDocVersion(docID, getTeamID(c), userID, contentBody)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	writeDocContent(docID, contentBody)
-
-	// Save version record
-	versionPath := store.VersionPath(bucket, docID, version)
-	database.DB.Exec(`INSERT INTO md_versions (id, document_id, version, file_path, file_size, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
-		uuid.New().String(), docID, version, versionPath, int64(len(contentBody)), userID)
-	service.PruneDocumentVersions(docID)
+	if !changed {
+		c.JSON(http.StatusOK, gin.H{"message": "内容无变化", "version": version, "unchanged": true})
+		return
+	}
 
 	audit(c, "edit_doc", "document", docID, "", fmt.Sprintf(`{"version":%d}`, version))
 	c.JSON(http.StatusOK, gin.H{"message": "已保存", "version": version})
@@ -816,7 +794,7 @@ func TeamRestoreFromTrash(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	audit(c, "restore_doc", "document", docID, "", "")
+	audit(c, "restore_doc", "document", docID, "", `{"from":"trash"}`)
 	c.JSON(http.StatusOK, gin.H{"message": "已恢复"})
 }
 
@@ -885,7 +863,9 @@ func TeamAddFavorite(c *gin.Context) {
 	if !requireDoc(c, docID, "read", true) {
 		return
 	}
-	_, err := database.DB.Exec(`INSERT IGNORE INTO md_favorites (user_id, document_id) VALUES (?, ?)`, userID, docID)
+	// md_favorites.id has no default: without an explicit id the first row
+	// got id='' and INSERT IGNORE silently dropped every later favorite.
+	_, err := database.DB.Exec(`INSERT IGNORE INTO md_favorites (id, user_id, document_id) VALUES (?, ?, ?)`, uuid.New().String(), userID, docID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -928,9 +908,7 @@ func TeamListTags(c *gin.Context) {
 }
 
 func TeamCreateTag(c *gin.Context) {
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	if !requireRole(c, RoleEditor) {
 		return
 	}
 	teamID := getTeamID(c)
@@ -953,9 +931,7 @@ func TeamCreateTag(c *gin.Context) {
 }
 
 func TeamDeleteTag(c *gin.Context) {
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	if !requireRole(c, RoleEditor) {
 		return
 	}
 	id := c.Param("id")
@@ -1094,58 +1070,34 @@ func TeamRestoreVersion(c *gin.Context) {
 		return
 	}
 	userID := c.GetString("user_id")
-
-	// Read version from file store
-	var teamID, deptID string
-	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
-	bucket := teamID
-	if bucket == "" {
-		bucket = deptID
+	if lockedAgainst(c, docID) {
+		return
 	}
-	content, err := store.ReadVersion(bucket, docID, req.Version)
+
+	content, err := store.ReadVersion(docBucket(docID), docID, req.Version)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "版本不存在"})
 		return
 	}
 
-	writeDocContent(docID, content)
-	var version int
-	database.DB.QueryRow("SELECT version FROM md_documents WHERE id=?", docID).Scan(&version)
-	version++
-	database.DB.Exec(`UPDATE md_documents SET content_text=?, version=?, updated_by=?, updated_at=NOW() WHERE id=? AND team_id=?`,
-		string(content), version, userID, docID, getTeamID(c))
-	audit(c, "restore", "document", docID, "", fmt.Sprintf(`{"version":%d}`, req.Version))
-	c.JSON(http.StatusOK, gin.H{"message": "已恢复"})
+	// Restoring creates a new version with the old content; the existing
+	// version files, including the newest one, stay as they are.
+	version, changed, err := saveDocVersion(docID, getTeamID(c), userID, content)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !changed {
+		c.JSON(http.StatusOK, gin.H{"message": "内容与当前版本相同，无需恢复", "version": version, "unchanged": true})
+		return
+	}
+	// D10: one action name for restores; the filter still matches the
+	// historical "restore" rows.
+	audit(c, "restore_doc", "document", docID, "", fmt.Sprintf(`{"from":"version","version":%d,"new_version":%d}`, req.Version, version))
+	c.JSON(http.StatusOK, gin.H{"message": "已恢复", "version": version})
 }
 
 // ==================== 锁定 ====================
-
-func TeamLockDocument(c *gin.Context) {
-	docID := c.Param("id")
-	if !requireDoc(c, docID, "write", true) {
-		return
-	}
-	userID := c.GetString("user_id")
-	_, err := database.DB.Exec(`UPDATE md_documents SET locked_by=?, locked_at=NOW() WHERE id=? AND team_id=?`, userID, docID, getTeamID(c))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "已锁定"})
-}
-
-func TeamUnlockDocument(c *gin.Context) {
-	docID := c.Param("id")
-	if !requireDoc(c, docID, "write", true) {
-		return
-	}
-	_, err := database.DB.Exec(`UPDATE md_documents SET locked_by='', locked_at=NULL WHERE id=? AND team_id=?`, docID, getTeamID(c))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "已解锁"})
-}
 
 // ==================== 分享 ====================
 
@@ -1200,6 +1152,10 @@ func TeamCreateShare(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "create_share", "document", docID, "", auditDetail(gin.H{
+		"share_id": id, "permission": req.Permission, "expires_in_hours": hours,
+		"expires": req.Expires, "has_password": req.Password != "",
+	}))
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"id": id, "token": token, "permission": req.Permission, "share_url": shareURL,
 	}})
@@ -1322,6 +1278,10 @@ func TeamAddCollaborator(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	notifyDocAccessChanged(docID)
+	audit(c, "add_collaborator", "document", docID, "", auditDetail(gin.H{
+		"target_id": req.TargetID, "target_name": userDisplayName(req.TargetID), "permission": perm,
+	}))
 	c.JSON(http.StatusOK, gin.H{"message": "已添加", "permission": perm, "role": service.FrontendRole(perm)})
 }
 
@@ -1384,6 +1344,9 @@ func TeamCreateComment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "create_comment", "document", docID, "", auditDetail(gin.H{
+		"comment_id": id, "parent_id": req.ParentID, "excerpt": excerpt(req.Content, 80),
+	}))
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"id": id, "content": req.Content, "user_id": userID, "user_name": userName,
 	}})
@@ -1418,7 +1381,11 @@ func TeamExportDocument(c *gin.Context) {
 func buildAuditFilter(action, userName, startDate, endDate string) (string, []interface{}) {
 	where := ""
 	args := []interface{}{}
-	if validAuditAction(action) {
+	switch {
+	case action == "restore_doc" || action == "restore":
+		// D10: version restores used to be written as "restore".
+		where += " AND a.action IN ('restore_doc','restore')"
+	case validAuditAction(action):
 		where += " AND a.action=?"
 		args = append(args, action)
 	}
@@ -1455,8 +1422,15 @@ func validAuditAction(action string) bool {
 	return true
 }
 
+const auditNameExpr = `COALESCE(NULLIF(a.resource_name,''), ad.title, af.name, '')`
+
 func auditFromClause() string {
-	return ` FROM md_audits a LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id WHERE a.team_id=?`
+	// md_documents/md_team_folders fill in names for older rows that were
+	// written without one (they showed "—").
+	return ` FROM md_audits a LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id
+		LEFT JOIN md_documents ad ON a.resource_type = 'document' AND ad.id = a.resource_id
+		LEFT JOIN md_team_folders af ON a.resource_type = 'folder' AND af.id = a.resource_id
+		WHERE a.team_id=?`
 }
 
 func TeamListAudits(c *gin.Context) {
@@ -1485,7 +1459,7 @@ func TeamListAudits(c *gin.Context) {
 	listArgs := append([]interface{}{teamID}, filterArgs...)
 	listArgs = append(listArgs, pageSize, offset)
 	rows, err := database.DB.Query(
-		`SELECT a.id, a.user_id, a.action, a.resource_type, a.resource_id, a.resource_name, a.detail, IFNULL(a.ip,''), a.created_at,
+		`SELECT a.id, a.user_id, a.action, a.resource_type, a.resource_id, `+auditNameExpr+`, IFNULL(a.detail,''), IFNULL(a.ip,''), a.created_at,
 		 COALESCE(NULLIF(u.display_name,''), NULLIF(a.user_name,''), '') as user_name`+
 			auditFromClause()+filter+` ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
 		listArgs...)
@@ -1524,7 +1498,7 @@ func TeamExportAudits(c *gin.Context) {
 	args := append([]interface{}{teamID}, filterArgs...)
 	rows, err := database.DB.Query(
 		`SELECT a.created_at, COALESCE(NULLIF(u.display_name,''), NULLIF(a.user_name,''), ''),
-		 a.action, a.resource_type, IFNULL(a.resource_name,''), IFNULL(a.detail,''), IFNULL(a.ip,'')`+
+		 a.action, a.resource_type, `+auditNameExpr+`, IFNULL(a.detail,''), IFNULL(a.ip,'')`+
 			auditFromClause()+filter+` ORDER BY a.created_at DESC LIMIT 10000`, args...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1666,6 +1640,9 @@ func TeamSetPermission(c *gin.Context) {
 	}
 	audit(c, "set_permission", req.ResourceType, req.ResourceID, resourceTitle(teamID, req.ResourceType, req.ResourceID),
 		fmt.Sprintf(`{"target_id":"%s","permission":"%s"}`, req.TargetID, req.Permission))
+	if req.ResourceType == "document" {
+		notifyDocAccessChanged(req.ResourceID)
+	}
 	c.JSON(http.StatusOK, gin.H{"data": req})
 }
 
@@ -1697,6 +1674,9 @@ func TeamRemovePermission(c *gin.Context) {
 		return
 	}
 	audit(c, "remove_permission", resType, resID, name, "")
+	if resType == "document" {
+		notifyDocAccessChanged(resID)
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
@@ -1721,8 +1701,10 @@ func TeamCheckPermission(c *gin.Context) {
 
 func TeamListTemplates(c *gin.Context) {
 	teamID := getTeamID(c)
+	uid := c.GetString("user_id")
+	admin := isTeamAdmin(c)
 	rows, err := database.DB.Query(
-		`SELECT id, name, type, is_public, created_at, updated_at
+		`SELECT id, name, type, is_public, IFNULL(user_id,''), created_at, updated_at
 		 FROM md_templates WHERE team_id=?`, teamID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1731,12 +1713,15 @@ func TeamListTemplates(c *gin.Context) {
 	defer rows.Close()
 	var templates []map[string]interface{}
 	for rows.Next() {
-		var id, name, docType, createdAt, updatedAt string
+		var id, name, docType, owner, createdAt, updatedAt string
 		var isPublic bool
-		rows.Scan(&id, &name, &docType, &isPublic, &createdAt, &updatedAt)
+		rows.Scan(&id, &name, &docType, &isPublic, &owner, &createdAt, &updatedAt)
 		templates = append(templates, map[string]interface{}{
 			"id": id, "name": name, "type": docType,
-			"is_public": isPublic, "created_at": createdAt, "updated_at": updatedAt,
+			"is_public": isPublic, "created_by": owner,
+			"created_at": createdAt, "updated_at": updatedAt,
+			// can_manage lets the UI hide edit/delete it would refuse anyway.
+			"can_manage": admin || (owner != "" && owner == uid && roleAtLeast(c, RoleEditor)),
 		})
 	}
 	if templates == nil {
@@ -1756,7 +1741,11 @@ func TeamGetTemplate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "name": name, "type": docType, "content": content}})
 }
 
+// TeamCreateTemplate: editors and admins (D2).
 func TeamCreateTemplate(c *gin.Context) {
+	if !requireRole(c, RoleEditor) {
+		return
+	}
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 	var req struct {
@@ -1779,8 +1768,27 @@ func TeamCreateTemplate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "name": req.Name}})
 }
 
+// templateManageable: the template exists in this team and the caller is its
+// author (editor or above) or a team admin.
+func templateManageable(c *gin.Context, id string) bool {
+	var owner string
+	err := database.DB.QueryRow(`SELECT IFNULL(user_id,'') FROM md_templates WHERE id=? AND team_id=?`, id, getTeamID(c)).Scan(&owner)
+	if err != nil {
+		denyNotFound(c, "模板不存在")
+		return false
+	}
+	if isTeamAdmin(c) || (owner != "" && owner == c.GetString("user_id") && roleAtLeast(c, RoleEditor)) {
+		return true
+	}
+	denyForbidden(c)
+	return false
+}
+
 func TeamUpdateTemplate(c *gin.Context) {
 	id := c.Param("id")
+	if !templateManageable(c, id) {
+		return
+	}
 	var req struct {
 		Name    string `json:"name"`
 		Content string `json:"content"`
@@ -1799,6 +1807,9 @@ func TeamUpdateTemplate(c *gin.Context) {
 
 func TeamDeleteTemplate(c *gin.Context) {
 	id := c.Param("id")
+	if !templateManageable(c, id) {
+		return
+	}
 	_, err := database.DB.Exec(`DELETE FROM md_templates WHERE id=? AND team_id=?`, id, getTeamID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1946,13 +1957,68 @@ func TeamListWebhooks(c *gin.Context) {
 		rows.Scan(&id, &name, &url, &events, &enabled, &createdAt, &updatedAt)
 		webhooks = append(webhooks, map[string]interface{}{
 			"id": id, "name": name, "url": url, "events": events,
-			"enabled": enabled, "created_at": createdAt, "updated_at": updatedAt,
+			"event_list": canonicalEventList(events),
+			"enabled":    enabled, "created_at": createdAt, "updated_at": updatedAt,
 		})
 	}
 	if webhooks == nil {
 		webhooks = []map[string]interface{}{}
 	}
-	c.JSON(http.StatusOK, gin.H{"data": webhooks})
+	c.JSON(http.StatusOK, gin.H{"data": webhooks, "available_events": webhook.Events})
+}
+
+// canonicalEventList turns a stored events field (JSON array or legacy CSV
+// of audit action names) into the dotted names the settings page shows.
+func canonicalEventList(field string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, e := range webhook.ParseEvents(field) {
+		e = webhook.Canonical(e)
+		if !seen[e] {
+			seen[e] = true
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// parseEventsInput accepts events as a JSON array or a string (JSON array or
+// comma-separated) and returns the canonical JSON array to store. Unknown
+// names are an error; an empty selection is an error too (a hook that never
+// fires is almost certainly a mistake).
+func parseEventsInput(raw json.RawMessage) (string, error) {
+	var list []string
+	var str string
+	switch {
+	case len(raw) == 0 || string(raw) == "null":
+		list = webhook.DefaultEvents
+	case json.Unmarshal(raw, &list) == nil:
+	case json.Unmarshal(raw, &str) == nil:
+		if strings.TrimSpace(str) == "" {
+			list = webhook.DefaultEvents
+		} else {
+			list = webhook.ParseEvents(str)
+		}
+	default:
+		return "", fmt.Errorf("events 格式错误")
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	for _, e := range list {
+		e = webhook.Canonical(strings.TrimSpace(e))
+		if !webhook.Valid(e) {
+			return "", fmt.Errorf("未知事件: %s", e)
+		}
+		if !seen[e] {
+			seen[e] = true
+			out = append(out, e)
+		}
+	}
+	if len(out) == 0 {
+		return "", fmt.Errorf("至少选择一个事件")
+	}
+	b, _ := json.Marshal(out)
+	return string(b), nil
 }
 
 func TeamCreateWebhook(c *gin.Context) {
@@ -1962,9 +2028,9 @@ func TeamCreateWebhook(c *gin.Context) {
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 	var req struct {
-		Name   string `json:"name" binding:"required"`
-		URL    string `json:"url" binding:"required"`
-		Events string `json:"events"`
+		Name   string          `json:"name" binding:"required"`
+		URL    string          `json:"url" binding:"required"`
+		Events json.RawMessage `json:"events"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -1974,18 +2040,82 @@ func TeamCreateWebhook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook 地址必须是 http 或 https"})
 		return
 	}
-	if req.Events == "" {
-		req.Events = `["document.created","document.updated"]`
+	events, err := parseEventsInput(req.Events)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 	id := uuid.New().String()
-	_, err := database.DB.Exec(
+	_, err = database.DB.Exec(
 		`INSERT INTO md_webhooks (id, team_id, name, url, events, enabled, created_by) VALUES (?, ?, ?, ?, ?, 1, ?)`,
-		id, teamID, req.Name, req.URL, req.Events, userID)
+		id, teamID, req.Name, req.URL, events, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "name": req.Name, "url": req.URL}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "name": req.Name, "url": req.URL, "event_list": canonicalEventList(events)}})
+}
+
+// TeamUpdateWebhook PUT /teams/:team_id/webhooks/:id
+// Changes name, URL, subscribed events and/or enabled; omitted fields stay.
+func TeamUpdateWebhook(c *gin.Context) {
+	if !requireTeamAdmin(c) {
+		return
+	}
+	id := c.Param("id")
+	teamID := getTeamID(c)
+	var n int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM md_webhooks WHERE id=? AND team_id=?`, id, teamID).Scan(&n)
+	if n == 0 {
+		denyNotFound(c, "Webhook 不存在")
+		return
+	}
+	var req struct {
+		Name    *string         `json:"name"`
+		URL     *string         `json:"url"`
+		Events  json.RawMessage `json:"events"`
+		Enabled *bool           `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	sets, args := []string{}, []interface{}{}
+	if req.Name != nil {
+		if strings.TrimSpace(*req.Name) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "名称不能为空"})
+			return
+		}
+		sets, args = append(sets, "name=?"), append(args, strings.TrimSpace(*req.Name))
+	}
+	if req.URL != nil {
+		if !validWebhookURL(*req.URL) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook 地址必须是 http 或 https"})
+			return
+		}
+		sets, args = append(sets, "url=?"), append(args, *req.URL)
+	}
+	if len(req.Events) > 0 && string(req.Events) != "null" {
+		events, err := parseEventsInput(req.Events)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		sets, args = append(sets, "events=?"), append(args, events)
+	}
+	if req.Enabled != nil {
+		sets, args = append(sets, "enabled=?"), append(args, *req.Enabled)
+	}
+	if len(sets) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "没有要修改的内容"})
+		return
+	}
+	args = append(args, id, teamID)
+	if _, err := database.DB.Exec(`UPDATE md_webhooks SET `+strings.Join(sets, ", ")+` WHERE id=? AND team_id=?`, args...); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已保存"})
 }
 
 func TeamDeleteWebhook(c *gin.Context) {
@@ -2088,26 +2218,6 @@ func TeamDocStats(c *gin.Context) {
 
 // ==================== Helpers ====================
 
-func writeDocContent(docID string, content []byte) {
-	var teamID, deptID string
-	database.DB.QueryRow("SELECT team_id, department_id FROM md_documents WHERE id=?", docID).Scan(&teamID, &deptID)
-	bucket := teamID
-	if bucket == "" {
-		bucket = deptID // fallback for legacy docs
-	}
-
-	var version int
-	database.DB.QueryRow("SELECT version FROM md_documents WHERE id=?", docID).Scan(&version)
-	if version < 1 {
-		version = 1
-	}
-
-	_, _, err := store.WriteVersion(bucket, docID, version, content)
-	if err != nil {
-		log.Printf("writeDocContent error: %v", err)
-	}
-}
-
 // teamStorageBytes matches the storage page: active documents, extra versions, and media files.
 // Trash is excluded, same as TeamStorageStatus.
 func teamStorageBytes(teamID string) int64 {
@@ -2162,9 +2272,7 @@ var _ = model.Document{}
 // ==================== Media Upload (Team-scoped) ====================
 
 func TeamUploadFile(c *gin.Context) {
-	role := getTeamRole(c)
-	if role == "viewer" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权限"})
+	if !requireRole(c, RoleEditor) {
 		return
 	}
 	teamID := getTeamID(c)
@@ -2197,14 +2305,34 @@ func TeamUploadFile(c *gin.Context) {
 		return
 	}
 	defer f.Close()
-	io.Copy(f, file)
+	size, err := io.Copy(f, file)
+	if err != nil {
+		os.Remove(path)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	database.DB.Exec(
+		`INSERT INTO md_media (filename, team_id, original_name, uploaded_by, size) VALUES (?, ?, ?, ?, ?)`,
+		filename, teamID, header.Filename, c.GetString("user_id"), size)
 
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"filename": filename,
 		"original": header.Filename,
-		"size":     header.Size,
+		"size":     size,
 		"url":      "/api/teams/" + teamID + "/media/" + filename,
 	}})
+}
+
+// mediaKind groups a stored file for the media library filter.
+func mediaKind(filename string) string {
+	switch strings.ToLower(filepath.Ext(filename)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp":
+		return "image"
+	case ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".md", ".csv":
+		return "document"
+	default:
+		return "other"
+	}
 }
 
 func TeamListMedia(c *gin.Context) {
@@ -2215,16 +2343,50 @@ func TeamListMedia(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
 		return
 	}
+
+	type mediaRow struct{ original, uploader, uploaderName string }
+	known := map[string]mediaRow{}
+	if rows, err := database.DB.Query(
+		`SELECT m.filename, m.original_name, m.uploaded_by,
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), '')
+		 FROM md_media m LEFT JOIN users u ON m.uploaded_by COLLATE utf8mb4_unicode_ci = u.id
+		 WHERE m.team_id=?`, teamID); err == nil {
+		for rows.Next() {
+			var fn string
+			var r mediaRow
+			if rows.Scan(&fn, &r.original, &r.uploader, &r.uploaderName) == nil {
+				known[fn] = r
+			}
+		}
+		rows.Close()
+	}
+
+	uid := c.GetString("user_id")
+	admin := isTeamAdmin(c)
 	var files []map[string]interface{}
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
 		info, _ := e.Info()
+		r := known[e.Name()]
+		name := r.original
+		if name == "" {
+			name = e.Name()
+		}
 		files = append(files, map[string]interface{}{
-			"filename": e.Name(),
-			"size":     info.Size(),
-			"modified": info.ModTime().Format("2006-01-02 15:04:05"),
+			// name/url/type are what the editor's media library renders;
+			// the list used to return only filename, so it showed blanks.
+			"name":             name,
+			"url":              "/api/teams/" + teamID + "/media/" + e.Name(),
+			"type":             mediaKind(e.Name()),
+			"filename":         e.Name(),
+			"original":         r.original,
+			"size":             info.Size(),
+			"modified":         info.ModTime().Format("2006-01-02 15:04:05"),
+			"uploaded_by":      r.uploader,
+			"uploaded_by_name": r.uploaderName,
+			"can_delete":       admin || (r.uploader != "" && r.uploader == uid && roleAtLeast(c, RoleEditor)),
 		})
 	}
 	if files == nil {
@@ -2233,6 +2395,8 @@ func TeamListMedia(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": files})
 }
 
+// TeamDeleteMedia: the uploader (editor or above) or a team admin (D3).
+// Files without an md_media row predate upload tracking; admins only.
 func TeamDeleteMedia(c *gin.Context) {
 	teamID := getTeamID(c)
 	filename, ok := safeBaseName(c.Param("filename"))
@@ -2241,7 +2405,22 @@ func TeamDeleteMedia(c *gin.Context) {
 		return
 	}
 	path := filepath.Join(store.RootPath(), teamID, "media", filename)
-	os.Remove(path)
+	if _, err := os.Stat(path); err != nil {
+		denyNotFound(c, "文件不存在")
+		return
+	}
+	var uploader string
+	database.DB.QueryRow(`SELECT uploaded_by FROM md_media WHERE team_id=? AND filename=?`, teamID, filename).Scan(&uploader)
+	if !isTeamAdmin(c) && !(uploader != "" && uploader == c.GetString("user_id") && roleAtLeast(c, RoleEditor)) {
+		denyForbidden(c)
+		return
+	}
+	if err := os.Remove(path); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	database.DB.Exec(`DELETE FROM md_media WHERE team_id=? AND filename=?`, teamID, filename)
+	audit(c, "delete_media", "media", filename, "", "")
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
@@ -2271,8 +2450,10 @@ func TeamListNotifications(c *gin.Context) {
 	}
 	offset := (page - 1) * pageSize
 
-	var total int
-	database.DB.QueryRow("SELECT COUNT(*) FROM md_notifications WHERE user_id=? AND team_id=?", userID, teamID).Scan(&total)
+	// unread_count is what the bell badge shows; it was never sent, so the
+	// badge stayed hidden no matter how many unread notifications there were.
+	var total, unread int
+	database.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(is_read=0),0) FROM md_notifications WHERE user_id=? AND team_id=?", userID, teamID).Scan(&total, &unread)
 
 	rows, err := database.DB.Query(
 		`SELECT id, type, title, is_read, created_at
@@ -2296,7 +2477,7 @@ func TeamListNotifications(c *gin.Context) {
 	if notifications == nil {
 		notifications = []map[string]interface{}{}
 	}
-	c.JSON(http.StatusOK, gin.H{"data": notifications, "total": total})
+	c.JSON(http.StatusOK, gin.H{"data": notifications, "total": total, "unread_count": unread})
 }
 
 func TeamMarkNotificationRead(c *gin.Context) {
@@ -2365,6 +2546,7 @@ func TeamDeleteShare(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "delete_share", "document", docID, "", auditDetail(gin.H{"share_id": id}))
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
@@ -2398,6 +2580,11 @@ func TeamUpdateCollaborator(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	notifyDocAccessChanged(resID)
+	target := permissionTarget(id)
+	audit(c, "update_collaborator", "document", resID, "", auditDetail(gin.H{
+		"target_id": target, "target_name": userDisplayName(target), "permission": perm,
+	}))
 	c.JSON(http.StatusOK, gin.H{"message": "已更新"})
 }
 
@@ -2411,11 +2598,16 @@ func TeamRemoveCollaborator(c *gin.Context) {
 	if !requireDoc(c, resID, "write", true) {
 		return
 	}
+	target := permissionTarget(id)
 	_, err := database.DB.Exec(`DELETE FROM md_permissions WHERE id=?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	notifyDocAccessChanged(resID)
+	audit(c, "remove_collaborator", "document", resID, "", auditDetail(gin.H{
+		"target_id": target, "target_name": userDisplayName(target),
+	}))
 	c.JSON(http.StatusOK, gin.H{"message": "已移除"})
 }
 
@@ -2446,11 +2638,14 @@ func TeamDeleteComment(c *gin.Context) {
 	if !commentEditable(c, id) {
 		return
 	}
+	var docID, author string
+	database.DB.QueryRow(`SELECT document_id, user_id FROM md_comments WHERE id=?`, id).Scan(&docID, &author)
 	_, err := database.DB.Exec(`DELETE FROM md_comments WHERE id=?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "delete_comment", "document", docID, "", auditDetail(gin.H{"comment_id": id, "author_id": author}))
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }
 
@@ -2583,11 +2778,9 @@ func TeamDashboardStats(c *gin.Context) {
 
 	// Recent activities
 	auditRows, _ := database.DB.Query(
-		`SELECT a.action, a.resource_name, a.created_at,
-		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), NULLIF(a.user_name,''), '') as user_name
-		 FROM md_audits a
-		 LEFT JOIN users u ON a.user_id COLLATE utf8mb4_unicode_ci = u.id
-		 WHERE a.team_id=? ORDER BY a.created_at DESC LIMIT 10`, teamID)
+		`SELECT a.action, `+auditNameExpr+`, a.created_at,
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), NULLIF(a.user_name,''), '') as user_name`+
+			auditFromClause()+` ORDER BY a.created_at DESC LIMIT 10`, teamID)
 	var recentActivities []map[string]interface{}
 	if auditRows != nil {
 		defer auditRows.Close()
@@ -2618,9 +2811,7 @@ func TeamDashboardStats(c *gin.Context) {
 }
 
 func TeamSystemInfo(c *gin.Context) {
-	role := getTeamRole(c)
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可查看"})
+	if !requireTeamAdmin(c) {
 		return
 	}
 	var dbSize int64
@@ -2633,61 +2824,136 @@ func TeamSystemInfo(c *gin.Context) {
 
 // ==================== Import ====================
 
+// TeamImportDocument POST /teams/:team_id/import
+//
+// Accepts one or more files in the multipart field "files" (what the web UI
+// sends) or a single file in "file" (older API callers). Files are converted
+// to what the editors expect: Markdown, plain text and Word become HTML,
+// Excel becomes sheet JSON.
 func TeamImportDocument(c *gin.Context) {
-	if getTeamRole(c) == "viewer" {
-		denyForbidden(c)
+	if !requireRole(c, RoleEditor) {
 		return
 	}
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 
-	file, header, err := c.Request.FormFile("file")
+	form, err := c.MultipartForm()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择文件"})
 		return
 	}
-	defer file.Close()
-
-	var content []byte
-	var title string
-	var docType string = "doc"
-
-	// Determine type from extension
-	name := header.Filename
-	if idx := strings.LastIndex(name, "."); idx >= 0 {
-		switch strings.ToLower(name[idx:]) {
-		case ".md", ".txt", ".html":
-			body, _ := io.ReadAll(file)
-			content = body
-			title = name[:idx]
-		case ".xlsx":
-			// For xlsx, store raw bytes
-			body, _ := io.ReadAll(file)
-			content = body
-			title = name[:idx]
-			docType = "sheet"
-		default:
-			body, _ := io.ReadAll(file)
-			content = body
-			title = name[:idx]
-		}
-	} else {
-		body, _ := io.ReadAll(file)
-		content = body
-		title = name
+	files := append(form.File["files"], form.File["file"]...)
+	if len(files) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择文件"})
+		return
 	}
-
+	if len(files) > maxImportFiles {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("最多同时导入%d个文件", maxImportFiles)})
+		return
+	}
 	folderID := c.PostForm("folder_id")
-	docID := uuid.New().String()
-	_, err = database.DB.Exec(
-		`INSERT INTO md_documents (id, team_id, folder_id, department_id, title, type, content_text, status, created_by, updated_by)
-		 VALUES (?, ?, ?, '', ?, ?, ?, 1, ?, ?)`,
-		docID, teamID, folderID, title, docType, string(content), userID, userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if folderID != "" && !folderInTeam(teamID, folderID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件夹不存在"})
 		return
 	}
 
-	writeDocContent(docID, content)
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": docID, "title": title, "type": docType}})
+	var docCount int
+	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents WHERE status = 1 AND team_id = ?", teamID).Scan(&docCount)
+	if !service.CheckDocumentLimit(c, docCount+len(files)-1) {
+		return
+	}
+
+	results := make([]BatchImportResult, 0, len(files))
+	var first gin.H
+	for _, fh := range files {
+		ext := strings.ToLower(filepath.Ext(fh.Filename))
+		title := strings.TrimSpace(strings.TrimSuffix(filepath.Base(fh.Filename), filepath.Ext(fh.Filename)))
+		if title == "" {
+			title = fh.Filename
+		}
+		if fh.Size > maxImportFileSize {
+			results = append(results, BatchImportResult{Title: title, Status: "skipped", Error: "文件超过10MB"})
+			continue
+		}
+		src, err := fh.Open()
+		if err != nil {
+			results = append(results, BatchImportResult{Title: title, Status: "error", Error: err.Error()})
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(src, maxImportFileSize+1))
+		src.Close()
+		if err != nil {
+			results = append(results, BatchImportResult{Title: title, Status: "error", Error: err.Error()})
+			continue
+		}
+
+		docType, content, convErr := convertImport(ext, data)
+		if convErr != nil {
+			results = append(results, BatchImportResult{Title: title, Status: "error", Error: convErr.Error()})
+			continue
+		}
+
+		docID := uuid.New().String()
+		if _, err := database.DB.Exec(
+			`INSERT INTO md_documents (id, team_id, folder_id, department_id, title, type, status, created_by, updated_by)
+			 VALUES (?, ?, ?, '', ?, ?, 1, ?, ?)`,
+			docID, teamID, folderID, title, docType, userID, userID); err != nil {
+			results = append(results, BatchImportResult{Title: title, Status: "error", Error: err.Error()})
+			continue
+		}
+		if err := writeInitialVersion(docID, userID, content); err != nil {
+			log.Printf("import %s: %v", docID, err)
+		}
+		audit(c, "import_doc", "document", docID, title, fmt.Sprintf(`{"file":%q}`, fh.Filename))
+		results = append(results, BatchImportResult{Title: title, ID: docID, Type: docType, Status: "created"})
+		if first == nil {
+			first = gin.H{"id": docID, "title": title, "type": docType}
+		}
+	}
+
+	created := 0
+	for _, r := range results {
+		if r.Status == "created" {
+			created++
+		}
+	}
+	msg := fmt.Sprintf("成功导入 %d/%d 个文件", created, len(files))
+	if created == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg, "results": results})
+		return
+	}
+	// data keeps the first created document for single-file API callers;
+	// results lists every file.
+	c.JSON(http.StatusOK, gin.H{"data": first, "results": results, "message": msg})
+}
+
+const (
+	maxImportFiles    = 20
+	maxImportFileSize = 10 * 1024 * 1024
+)
+
+// convertImport turns an uploaded file into (document type, stored content).
+func convertImport(ext string, data []byte) (string, []byte, error) {
+	switch ext {
+	case ".md", ".markdown":
+		return "doc", []byte(markdownToHTML(string(data))), nil
+	case ".txt":
+		return "doc", []byte(textToHTML(string(data))), nil
+	case ".html", ".htm":
+		return "doc", data, nil
+	case ".docx":
+		html, err := docxToHTML(data)
+		if err != nil {
+			return "", nil, fmt.Errorf("Word 解析失败: %w", err)
+		}
+		return "doc", []byte(html), nil
+	case ".xlsx":
+		sheet, err := xlsxToSheet(data)
+		if err != nil {
+			return "", nil, fmt.Errorf("Excel 解析失败: %w", err)
+		}
+		return "sheet", []byte(sheet), nil
+	default:
+		return "", nil, fmt.Errorf("不支持的格式")
+	}
 }

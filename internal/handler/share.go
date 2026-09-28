@@ -1,133 +1,13 @@
 package handler
 
 import (
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
-	"fmt"
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
-	"github.com/c-wind/mist-docs/internal/service"
 	"github.com/c-wind/mist-docs/internal/store"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
-
-// CreateShare creates a public share link for a document.
-// POST /docs/documents/:id/share
-func CreateShare(c *gin.Context) {
-	if !service.RequirePlanFeature(c, "external_share") {
-		return
-	}
-	docID := c.Param("id")
-	userID, _ := c.Get("user_id")
-	userName, _ := c.Get("username")
-	role, _ := c.Get("role")
-	deptID, _ := c.Get("department_id")
-
-	// Permission check: need at least 'read' to share
-	if role != "super_admin" {
-		perm, err := service.CheckPermission(c.Request.Context(), userID.(string), deptID.(string), "document", docID)
-		if err != nil || perm == "none" {
-			c.JSON(403, gin.H{"error": "无权限分享此文档"})
-			return
-		}
-	}
-
-	var req struct {
-		Password  string `json:"password"`
-		ExpiresIn int    `json:"expires_in"` // hours, 0 = never
-	}
-	c.ShouldBindJSON(&req)
-
-	// Check document exists
-	var exists int
-	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents WHERE id = ? AND status = 1", docID).Scan(&exists)
-	if exists == 0 {
-		c.JSON(404, gin.H{"error": "文档不存在"})
-		return
-	}
-
-	// Deactivate existing shares for this doc by this user
-	database.DB.Exec("UPDATE md_shares SET status = 0 WHERE document_id = ? AND created_by = ? AND status = 1", docID, userID)
-
-	id := uuid.New().String()
-	token := generateShareToken()
-
-	var expiresAt *time.Time
-	if req.ExpiresIn > 0 {
-		t := time.Now().Add(time.Duration(req.ExpiresIn) * time.Hour)
-		expiresAt = &t
-	}
-
-	_, err := database.DB.Exec(
-		"INSERT INTO md_shares (id, document_id, token, password, expires_at, created_by, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
-		id, docID, token, req.Password, expiresAt, userID, time.Now(),
-	)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Audit
-	audit(c, "share", "document", docID, "", fmt.Sprintf("%s 分享了文档", userName))
-
-	c.JSON(200, gin.H{
-		"share_id":   id,
-		"token":      token,
-		"share_url":  fmt.Sprintf("/s/%s", token),
-		"expires_at": expiresAt,
-	})
-}
-
-// ListShares lists active shares for a document.
-// GET /docs/documents/:id/shares
-func ListShares(c *gin.Context) {
-	docID := c.Param("id")
-
-	rows, err := database.DB.Query(
-		"SELECT id, token, password, expires_at, created_by, created_at, access_count FROM md_shares WHERE document_id = ? AND status = 1 ORDER BY created_at DESC",
-		docID,
-	)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	defer rows.Close()
-
-	shares := []gin.H{}
-	for rows.Next() {
-		var id, token, createdBy string
-		var createdAt time.Time
-		var password sql.NullString
-		var expiresAt sql.NullTime
-		var accessCount int
-		rows.Scan(&id, &token, &password, &expiresAt, &createdBy, &createdAt, &accessCount)
-		item := gin.H{
-			"id":           id,
-			"token":        token,
-			"has_password": password.Valid && password.String != "",
-			"expires_at":   expiresAt.Time,
-			"expired":      expiresAt.Valid && expiresAt.Time.Before(time.Now()),
-			"created_by":   createdBy,
-			"created_at":   createdAt,
-			"access_count": accessCount,
-		}
-		shares = append(shares, item)
-	}
-	c.JSON(200, gin.H{"data": shares})
-}
-
-// DeleteShare deactivates a share link.
-// DELETE /docs/shares/:id
-func DeleteShare(c *gin.Context) {
-	shareID := c.Param("id")
-	userID, _ := c.Get("user_id")
-
-	database.DB.Exec("UPDATE md_shares SET status = 0 WHERE id = ? AND created_by = ?", shareID, userID)
-	c.JSON(200, gin.H{"message": "分享已取消"})
-}
 
 // AccessShare handles public access to a shared document.
 // GET /s/:token
@@ -216,10 +96,4 @@ func AccessShareInfo(c *gin.Context) {
 		"has_password": sharePassword != "",
 		"expires_at":   expiresAt.Time,
 	})
-}
-
-func generateShareToken() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return hex.EncodeToString(b)
 }

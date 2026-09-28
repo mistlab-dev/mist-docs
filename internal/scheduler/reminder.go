@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
+	"github.com/c-wind/mist-docs/internal/webhook"
 	"github.com/google/uuid"
 )
 
@@ -199,24 +200,21 @@ func createInAppNotification(userID, teamID, deadlineID, title string) error {
 	return err
 }
 
-// deliverWebhook posts the reminder through the team's existing webhook config.
+// deliverWebhook posts the reminder to the owning team's enabled webhooks
+// that subscribe to deadline.reminder (see webhook.ReminderTargets).
 // Returns "" on success or a failure detail.
+//
+// The lookup is scoped to teamID: reminders carry order numbers and customer
+// context, so they must never reach another team's endpoints.
 func deliverWebhook(teamID, deadlineID, orderNo, message string) string {
-	rows, err := database.DB.Query(
-		`SELECT id, url, secret FROM md_webhooks WHERE enabled = 1`)
-	if err != nil {
-		return err.Error()
-	}
-	defer rows.Close()
+	targets := webhook.ReminderTargets(webhook.LoadTargets(teamID))
 
 	var (
 		anySent bool
 		lastErr string
 	)
-	for rows.Next() {
-		var id, url, secret string
-		rows.Scan(&id, &url, &secret)
-		if err := postWebhook(url, secret, teamID, map[string]any{
+	for _, t := range targets {
+		if err := postWebhook(t.URL, t.Secret, teamID, map[string]any{
 			"event":       "deadline.reminder",
 			"deadline_id": deadlineID,
 			"order_no":    orderNo,
@@ -225,13 +223,11 @@ func deliverWebhook(teamID, deadlineID, orderNo, message string) string {
 			"timestamp":   time.Now().Format(time.RFC3339),
 		}); err != nil {
 			lastErr = err.Error()
-			database.DB.Exec(`INSERT INTO md_webhook_logs (id, webhook_id, event, status, created_at) VALUES (?,?,?,?,NOW())`,
-				uuid.New().String(), id, "deadline.reminder", "error:"+err.Error())
+			webhook.LogDelivery(t.ID, "deadline.reminder", "error:"+err.Error())
 			continue
 		}
 		anySent = true
-		database.DB.Exec(`INSERT INTO md_webhook_logs (id, webhook_id, event, status, created_at) VALUES (?,?,?,?,NOW())`,
-			uuid.New().String(), id, "deadline.reminder", "ok")
+		webhook.LogDelivery(t.ID, "deadline.reminder", "ok")
 	}
 	if anySent {
 		return ""

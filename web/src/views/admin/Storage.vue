@@ -138,9 +138,11 @@ function humanSize(b: number): string {
 
 async function load() {
   const { data } = await teamApi.get('/storage/status')
-  usage.value = { ...usage.value, ...(data.usage || {}) }
-  quota.value = data.quota || quota.value
-  isAdmin.value = !!data.is_admin
+  // The endpoint answers {data: {...}} like every team route.
+  const body = data?.data ?? data ?? {}
+  usage.value = { ...usage.value, ...(body.usage || {}) }
+  quota.value = body.quota || quota.value
+  isAdmin.value = !!body.is_admin
 }
 
 onMounted(load)

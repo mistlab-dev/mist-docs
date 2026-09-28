@@ -57,7 +57,7 @@
             <div class="activity-content">
               <div class="activity-text">
                 <strong>{{ a.user_name }}</strong>
-                {{ a.action }}
+                {{ actionLabel(a.action) }}
                 <em>{{ a.resource_name }}</em>
               </div>
               <div class="activity-time">{{ formatTime(a.created_at) }}</div>
@@ -75,8 +75,15 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
+import { auditActionKey } from '@/utils/auditActions'
 
 const { t } = useI18n()
+// Raw action names (edit_doc, create_share…) were shown as-is.
+function actionLabel(action: string) {
+  const key = auditActionKey(action)
+  const label = t(key)
+  return label === key ? action : label
+}
 
 const stats = ref<any>({})
 

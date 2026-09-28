@@ -27,20 +27,25 @@
         <span v-else-if="saveStatus === 'saved'" class="save-indicator saved">{{ t('docEditor.saved') }}</span>
         <span v-else-if="saveStatus === 'error'" class="save-indicator error">{{ t('docEditor.saveFailed') }}</span>
 
-        <el-button v-if="canEdit && doc?.locked_by && doc?.locked_by !== currentUserId" size="small" type="warning" disabled>
-          <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg>
-          {{ t("docEditor.locked") }}
-        </el-button>
-        <el-button v-else-if="canEdit && doc?.locked_by === currentUserId" size="small" type="warning" @click="unlockDoc">
+        <template v-if="lockedByOther">
+          <el-tooltip :content="t('perm.lockedBy', { name: lockHolderName })" placement="bottom">
+            <el-tag type="warning" effect="plain" class="lock-tag">
+              <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg>
+              {{ t('perm.lockedByShort', { name: lockHolderName }) }}
+            </el-tag>
+          </el-tooltip>
+          <el-button v-if="isTeamAdmin" size="small" type="warning" plain @click="unlockDoc">{{ t("docEditor.unlockBtn") }}</el-button>
+        </template>
+        <el-button v-else-if="hasWritePerm && doc?.locked_by === currentUserId" size="small" type="warning" @click="unlockDoc">
           <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2zm-2 4a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1z"/></svg>
           {{ t("docEditor.unlockBtn") }}
         </el-button>
-        <el-button v-else-if="canEdit" size="small" @click="lockDoc">
+        <el-button v-else-if="hasWritePerm" size="small" @click="lockDoc">
           <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M5 8V6a5 5 0 0110 0v2h1a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1h1zm2-2a3 3 0 016 0v2H7V6z"/></svg>
           <span class="btn-label">{{ t('docEditor.lockBtn') }}</span>
         </el-button>
 
-        <el-button type="primary" size="small" @click="manualSave" :loading="saving">
+        <el-button v-if="canEdit" type="primary" size="small" @click="manualSave" :loading="saving">
           <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 00-1 1v2H4a1 1 0 000 2h5a1 1 0 000-2H8V4h8v3a1 1 0 102 0V4a1 1 0 00-1-1H7zM5 10a1 1 0 00-1 1v5a1 1 0 001 1h10a1 1 0 001-1v-5a1 1 0 10-2 0v4H6v-4a1 1 0 00-1-1z"/></svg>
           {{ t("common.save") }}
         </el-button>
@@ -79,7 +84,7 @@
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
                 {{ t("docEditor.exportMenu") }}
               </el-dropdown-item>
-              <el-dropdown-item v-if="doc?.type === 'doc'" command="save-template">
+              <el-dropdown-item v-if="doc?.type === 'doc' && auth.canEditTeam" command="save-template">
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm1 3h6v2H7V7zm0 4h4v2H7v-2z"/></svg>
                 {{ t("docEditor.saveAsTemplate") }}
               </el-dropdown-item>
@@ -92,6 +97,10 @@
         </el-dropdown>
       </div>
     </div>
+
+    <el-alert v-if="lockedByOther" type="warning" show-icon :closable="false" class="lock-banner"
+      :title="isTeamAdmin ? t('perm.lockedByShort', { name: lockHolderName }) : t('perm.lockedBy', { name: lockHolderName })"
+      :description="isTeamAdmin ? t('perm.lockedAdminNote') : undefined" />
 
         <!-- TipTap 工具栏 -->
     <div v-if="editor" class="toolbar">
@@ -434,15 +443,18 @@
         </el-radio-group>
       </div>
       <div v-if="mediaLoading" style="text-align:center;padding:40px"><el-skeleton :rows="4" animated /></div>
-      <div v-else-if="!mediaItems.length" style="text-align:center;padding:40px;color:#c0c4cc">{{ t('docEditor.mediaEmpty') }}</div>
+      <div v-else-if="!shownMedia.length" style="text-align:center;padding:40px;color:#c0c4cc">{{ t('docEditor.mediaEmpty') }}</div>
       <div v-else class="media-grid">
-        <div v-for="item in mediaItems" :key="item.name" class="media-item" @click="insertMedia(item)">
+        <div v-for="item in shownMedia" :key="item.filename" class="media-item" @click="insertMedia(item)">
+          <el-tooltip v-if="item.can_delete" :content="t('common.delete')" placement="top">
+            <button class="media-del" @click.stop="deleteMedia(item)">×</button>
+          </el-tooltip>
           <div class="media-preview">
-            <img v-if="item.type === 'image'" :src="item.url" :alt="item.name" />
+            <img v-if="item.type === 'image' && mediaThumbs[item.filename]" :src="mediaThumbs[item.filename]" :alt="item.name" />
             <div v-else class="media-file-icon">{{ item.type === 'document' ? '📄' : '📦' }}</div>
           </div>
           <div class="media-name" :title="item.name">{{ item.name }}</div>
-          <div class="media-size">{{ formatFileSize(item.size) }}</div>
+          <div class="media-size">{{ formatFileSize(item.size) }}<span v-if="item.uploaded_by_name"> · {{ item.uploaded_by_name }}</span></div>
         </div>
       </div>
     </el-dialog>
@@ -708,7 +720,7 @@
           <pre v-if="!f.deleted" class="frag-cmd">{{ f.command }}</pre>
           <div class="frag-actions">
             <el-button v-if="!f.deleted" link size="small" @click="copyFragment(f.command)">{{ t('docEditor.fragCopy') }}</el-button>
-            <el-button link type="danger" size="small" @click="detachFragment(f)">{{ t('common.delete') }}</el-button>
+            <el-button v-if="hasWritePerm" link type="danger" size="small" @click="detachFragment(f)">{{ t('common.delete') }}</el-button>
           </div>
         </div>
         <div v-if="!linkedFragments.length" class="no-data">{{ t('docEditor.fragEmpty') }}</div>
@@ -724,7 +736,7 @@
           <pre class="frag-cmd">{{ f.command }}</pre>
           <div class="frag-actions">
             <el-button link size="small" @click="copyFragment(f.command)">{{ t('docEditor.fragCopy') }}</el-button>
-            <el-button link type="primary" size="small" :disabled="isLinked(f.fragment_id)" @click="attachFragment(f)">
+            <el-button v-if="hasWritePerm" link type="primary" size="small" :disabled="isLinked(f.fragment_id)" @click="attachFragment(f)">
               {{ isLinked(f.fragment_id) ? t('docEditor.fragAttached') : t('docEditor.fragAttach') }}
             </el-button>
           </div>
@@ -784,15 +796,27 @@ const saveStatus = ref('') // '', 'saving', 'saved', 'error'
 let saveTimer: any = null
 let autoSaveTimer: any = null
 let dataLoaded = false // 防止加载数据前自动保存空内容
+// 最近一次已保存（或刚加载）的内容。打开文档时编辑器会把同样的内容再触发一次
+// onUpdate，内容没变就不保存，避免每次打开都多出一个版本。
+let lastSavedContent: string | null = null
 
 // 分享 & 协作
 const showShareDialog = ref(false)
 const _watermarkToggle = ref(false)
 const isAdmin = computed(() => auth.isAdmin)
-const canEdit = computed(() => {
+const isTeamAdmin = computed(() => auth.isTeamAdmin)
+// Document permission (share/ACL), independent of the lock.
+const hasWritePerm = computed(() => {
   const p = doc.value?.permission as string | undefined
   return p === 'write' || p === 'admin'
 })
+// A lock held by someone else makes the document read-only for everyone
+// but the holder and team admins — the API and the websocket enforce the
+// same rule.
+const lockedByOther = computed(() => !!doc.value?.locked_by && doc.value.locked_by !== currentUserId.value)
+const lockHolderName = computed(() => doc.value?.locked_by_name || t('docEditor.someone'))
+const canEdit = computed(() => hasWritePerm.value && (!lockedByOther.value || isTeamAdmin.value))
+watch(canEdit, (v) => { editor.value?.setEditable(v) })
 const canComment = computed(() => {
   const p = doc.value?.permission as string | undefined
   return p === 'comment' || p === 'write' || p === 'admin'
@@ -1078,8 +1102,11 @@ const windowWidth = ref(window.innerWidth)
 // 锁定
 async function lockDoc() {
   try {
-    await teamApi.post(`/documents/${docId}/lock`)
-    if (doc.value) doc.value.locked_by = currentUserId.value
+    const { data } = await teamApi.post(`/documents/${docId}/lock`)
+    if (doc.value) {
+      doc.value.locked_by = data?.locked_by || currentUserId.value
+      doc.value.locked_by_name = data?.locked_by_name || ''
+    }
     ElMessage.success(t('docEditor.lockSuccess'))
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error || t('docEditor.lockFailed'))
@@ -1089,9 +1116,9 @@ async function lockDoc() {
 async function unlockDoc() {
   try {
     await teamApi.post(`/documents/${docId}/unlock`)
-    if (doc.value) doc.value.locked_by = ''
+    if (doc.value) { doc.value.locked_by = ''; doc.value.locked_by_name = '' }
     ElMessage.success(t('docEditor.unlockSuccess'))
-  } catch { ElMessage.error(t('docEditor.unlockFailed')) }
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || t('docEditor.unlockFailed')) }
 }
 
 function openDiff(ver: number) {
@@ -1245,7 +1272,26 @@ const otherLangs = ['c', 'cpp', 'csharp', 'rust', 'ruby', 'php', 'swift', 'kotli
 // 媒体库
 const showMediaLib = ref(false)
 const mediaFilter = ref('')
-const mediaItems = ref<{name: string; url: string; size: number; type: string}[]>([])
+interface MediaItem {
+  name: string; url: string; size: number; type: string; filename: string
+  uploaded_by_name?: string; can_delete?: boolean
+}
+const mediaItems = ref<MediaItem[]>([])
+const shownMedia = computed(() => mediaFilter.value ? mediaItems.value.filter(m => m.type === mediaFilter.value) : mediaItems.value)
+
+// The uploader or a team admin may delete a file (D2); the API decides and
+// tells us through can_delete.
+async function deleteMedia(item: MediaItem) {
+  try {
+    await ElMessageBox.confirm(t('docEditor.mediaDeleteConfirm', [item.name]), { type: 'warning' })
+  } catch { return }
+  try {
+    await teamApi.delete(`/media/${encodeURIComponent(item.filename)}`)
+    mediaItems.value = mediaItems.value.filter(m => m.filename !== item.filename)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || t('perm.mediaDelete'))
+  }
+}
 const mediaLoading = ref(false)
 
 async function loadMedia() {
@@ -1257,9 +1303,24 @@ async function loadMedia() {
     mediaItems.value = data.data || []
   } catch { mediaItems.value = [] }
   mediaLoading.value = false
+  loadMediaThumbs()
 }
 
-function insertMedia(item: {name: string; url: string; size: number; type: string}) {
+// Media files need the Authorization header, which <img src> cannot send,
+// so thumbnails are fetched with it and shown as blob URLs.
+const mediaThumbs = reactive<Record<string, string>>({})
+async function loadMediaThumbs() {
+  for (const m of mediaItems.value) {
+    if (m.type !== 'image' || mediaThumbs[m.filename]) continue
+    try {
+      const { data } = await http.get(m.url.replace(/^\/api/, ''), { responseType: 'blob' })
+      mediaThumbs[m.filename] = URL.createObjectURL(data)
+    } catch { /* leave the placeholder */ }
+  }
+}
+onUnmounted(() => { Object.values(mediaThumbs).forEach(u => URL.revokeObjectURL(u)) })
+
+function insertMedia(item: MediaItem) {
   if (item.type === 'image') {
     editor.value?.chain().focus().setImage({ src: item.url }).run()
   } else {
@@ -1295,6 +1356,7 @@ async function loadDoc() {
   if (doc.value?.type === 'sheet') {
     sheetData.value = doc.value?.content || '{}'
   }
+  lastSavedContent = doc.value?.content ?? null
   // 数据加载完成，允许自动保存
   nextTick(() => { dataLoaded = true })
 }
@@ -1358,6 +1420,24 @@ function initEditor(initialContent: string) {
           }
           nextTick(refreshCursors)
         }
+      }
+      wsProvider.onAccessRevoked = () => {
+        clearTimeout(autoSaveTimer)
+        dataLoaded = false
+        editor.value?.setEditable(false)
+        if (doc.value) doc.value.permission = 'none'
+        collabStatus.value = 'disconnected'
+        ElMessageBox.alert(t('docEditor.accessRevoked'), { type: 'warning' })
+          .catch(() => {})
+          .finally(() => router.push('/docs'))
+      }
+      wsProvider.onPermission = (p) => {
+        if (!doc.value) return
+        const couldEdit = canEdit.value
+        doc.value.locked_by = p.locked_by || ''
+        doc.value.locked_by_name = p.locked_by_name || ''
+        if (couldEdit && !canEdit.value) ElMessage.warning(p.locked_by ? t('perm.lockedBy', { name: lockHolderName.value }) : t('perm.lostWrite'))
+        else if (!couldEdit && canEdit.value) ElMessage.success(t('perm.regainedWrite'))
       }
       wsProvider.onClients = (users) => { collabUsers.value = users.filter((u: CollabUser) => u.id !== currentUserId.value) }
       wsProvider.bind()
@@ -1444,6 +1524,7 @@ function initEditor(initialContent: string) {
           if (yXmlFragment.length === 0 && initialContent && initialContent !== '{}') {
             editor.value?.commands.setContent(initialContent)
           }
+          markContentBaseline()
           updateOutline()
           wsProvider!.onSynced = null
         })
@@ -1491,6 +1572,11 @@ function initEditor(initialContent: string) {
 
   // Fallback: local mode (no collab)
   createLocalEditor(initialContent)
+}
+
+// 以编辑器当前内容（经 tiptap 规范化后的 HTML）作为"已保存"基线
+function markContentBaseline() {
+  if (editor.value) lastSavedContent = editor.value.getHTML()
 }
 
 function createLocalEditor(content: string) {
@@ -1545,6 +1631,7 @@ function createLocalEditor(content: string) {
       scheduleAutoSave()
       updateOutline()
     },
+    onCreate: () => { markContentBaseline() },
   })
 }
 
@@ -1627,37 +1714,43 @@ function scheduleAutoSave() {
   autoSaveTimer = setTimeout(doSave, 1500)
 }
 
-async function doSave() {
-  if (!dataLoaded || !canEdit.value) return
+async function doSave(): Promise<boolean> {
+  if (!dataLoaded || !canEdit.value) return false
   let content = ''
   if (doc.value?.type === 'sheet') {
-    const refVal = sheetRef.value
-    console.log('[SAVE] sheetRef.value type:', typeof refVal, 'keys:', refVal ? Object.keys(refVal) : 'null')
-    console.log('[SAVE] getData exists:', typeof refVal?.getData)
-    content = refVal?.getData?.() || '{}'
-    console.log('[SAVE] sheet content len:', content.length, 'isEmpty:', content === '{}')
+    content = sheetRef.value?.getData?.() || '{}'
   } else if (editor.value) {
     content = editor.value.getHTML()
   }
-  if (!content || content === '{}') { console.warn('[SAVE] blocked: no content or empty'); return }
+  if (!content || content === '{}') return false // 不保存空内容
+  if (content === lastSavedContent) return true // 内容没变，不产生新版本
   saving.value = true
   saveStatus.value = 'saving'
   try {
     await teamApi.put(`/documents/${docId}/content`, { content })
+    lastSavedContent = content
     saveStatus.value = 'saved'
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => { saveStatus.value = '' }, 3000)
-  } catch (e) {
+  } catch (e: any) {
     console.error('保存失败', e)
     saveStatus.value = 'error'
+    // 409: someone else locked the document meanwhile — show who.
+    if (e?.response?.status === 409 && doc.value) {
+      doc.value.locked_by = e.response.data?.locked_by || doc.value.locked_by
+      doc.value.locked_by_name = e.response.data?.locked_by_name || ''
+      ElMessage.warning(e.response.data?.error || t('perm.lockedTitle'))
+    }
+    saving.value = false
+    return false
   }
   saving.value = false
+  return true
 }
 
 async function manualSave() {
   clearTimeout(autoSaveTimer)
-  await doSave()
-  ElMessage.success(t('docEditor.docSaved'))
+  if (await doSave()) ElMessage.success(t('docEditor.docSaved'))
 }
 
 async function saveTitle() {
@@ -1713,14 +1806,16 @@ function selectRestoreVersion(ver: number) {
   ).then(async () => {
     versionDialog.loading = true
     try {
-      await teamApi.post(`/documents/${docId}/restore`, { version: ver })
-      ElMessage.success(t('common.restoreSuccess', [ver]))
+      const { data: res } = await teamApi.post(`/documents/${docId}/restore`, { version: ver })
+      if (res?.unchanged) ElMessage.info(res.message)
+      else ElMessage.success(t('common.restoreSuccess', [ver]))
       versionDialog.show = false
       await loadDoc()
       await loadVersions()
       if (doc.value?.type === 'doc' && editor.value) {
         const content = doc.value?.content || ''
         editor.value.commands.setContent(content === '{}' ? '' : content)
+        markContentBaseline()
       } else if (doc.value?.type === 'sheet') {
         sheetData.value = doc.value?.content || '{}'
       }
@@ -1731,7 +1826,7 @@ function selectRestoreVersion(ver: number) {
   }).catch(() => {})
 }
 
-function onSheetChange() { console.log('[SAVE] onSheetChange triggered, dataLoaded:', dataLoaded); scheduleAutoSave() }
+function onSheetChange() { scheduleAutoSave() }
 
 // === 分享 & 协作 ===
 function roleLabel(role: string) {
@@ -2012,6 +2107,13 @@ document.addEventListener('keydown', handleGlobalKeydown)
 </script>
 
 <style scoped>
+.media-item { position: relative; }
+.media-del { position: absolute; top: 4px; right: 4px; z-index: 1; width: 20px; height: 20px; border: none; border-radius: 50%;
+  background: rgba(0,0,0,.55); color: #fff; cursor: pointer; line-height: 20px; padding: 0; font-size: 14px; opacity: 0; transition: opacity .15s; }
+.media-item:hover .media-del { opacity: 1; }
+.lock-banner { margin: 0 16px 8px; width: auto; }
+.lock-tag { display: inline-flex; align-items: center; gap: 4px; }
+.lock-tag .btn-icon { width: 12px; height: 12px; }
 /* ── 顶部导航栏 ── */
 .editor-header {
   display: flex; align-items: center; justify-content: space-between;

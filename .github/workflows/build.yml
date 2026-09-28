@@ -3,10 +3,27 @@ name: Build & Deploy
 on:
   push:
     branches: [master]
+  pull_request:
+    branches: [master]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      # Throwaway database for the integration tests (D7). The suite fails
+      # when it cannot connect, so a broken service fails the build.
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root
+          MYSQL_DATABASE: mistdocs_ci
+          MYSQL_USER: mistdocs_ci
+          MYSQL_PASSWORD: ci-pass
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h127.0.0.1 -uroot -pci-root"
+          --health-interval=5s --health-timeout=3s --health-retries=30
     steps:
       - uses: actions/checkout@v4
 
@@ -22,29 +39,35 @@ jobs:
 
       - name: Install Frontend Dependencies
         working-directory: web
-        run: |
-          npm install --legacy-peer-deps
-          ls node_modules/.bin/vite || echo "vite not found in .bin"
-          ls node_modules/vite/package.json || echo "vite package not found"
+        run: npm ci
 
-      - name: Lint Frontend (vue-tsc)
+      - name: Type-check Frontend (vue-tsc)
         working-directory: web
-        run: |
-          npx vue-tsc --noEmit --skipLibCheck 2>&1 | grep -E 'SheetEditor|DocEditor|Docs\.vue' || true
-          # Check SheetEditor specifically - fail on undefined template refs
-          ERRORS=$(npx vue-tsc --noEmit --skipLibCheck 2>&1 | grep 'SheetEditor' || true)
-          if [ -n "$ERRORS" ]; then
-            echo "::error::SheetEditor has TypeScript errors:"\n"$ERRORS"
-            exit 1
-          fi
-          echo "✅ SheetEditor type check passed"
+        run: npx vue-tsc --noEmit
 
-      - name: Test Frontend formulas
+      - name: Test Frontend
         working-directory: web
         run: npx vitest run
 
+      - name: Vet Backend
+        run: go vet ./...
+
       - name: Test Backend
         run: go test ./internal/...
+
+      - name: Load schema into CI database
+        run: |
+          mysql -h127.0.0.1 -uroot -pci-root mistdocs_ci < docker/init-db.sql
+          mysql -h127.0.0.1 -uroot -pci-root mistdocs_ci < docker/dev-portal-tables.sql
+
+      - name: Integration tests
+        env:
+          MIST_DOCS_TEST_DB_HOST: 127.0.0.1
+          MIST_DOCS_TEST_DB_PORT: "3306"
+          MIST_DOCS_TEST_DB_NAME: mistdocs_ci
+          MIST_DOCS_TEST_DB_USER: mistdocs_ci
+          MIST_DOCS_TEST_DB_PASSWORD: ci-pass
+        run: go test -count=1 ./tests/
 
       - name: Build Frontend
         working-directory: web
@@ -60,7 +83,7 @@ jobs:
           mkdir -p release/web
           cp mist-docs release/
           cp -r web/dist/* release/web/
-          cp configs/config.yaml release/config.yaml.example
+          cp configs/config.example.yaml release/config.yaml.example
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -22,7 +22,7 @@
 | 表格编辑器 | 自研 `SheetEditor.vue`（公式、图表、数据透视） |
 | 协同同步 | 仅富文本文档使用 Yjs CRDT |
 | 前端 | Vue 3 + Element Plus |
-| 加密 | AES-256-GCM（`MISTDOCS_MASTER_FILE` 主密钥） |
+| 加密 | AES-256-GCM（主密钥来自环境变量 `MISTDOCS_MASTER_KEY`，或 `secrets/master.key` / `/etc/mist-docs/secrets/master.key`） |
 
 ## 项目结构
 
@@ -34,14 +34,19 @@ mist-docs/
 │   ├── database/        # 数据库连接与迁移
 │   ├── model/           # 数据模型
 │   ├── handler/         # HTTP Handler（team_api.go 为团队级 API 主体）
-│   ├── middleware/      # SharedJWTAuth（Portal JWT）+ TeamAuth 成员校验 + 限流
+│   ├── middleware/      # JWTAuth（Portal JWT）+ TeamAuth 成员校验 + 限流
+│   ├── router/          # 路由注册（cmd/server 与集成测试共用）
+│   ├── schedule/        # 交期插单预演 / 解释器（纯函数，无 AI）
+│   ├── webhook/         # Webhook 事件目录与投递
 │   ├── service/         # 业务逻辑
 │   ├── ws/              # WebSocket Hub（协同中转）
 │   ├── store/           # 文件存储
 │   └── crypto/          # 信封加密
 ├── web/                 # 前端（Vue 3 + Vite）
 ├── docs/                # 设计文档
-├── migrations/          # 数据库迁移
+├── docker/init-db.sql   # 全新安装的 md_* 表结构
+├── migrations/          # 历史文件（部门版），不要再用
+├── tests/               # 集成测试（需要专用测试库）
 └── configs/             # 配置文件
 ```
 
@@ -53,6 +58,14 @@ go build -o mist-docs ./cmd/server
 
 # 运行
 ./mist-docs -c configs/config.yaml
+```
+
+测试（集成测试需要一个专用测试库，详见 [部署指南](docs/DEPLOYMENT.md#运行测试)）：
+
+```bash
+go test ./internal/...
+MIST_DOCS_TEST_DB_NAME=mistdocs_it go test ./tests/
+cd web && npx vitest run
 ```
 
 生产发布以 `scripts/deploy.sh` 为准：同步 `web/dist/` 到 `/var/www/mistdocs/web/`，原子替换 `/usr/local/bin/mist-docs`，`systemctl restart mist-docs`，并用本机 `http://127.0.0.1:8900/healthz` 决定是否回滚。脚本不覆盖 `/etc/mistdocs/config.yaml` 和生产 master key。登录在 Portal，不要在 MistDocs 里建管理员。
@@ -68,16 +81,30 @@ go build -o mist-docs ./cmd/server
 |------|----------|------|
 | 探活 | `/healthz`、`/health` | 公开 |
 | 登录 | `POST /api/auth/login` | 已废弃，返回 410，请走 Portal |
-| 当前用户 | `GET /api/auth/me`、`PUT /api/auth/password`、`POST /api/auth/logout` | JWT |
+| 当前用户 | `GET /api/auth/me`、`POST /api/auth/logout` | JWT |
+| 改密码 | `PUT /api/auth/password` | 已停用，返回 410，密码在 Portal 管理 |
 | 公开分享 | `GET /api/s/:token`、`/api/s/:token/info` | 公开 |
 | 团队级 | `/api/teams/:team_id/**` | JWT + 团队成员 |
 | 协同 | `WS /ws/teams/:team_id/docs/:doc_id` | JWT |
 
 团队级 API 覆盖：文件夹树、文档 CRUD / 版本 / 锁定 / 分享 / 协作者 / 评论 / 导出、
-回收站、标签、模板、权限、审计、收藏、存储、Webhook、媒体上传、通知，
-以及与 MistTerm 联动的 `/documents/:id/fragments`、`/fragments-search`、`/docs/search`。
+回收站、标签、模板、权限、审计、收藏、存储、Webhook、媒体上传、通知（列表带 `unread_count`），
+交期看板与提醒规则，以及与 MistTerm 联动的 `/documents/:id/fragments`、`/fragments-search`、`/docs/search`。
 
-完整清单见 [`docs/UNIFIED-AUTH-DESIGN.md`](docs/UNIFIED-AUTH-DESIGN.md) 与运行时 `GET /api/openapi.json`。
+交期智能（设计见 [`docs/DESIGN-DEADLINE-AI.md`](docs/DESIGN-DEADLINE-AI.md)，mist-docs 侧为确定性规则，不调用 AI）：
+
+| 接口 | 权限 | 说明 |
+|------|------|------|
+| `POST /deadlines/preview-insert` | 成员 | 插单预演，生成一条 pending 提议 |
+| `GET` / `PUT /deadlines/capacity` | 成员 / 仅管理员 | 每日产能与重点客户 |
+| `GET /proposals` | 成员 | 提议历史 |
+| `POST /proposals/:id/apply` | 编辑者 | 按服务端保存的变更执行；数据已变返回 409 |
+| `POST /proposals/:id/reject` | 提议人或编辑者 | 驳回 |
+| `GET /deadlines/:id/explain` | 成员 | 交期解释（证据、缺失信息、建议） |
+
+Webhook 可订阅事件见 `internal/webhook` 的 `Events`：`document.created/updated/deleted/shared/imported/locked/unlocked/restored`、`comment.created`、`deadline.reminder`、`deadline.proposal_applied`。
+
+完整清单以运行时 `GET /api/openapi.json` 为准（`internal/router` 的测试保证它与实际路由一致）。
 
 ## 与 MistTerm / Portal 的关系
 
@@ -102,7 +129,8 @@ go build -o mist-docs ./cmd/server
 ## 相关文档
 
 - [快速入门](docs/README.md)
-- [技术设计](docs/DESIGN.md)
+- [技术设计（部门版，已过时）](docs/DESIGN.md)
+- [交期智能体设计](docs/DESIGN-DEADLINE-AI.md)
 - [统一多租户认证设计](docs/UNIFIED-AUTH-DESIGN.md)
 - [部署指南](docs/DEPLOYMENT.md)
 - [WebSocket 协议](docs/WEBSOCKET.md)

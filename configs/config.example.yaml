@@ -26,7 +26,10 @@ storage:
   root: "/var/lib/mist-docs/files"
   max_file_size: 52428800    # 50MB
   version_keep: 20
-  audit_retain_days: 180
+
+audit:
+  # 审计日志保留天数。注意：目前还没有定时清理任务，此值暂不生效。
+  retain_days: 180
 
 websocket:
   max_message_size: 1048576  # 1MB

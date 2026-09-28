@@ -6,15 +6,15 @@
         <el-button @click="sidebarOpen = !sidebarOpen" class="menu-btn" circle size="small">
           <el-icon><Operation /></el-icon>
         </el-button>
-        <el-button type="primary" @click="showNewDoc = true">
+        <GuardedButton type="primary" :allowed="canEdit" :reason="t('perm.needEditor')" @click="showNewDoc = true">
           <el-icon><Plus /></el-icon> {{ t('docs.newDoc') }}
-        </el-button>
-        <el-button @click="showNewSheet = true">
+        </GuardedButton>
+        <GuardedButton :allowed="canEdit" :reason="t('perm.needEditor')" @click="showNewSheet = true">
           <el-icon><Grid /></el-icon> {{ t('docs.newSheet') }}
-        </el-button>
-        <el-button @click="showImportDialog = true">
+        </GuardedButton>
+        <GuardedButton :allowed="canEdit" :reason="t('perm.needEditor')" @click="showImportDialog = true">
           <el-icon><Upload /></el-icon>
-        </el-button>
+        </GuardedButton>
       </div>
       <div class="toolbar-right">
         <el-input v-model="search" :placeholder="t('mainLayout.searchPlaceholder')" class="search-box" clearable @input="debounceSearch" @clear="clearSearch" size="default">
@@ -90,7 +90,10 @@
           <div class="sidebar-section">
             <div class="section-title">
               {{ t('docs.folderSection') }}
-              <el-button size="small" text @click="newFolderParentId = null; showNewFolder = true" class="section-add">{{ t('docs.newFolderBtn') }}</el-button>
+              <el-tooltip v-if="!isAdmin" :content="t('perm.needAdmin')" placement="top">
+                <span class="section-add"><el-button size="small" text disabled>{{ t('docs.newFolderBtn') }}</el-button></span>
+              </el-tooltip>
+              <el-button v-else size="small" text @click="newFolderParentId = null; showNewFolder = true" class="section-add">{{ t('docs.newFolderBtn') }}</el-button>
             </div>
             <el-tree
               :data="treeData"
@@ -385,6 +388,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatRelative } from '@/utils/time'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -392,8 +396,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Star, StarFilled, Clock, Files, MoreFilled, Operation, Monitor, List } from '@element-plus/icons-vue'
 import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
+import GuardedButton from '@/components/GuardedButton.vue'
+import { useAuthStore } from '@/stores/auth'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const treeData = ref<any[]>([])
 const docs = ref<any[]>([])
@@ -439,6 +445,9 @@ const newFolderName = ref('')
 const showRenameFolder = ref(false)
 const renameFolderName = ref('')
 const renameFolderId = ref('')
+const auth = useAuthStore()
+const canEdit = computed(() => auth.canEditTeam)
+const isAdmin = computed(() => auth.isTeamAdmin)
 const folderCtxMenu = reactive({ show: false, x: 0, y: 0, nodeId: '', nodeName: '' })
 const newDocTitle = ref('')
 const newDocTemplate = ref('')
@@ -512,15 +521,7 @@ function setDocs(list: any[]) {
 }
 
 function formatTime(ts: string): string {
-  if (!ts) return ''
-  const d = new Date(ts)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  if (diff < 60000) return t('common.justNow')
-  if (diff < 3600000) return t('common.minutesAgo', [Math.floor(diff / 60000)])
-  if (diff < 86400000) return t('common.hoursAgo', [Math.floor(diff / 3600000)])
-  if (diff < 604800000) return t('common.daysAgo', [Math.floor(diff / 86400000)])
-  return d.toLocaleDateString('zh-CN')
+  return formatRelative(ts, t, { locale: locale.value })
 }
 
 async function loadTree() {
@@ -634,6 +635,7 @@ async function createFolder() {
 
 function onFolderContextMenu(event: MouseEvent, node: any) {
   event.preventDefault()
+  if (!isAdmin.value) return // folder structure is admin-only (D2)
   folderCtxMenu.show = true
   folderCtxMenu.x = event.clientX
   folderCtxMenu.y = event.clientY
@@ -831,7 +833,13 @@ async function doImport() {
   if (currentFolder.value) fd.append('folder_id', currentFolder.value)
   try {
     const { data } = await teamApi.post('/import', fd)
-    ElMessage.success(data.message || t('docs.importSuccess'))
+    const failed = (data.results || []).filter((r: any) => r.status !== 'created')
+    if (failed.length) {
+      const detail = failed.map((r: any) => `${r.title}（${r.error || r.status}）`).join('，')
+      ElMessage.warning({ message: `${data.message}：${detail}`, duration: 6000 })
+    } else {
+      ElMessage.success(data.message || t('docs.importSuccess'))
+    }
     showImportDialog.value = false
     importFiles.value = []
     loadDocs()

@@ -40,12 +40,7 @@ func denyForbidden(c *gin.Context) {
 }
 
 func requireTeamAdmin(c *gin.Context) bool {
-	role := getTeamRole(c)
-	if role == "admin" || role == "owner" {
-		return true
-	}
-	c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可操作"})
-	return false
+	return requireRole(c, RoleAdmin)
 }
 
 func documentInTeam(teamID, docID string, activeOnly bool) bool {
@@ -126,12 +121,7 @@ func commentEditable(c *gin.Context, id string) bool {
 		denyNotFound(c, "评论不存在")
 		return false
 	}
-	role := getTeamRole(c)
-	if author == c.GetString("user_id") || role == "admin" || role == "owner" {
-		return true
-	}
-	denyForbidden(c)
-	return false
+	return requireOwnerOrAdmin(c, author)
 }
 
 func permissionResource(id string) (string, string, bool) {

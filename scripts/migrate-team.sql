@@ -1,3 +1,6 @@
+-- ⚠️ 一次性升级脚本 / ONE-TIME UPGRADE for databases created before the
+-- team (multi-tenant) model. Not needed for new installs (docker/init-db.sql
+-- already has the team columns). Back up first (scripts/deploy.sh does).
 -- ============================================================
 -- MistDocs 统一多租户 Migration
 -- Phase 1: Schema 变更 + 数据迁移

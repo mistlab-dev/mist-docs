@@ -1,6 +1,7 @@
 # 交期智能体 · 详细设计（插单影响面预演 + 交期解释器）
 
-> 状态：设计定稿（未实施） · 日期：2026-09-27
+> 状态：**mist-docs 侧已实施**（确定性预演 P0、两段式提议 P1、规则版解释器 P3）；AI Tool / 自然语言入口（P2）与 LLM 叙述待 mist-team-server 实施 · 设计日期：2026-09-27 · 实施更新：2026-09-28
+> 实施与本文的差异见 §13；最终决策见 §11 D14–D19。
 > 上游依据：`research/01~04`（480 条来源调研）· `04-产品架构视角.md`（阶段一已上线）
 > 范围：**阶段二 AI 提议层**——纯设计，不含语音报工/概率化交期（阶段三）
 
@@ -254,6 +255,8 @@ ORDER BY FIELD(priority,'urgent','inserted','normal'), due_date ASC
 | POST | `/teams/:team_id/deadlines/preview-insert` | viewer+ | 纯计算预演（无 AI 也可用；确定性路径） |
 | GET | `/teams/:team_id/proposals` | viewer+ | 提议历史（含 rejected） |
 
+> **实际实现（2026-09-28）**：确认接口是 `POST /teams/:team_id/proposals/:id/apply`（另有 `POST /proposals/:id/reject`），body 只需 `{reason}`。服务端执行的是预演时**存进 `md_proposals` 的变更**，不接受客户端传来的 `changes[]`；“二次校验”改为比对基线指纹（开放订单的日期/优先级/进度等），在事务内锁定开放订单后比对，不一致则 409 并把提议标为 `stale`。另增 `GET` / `PUT /deadlines/capacity`（PUT 仅管理员）和 `GET /deadlines/:id/explain`（规则版解释器）。下面的请求示例保留为原设计。
+
 `apply-proposal` 请求示例：
 ```json
 {
@@ -272,7 +275,7 @@ ORDER BY FIELD(priority,'urgent','inserted','normal'), due_date ASC
 - `POST /v1/teams/:team_id/ai/agent` — 入口不变，靠新 Tool 扩展能力
 - `GET /v1/teams/:team_id/ai/agent/runs` / `agent/replay` — 回放
 
-### 6.3 新表（mist-team-server 侧）
+### 6.3 新表（原设计：mist-team-server 侧；实际：mist-docs 建表，见 D18/D19）
 
 ```sql
 CREATE TABLE md_proposals (
@@ -305,6 +308,8 @@ CREATE TABLE md_proposals (
 | 6 | 看板预演卡片 + 解释器侧栏组件 | mist-docs/web | 代码 |
 
 **无破坏性变更**：不动现有 4 张表结构，不改现有提醒语义。
+
+> 实施状态：#1、#2、#3、#5、#6 已在 mist-docs 完成（两张表由程序启动时的 `database.Migrate` 幂等创建，也已写进 `docker/init-db.sql`）；#4（Tool 注册）属于 mist-team-server，未做。另外交期 `PUT` 现在也记录 `priority` 与 `start_date` 变更事件，解释器依赖这些记录。
 
 ---
 
@@ -363,6 +368,8 @@ CREATE TABLE md_proposals (
 | **P2** | 4 个 Tool + 自然语言入口 + 提示词约束 + trace 接入 | 2~3 天 | P0/P1 |
 | **P3** | 交期解释器（evidence 结构 + missing 字段）+ 回放验收 | 1~2 天 | P2 |
 
+> 实施状态（2026-09-28）：P0 ✅、P1 ✅（mist-docs 侧）、P3 ✅ 规则版（无 LLM 叙述）、P2 ⬜（mist-team-server）。
+
 **P0 独立有价值**：即使 LLM 接入延后，确定性预演已解决"插单前看不到影响面"这个最痛的空白——也符合"先解决一个真痛点"的调研建议。
 
 ---
@@ -377,11 +384,34 @@ CREATE TABLE md_proposals (
 | D4 | 单资源顺序模型，capacity 可配 | 覆盖中小厂 80% 场景，O(n log n) 毫秒级 | 工序级排产（滑向 APS） |
 | D5 | 提议历史含 rejected 全记录 | 未来评估提议质量、审计需要 | 只记成功 |
 
+**实施决策（2026-09-28，编号沿用实施计划；D6–D13 是同一计划里认证、测试等其他决策）**
+
+| # | 决策 | 实现位置 |
+|---|---|---|
+| D14 | capacity 按“订单数/天”，按生效日期分段（`md_team_capacity.effective_from` / `per_day`），未设置时 1 单/天 | `internal/schedule/preview.go`、`md_team_capacity` |
+| D15 | 已开工的单（进度 > 0）保持原位置，不参与重排，结果里标 `started` | `schedule.Started` |
+| D16 | 违约风险靠备注关键词（违约/赔偿/扣款）识别；另有团队级重点客户名单（`key_customers`，每行一个，不区分大小写），命中的受影响单打标 | `FlagPenalty` / `FlagKeyCustomer` |
+| D17 | 确认只需一名编辑者（不做双人确认），记录 `decided_by` | `handler/proposals.go` |
+| D18 | `payload` / `baseline` 用 LONGTEXT 存 JSON，不用 JSON 类型：MariaDB 与 MySQL 行为一致 | `database/mysql.go` |
+| D19 | `md_proposals` 建在 mist-docs，与唯一写路径放在一起（原设计放 mist-team-server） | `database/mysql.go`、`handler/proposals.go` |
+
 ---
 
-## 12. 开放问题（实施前需定）
+## 12. 开放问题（已定，见 D14–D17）
 
 1. **capacity 语义**：按"订单数/天"还是按"加权工作量"？（建议 v1 订单数，字段留扩展位）
 2. **apply 权限**：提议人 vs 受影响单 owner 是否需双人确认？（v1 单人 editor 即可，字段留 `applied_by`）
 3. **违约金识别**：靠 remark 关键词（"违约/赔偿/扣款"）还是引入结构化字段？（v1 关键词，够用再结构化）
 4. **自然语言入口放哪**：MistTerm 对话框 vs mist-docs 看板内输入框？（建议先看板内，MistTerm 侧随策略包叙事一起做）
+
+结论：1 → D14（订单数/天）；2 → D17（单人 editor）；3 → D16（关键词 + 重点客户名单）；4 未定，随 P2 在 mist-team-server 侧决定（当前看板内只有表单式预演入口，没有自然语言输入）。
+
+---
+
+## 13. 实施与设计的差异（2026-09-28）
+
+1. **确认路由**：`POST /proposals/:id/apply`（和 `/reject`），不是 `/deadlines/:id/apply-proposal`。
+2. **服务端保存的变更**：每次预演都生成一条 pending 提议，存下“确认后要执行的变更”和基线指纹；确认时只执行存下的变更，客户端不能改。基线不一致 → 409 + `stale`；预演跨天也视为过期。
+3. **解释器不调用 LLM**：`GET /deadlines/:id/explain` 返回规则拼出的结论（verdict / conclusion / confidence / evidence（带来源） / missing / assumptions / suggestion）和可带入插单预演的参数；没有变更记录时结论以“数据不足：”开头。文字目前只有中文。LLM 叙述留给 mist-team-server。
+4. **表的位置**：`md_proposals`、`md_team_capacity` 在 mist-docs 建（D19），字段与 §6.3 略有不同：`decided_by` / `decided_at` 代替 `applied_by` / `applied_at`（驳回也记录），多了 `title` 和 `reason`，没有 `run_id`（等 AI 侧接入时再加）。
+5. **确认后的联动**：写 `md_deadline_events`（`proposal_applied`），通知受影响单的负责人，投递 Webhook `deadline.proposal_applied`。

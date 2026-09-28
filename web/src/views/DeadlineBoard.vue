@@ -10,9 +10,15 @@
         <el-button @click="loadAll" :loading="loading">
           <el-icon><Refresh /></el-icon>
         </el-button>
-        <el-button type="primary" @click="openCreate">
-          <el-icon><Plus /></el-icon> {{ t('deadlines.newDeadline') }}
+        <el-button @click="openHistory" data-test="proposal-history-btn">
+          <el-icon><Tickets /></el-icon> {{ t('insertPreview.history') }}
         </el-button>
+        <el-button @click="openPreview(null)" data-test="insert-preview-btn">
+          <el-icon><DataAnalysis /></el-icon> {{ t('insertPreview.button') }}
+        </el-button>
+        <GuardedButton type="primary" :allowed="canEdit" :reason="t('perm.needEditor')" @click="openCreate">
+          <el-icon><Plus /></el-icon> {{ t('deadlines.newDeadline') }}
+        </GuardedButton>
       </div>
     </div>
 
@@ -78,6 +84,8 @@
                 <div class="card-foot">
                   <span class="owner" :class="{ unassigned: !d.owner_name }">{{ d.owner_name || t('deadlines.unassigned') }}</span>
                   <span class="status">{{ statusText(d.status) }}</span>
+                  <el-button v-if="worthExplaining(d.risk_level, d.status)" link size="small" class="why-btn"
+                    data-test="card-explain" @click.stop="openExplain(d)">{{ t('explain.short') }}</el-button>
                 </div>
               </div>
             </div>
@@ -150,10 +158,11 @@
             </template>
           </el-table-column>
           <!-- 操作收敛成文字按钮：以前每行一个实心蓝块，整表都是高饱和色块 -->
-          <el-table-column :label="t('common.operation')" width="120" fixed="right">
+          <el-table-column :label="t('common.operation')" width="190" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openDetail(row)">{{ t('common.detail') }}</el-button>
-              <el-button link @click="openEdit(row)">{{ t('common.edit') }}</el-button>
+              <el-button v-if="row.status !== 'done'" link type="warning" @click="openExplain(row)">{{ t('explain.short') }}</el-button>
+              <el-button v-if="canEdit" link @click="openEdit(row)">{{ t('common.edit') }}</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -175,11 +184,21 @@
 
       <!-- ==================== 提醒规则 ==================== -->
       <el-tab-pane :label="t('deadlines.rules')" name="rules">
+        <div class="capacity-bar">
+          <span class="cap-label">{{ t('insertPreview.capacity') }}</span>
+          <b>{{ t('insertPreview.capacityLine', { n: capacity.per_day }) }}</b>
+          <el-tag v-if="capacity.is_default" size="small" effect="plain">{{ t('insertPreview.capacityDefault') }}</el-tag>
+          <span class="cap-sep">·</span>
+          <span class="cap-label">{{ t('insertPreview.keyCustomers') }}</span>
+          <span>{{ capacity.key_customers.length ? capacity.key_customers.join('、') : t('insertPreview.noKeyCustomers') }}</span>
+          <GuardedButton size="small" :allowed="isAdmin" :reason="t('perm.needAdmin')" class="cap-btn" @click="openCapacity">{{ t('insertPreview.setCapacity') }}</GuardedButton>
+        </div>
         <div class="rules-head">
-          <el-button @click="seedRules">{{ t('deadlines.seedRules') }}</el-button>
-          <el-button type="primary" @click="openRuleCreate">
+          <span v-if="!isAdmin" class="perm-hint">{{ t('perm.needAdmin') }}</span>
+          <GuardedButton :allowed="isAdmin" :reason="t('perm.needAdmin')" @click="seedRules">{{ t('deadlines.seedRules') }}</GuardedButton>
+          <GuardedButton type="primary" :allowed="isAdmin" :reason="t('perm.needAdmin')" @click="openRuleCreate">
             <el-icon><Plus /></el-icon> {{ t('deadlines.newRule') }}
-          </el-button>
+          </GuardedButton>
         </div>
 
         <el-table :data="rules" v-loading="loading" empty-text="—">
@@ -199,10 +218,10 @@
           </el-table-column>
           <el-table-column :label="t('deadlines.enabled')" width="100">
             <template #default="{ row }">
-              <el-switch :model-value="row.enabled" @change="(v: boolean) => toggleRule(row, v)" />
+              <el-switch :model-value="row.enabled" :disabled="!isAdmin" @change="(v: boolean) => toggleRule(row, v)" />
             </template>
           </el-table-column>
-          <el-table-column :label="t('common.edit')" width="140">
+          <el-table-column v-if="isAdmin" :label="t('common.edit')" width="140">
             <template #default="{ row }">
               <el-button size="small" @click="openRuleEdit(row)">{{ t('common.edit') }}</el-button>
               <el-button size="small" type="danger" @click="removeRule(row)">{{ t('common.delete') }}</el-button>
@@ -230,6 +249,57 @@
         </el-table>
       </el-tab-pane>
     </el-tabs>
+
+    <InsertPreviewDialog v-model="previewVisible" :prefill="previewPrefill" @applied="loadAll" />
+    <ExplainDrawer v-model="explainVisible" :deadline-id="explainTarget.id" :order-no="explainTarget.order_no"
+      @preview="onExplainPreview" />
+
+    <el-drawer v-model="historyVisible" :title="t('insertPreview.history')" size="720px" class="proposal-drawer">
+      <el-table :data="proposals" v-loading="historyLoading" :empty-text="t('insertPreview.histEmpty')">
+        <el-table-column :label="t('insertPreview.colTime')" width="150">
+          <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column :label="t('insertPreview.colTitle')" min-width="200">
+          <template #default="{ row }">
+            <div class="ph-title">{{ row.title }}</div>
+            <div class="ph-sub">
+              {{ row.user_name || '—' }}
+              <template v-if="row.breaches || row.delayed"> · {{ t(summaryKey(row).key, summaryKey(row).args) }}</template>
+            </div>
+            <ul v-if="row.status === 'applied' && row.changes?.length" class="ph-changes">
+              <li v-for="(ch, i) in row.changes" :key="i">{{ ch.field === '__create__' ? '+ ' + (ch.order_no || ch.title) : `${ch.order_no} ${ch.old} → ${ch.new}` }}</li>
+            </ul>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('insertPreview.colStatus')" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" :type="proposalStatusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('insertPreview.colDecided')" width="120">
+          <template #default="{ row }">{{ row.decided_by_name || '—' }}</template>
+        </el-table-column>
+      </el-table>
+    </el-drawer>
+
+    <el-dialog v-model="capacityVisible" :title="t('insertPreview.setCapacity')" width="480px">
+      <p class="cap-hint">{{ t('insertPreview.capacityHint') }}</p>
+      <el-form label-width="96px">
+        <el-form-item :label="t('insertPreview.perDay')">
+          <el-input-number v-model="capacityForm.per_day" :min="1" :max="1000" /> <span class="cap-unit">{{ t('insertPreview.perDayUnit') }}</span>
+        </el-form-item>
+        <el-form-item :label="t('insertPreview.effectiveFrom')">
+          <el-date-picker v-model="capacityForm.effective_from" type="date" value-format="YYYY-MM-DD" />
+        </el-form-item>
+        <el-form-item :label="t('insertPreview.keyCustomers')">
+          <el-input v-model="capacityForm.key_customers" type="textarea" :rows="4" :placeholder="t('insertPreview.keyCustomersHint')" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="capacityVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="saveCapacity">{{ t('common.save') }}</el-button>
+      </template>
+    </el-dialog>
 
     <!-- ==================== 新建 / 编辑 ==================== -->
     <el-dialog v-model="formVisible" :title="form.id ? t('deadlines.editDeadline') : t('deadlines.newDeadline')" width="620px">
@@ -316,10 +386,12 @@
       </div>
       <template #footer>
         <div class="detail-footer">
-          <el-button type="danger" plain @click="removeDeadline">{{ t('common.delete') }}</el-button>
+          <GuardedButton type="danger" plain :allowed="canDeleteDetail" :reason="canEdit ? t('perm.deadlineDelete') : t('perm.needEditor')" @click="removeDeadline">{{ t('common.delete') }}</GuardedButton>
           <span class="footer-gap" />
+          <el-button v-if="detail && detail.status !== 'done'" type="warning" plain data-test="detail-explain"
+            @click="openExplain(detail)">{{ t('explain.button') }}</el-button>
           <el-button @click="detailVisible = false">{{ t('common.close') }}</el-button>
-          <el-button type="primary" @click="openEdit(detail)">{{ t('common.edit') }}</el-button>
+          <GuardedButton type="primary" :allowed="canEdit" :reason="t('perm.needEditor')" @click="openEdit(detail)">{{ t('common.edit') }}</GuardedButton>
         </div>
       </template>
     </el-dialog>
@@ -362,10 +434,22 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Plus, Refresh, Search, DataAnalysis, Tickets } from '@element-plus/icons-vue'
 import teamApi from '@/utils/team-api'
+import GuardedButton from '@/components/GuardedButton.vue'
+import InsertPreviewDialog from '@/components/InsertPreviewDialog.vue'
+import ExplainDrawer from '@/components/ExplainDrawer.vue'
+import { worthExplaining, type SuggestedPreview } from '@/utils/explain'
+import { conclusionText, proposalStatusType } from '@/utils/insertPreview'
+import { useAuthStore } from '@/stores/auth'
+import { canManageRecord } from '@/utils/roles'
 
 const { t } = useI18n()
+const auth = useAuthStore()
+// Mirrors the API (D2): editors create/update, admins manage rules,
+// delete is the creator, the 负责人 or an admin.
+const canEdit = computed(() => auth.canEditTeam)
+const isAdmin = computed(() => auth.isTeamAdmin)
 
 interface Deadline {
   id: string
@@ -379,6 +463,7 @@ interface Deadline {
   progress: number
   priority: string
   owner_id?: string
+  created_by?: string
   owner_name?: string
   remark?: string
   days_left: number
@@ -395,6 +480,79 @@ interface Rule {
 }
 
 const tab = ref('board')
+const previewVisible = ref(false)
+const previewPrefill = ref<SuggestedPreview | null>(null)
+function openPreview(p: SuggestedPreview | null) {
+  previewPrefill.value = p
+  previewVisible.value = true
+}
+
+// ---- 为什么可能晚？ ----
+const explainVisible = ref(false)
+const explainTarget = reactive({ id: '', order_no: '' })
+function openExplain(d: { id: string; order_no?: string; title?: string }) {
+  explainTarget.id = d.id
+  explainTarget.order_no = d.order_no || d.title || ''
+  explainVisible.value = true
+}
+function onExplainPreview(p: SuggestedPreview) {
+  explainVisible.value = false
+  detailVisible.value = false
+  openPreview(p)
+}
+const historyVisible = ref(false)
+const historyLoading = ref(false)
+const proposals = ref<any[]>([])
+
+async function openHistory() {
+  historyVisible.value = true
+  historyLoading.value = true
+  try {
+    const { data } = await teamApi.get('/proposals')
+    proposals.value = data.data || []
+  } catch {
+    proposals.value = []
+  } finally {
+    historyLoading.value = false
+  }
+}
+function summaryKey(row: any) {
+  return conclusionText({ new_breaches: new Array(row.breaches || 0), delayed: new Array(row.delayed || 0) } as any)
+}
+function statusLabel(s: string) {
+  return t(({ pending: 'insertPreview.stPending', applied: 'insertPreview.stApplied', rejected: 'insertPreview.stRejected', stale: 'insertPreview.stStale' } as Record<string, string>)[s] || 'insertPreview.stPending')
+}
+const capacityVisible = ref(false)
+const capacity = reactive({ per_day: 1, is_default: true, key_customers: [] as string[] })
+const capacityForm = reactive({ per_day: 1, effective_from: '', key_customers: '' })
+
+async function loadCapacity() {
+  try {
+    const { data } = await teamApi.get('/deadlines/capacity')
+    Object.assign(capacity, { per_day: data.data.per_day, is_default: data.data.is_default, key_customers: data.data.key_customers || [] })
+  } catch { /* keep defaults */ }
+}
+function openCapacity() {
+  Object.assign(capacityForm, { per_day: capacity.per_day, effective_from: '', key_customers: capacity.key_customers.join('\n') })
+  capacityVisible.value = true
+}
+async function saveCapacity() {
+  saving.value = true
+  try {
+    const { data } = await teamApi.put('/deadlines/capacity', {
+      per_day: capacityForm.per_day,
+      effective_from: capacityForm.effective_from || undefined,
+      key_customers: capacityForm.key_customers.split('\n'),
+    })
+    Object.assign(capacity, { per_day: data.data.per_day, is_default: data.data.is_default, key_customers: data.data.key_customers || [] })
+    capacityVisible.value = false
+    ElMessage.success(t('insertPreview.capacitySaved'))
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || t('deadlines.saveFailed'))
+  } finally {
+    saving.value = false
+  }
+}
 const loading = ref(false)
 const saving = ref(false)
 
@@ -425,6 +583,8 @@ const formVisible = ref(false)
 const detailVisible = ref(false)
 const ruleVisible = ref(false)
 const detail = ref<Deadline | null>(null)
+const canDeleteDetail = computed(() =>
+  !!detail.value && canManageRecord(auth.currentTeamRole, auth.user?.id, detail.value.created_by, detail.value.owner_id))
 
 const emptyForm = () => ({
   id: '',
@@ -505,6 +665,7 @@ function eventText(tp: string) {
     status_changed: t('deadlines.eventStatusChanged'),
     date_changed: t('deadlines.eventDateChanged'),
     deleted: t('deadlines.eventDeleted'),
+    proposal_applied: t('deadlines.eventProposalApplied'),
   }
   return map[tp] || tp
 }
@@ -574,7 +735,7 @@ async function loadLog() {
 async function loadAll() {
   loading.value = true
   try {
-    await Promise.all([loadBoard(), loadList(), loadRules(), loadLog()])
+    await Promise.all([loadBoard(), loadList(), loadRules(), loadLog(), loadCapacity()])
   } finally {
     loading.value = false
   }
@@ -979,6 +1140,8 @@ onMounted(loadAll)
   padding-top: 6px;
   border-top: 1px dashed var(--md-dl-border);
 }
+.card-foot .status { margin-left: auto; }
+.card-foot .why-btn { margin-left: 8px; padding: 0; height: auto; font-size: 12px; }
 .cell-unassigned,
 .owner.unassigned {
   color: var(--md-dl-unassigned);
@@ -1027,6 +1190,27 @@ onMounted(loadAll)
 }
 
 /* 规则 */
+.ph-title { font-weight: 600; color: var(--md-text); }
+.ph-sub { font-size: 12px; color: var(--md-text-slate-dim); margin-top: 2px; }
+.ph-changes { margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--md-text-slate); }
+.capacity-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: var(--md-dl-surface);
+  border: 1px solid var(--md-dl-border);
+  font-size: 13px;
+  color: var(--md-text);
+}
+.cap-label { color: var(--md-text-slate-dim); }
+.cap-sep { color: var(--md-text-slate-dim); margin: 0 4px; }
+.cap-btn { margin-left: auto; }
+.cap-hint { margin: -6px 0 14px; color: var(--md-text-slate); font-size: 13px; }
+.cap-unit { margin-left: 8px; color: var(--md-text-slate); }
 .rules-head {
   display: flex;
   gap: 8px;
@@ -1045,6 +1229,7 @@ onMounted(loadAll)
   align-items: center;
   width: 100%;
 }
+.perm-hint { color: var(--el-text-color-secondary); font-size: 12px; margin-right: 12px; align-self: center; }
 .detail-footer .footer-gap {
   flex: 1;
 }

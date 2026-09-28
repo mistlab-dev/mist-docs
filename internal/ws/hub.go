@@ -2,7 +2,9 @@ package ws
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"sync"
@@ -56,10 +58,39 @@ const (
 	sendBackoffTime       = 100 * time.Millisecond // wait time when send buffer is full
 	writeDeadline         = 10 * time.Second
 	readDeadline          = 60 * time.Second
-	pingIntervalDefault   = 30               // seconds
-	maxMessageSizeDefault = 2 * 1024 * 1024  // 2MB
-	permCheckInterval     = 60 * time.Second // periodic permission check interval
+	pingIntervalDefault   = 30              // seconds
+	maxMessageSizeDefault = 2 * 1024 * 1024 // 2MB
 )
+
+// Access re-check timing. Team membership is managed in the Portal, so the
+// only way to notice a removed member is to look again: on a timer, and
+// before accepting an edit when the last check is older than
+// writeRecheckAfter. Variables so tests can shorten them.
+var (
+	permCheckInterval atomic.Int64 // time.Duration
+	writeRecheckAfter atomic.Int64 // time.Duration
+)
+
+func init() {
+	permCheckInterval.Store(int64(20 * time.Second))
+	writeRecheckAfter.Store(int64(5 * time.Second))
+}
+
+// CloseAccessRevoked is the close code sent when a member lost access to the
+// document (removed from the team, permission withdrawn, document deleted).
+// Clients must not reconnect after it.
+const CloseAccessRevoked = 4403
+
+// SetAccessCheckIntervals overrides the re-check timing and returns a function
+// restoring the previous values. For tests.
+func SetAccessCheckIntervals(periodic, beforeWrite time.Duration) (restore func()) {
+	oldP := permCheckInterval.Swap(int64(periodic))
+	oldW := writeRecheckAfter.Swap(int64(beforeWrite))
+	return func() {
+		permCheckInterval.Store(oldP)
+		writeRecheckAfter.Store(oldW)
+	}
+}
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -89,8 +120,116 @@ type Client struct {
 	TeamRole  string
 	DeptID    string // user department ID for permission checks
 	canWrite  atomic.Bool
+	lastAuth  atomic.Int64 // unix nanos of the last successful access check
 	mu        sync.Mutex
 	closeOnce sync.Once
+}
+
+var errAccessRevoked = errors.New("access revoked")
+
+// authorize re-reads the member's team role and document permission and
+// updates canWrite. It returns errAccessRevoked when the user may no longer
+// read the document; other errors (database hiccups) leave the previous state
+// in place so a brief outage does not disconnect everyone.
+func (c *Client) authorize() error {
+	ctx := context.Background()
+	var role string
+	err := database.DB.QueryRowContext(ctx,
+		`SELECT role FROM team_members WHERE team_id = ? AND user_id = ?`, c.TeamID, c.UserID).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return errAccessRevoked
+	}
+	if err != nil {
+		return err
+	}
+
+	var docTeamID, lockedBy string
+	err = database.DB.QueryRowContext(ctx,
+		`SELECT team_id, IFNULL(locked_by, '') FROM md_documents WHERE id = ? AND status = 1`, c.DocID).Scan(&docTeamID, &lockedBy)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && docTeamID != c.TeamID) {
+		return errAccessRevoked
+	}
+	if err != nil {
+		return err
+	}
+
+	perm := service.CheckTeamPermission(ctx, c.UserID, c.TeamID, role, "document", c.DocID)
+	if perm == "none" || perm == "" {
+		return errAccessRevoked
+	}
+	// A lock held by someone else makes the document read-only for everyone
+	// except the holder and team admins, in the live session as over REST.
+	lockedByOther := lockedBy != "" && lockedBy != c.UserID && role != "admin" && role != "owner"
+	canWrite := service.PermAtLeast(perm, "write") && !lockedByOther
+	if prev := c.canWrite.Swap(canWrite); prev != canWrite {
+		c.notifyPermission(canWrite, lockedBy)
+	}
+	c.lastAuth.Store(time.Now().UnixNano())
+	return nil
+}
+
+// notifyPermission tells the client its write access changed (lock taken or
+// released, permission changed) so the editor can switch modes.
+func (c *Client) notifyPermission(canWrite bool, lockedBy string) {
+	var lockedByName string
+	if lockedBy != "" {
+		database.DB.QueryRow(
+			`SELECT COALESCE(NULLIF(display_name,''), NULLIF(username,''), '') FROM users WHERE id = ?`, lockedBy,
+		).Scan(&lockedByName)
+	}
+	msg, _ := json.Marshal(map[string]interface{}{
+		"type": "permission", "can_write": canWrite,
+		"locked_by": lockedBy, "locked_by_name": lockedByName,
+	})
+	c.mu.Lock()
+	c.Conn.SetWriteDeadline(time.Now().Add(writeDeadline))
+	c.Conn.WriteMessage(websocket.BinaryMessage, msg)
+	c.mu.Unlock()
+}
+
+// Reauthorize re-checks every live session of docID right away. Handlers call
+// it (through handler.OnDocAccessChanged) after a lock or permission change so
+// people do not keep typing into a document for up to one check interval.
+func (h *Hub) Reauthorize(docID string) {
+	h.mu.RLock()
+	room, ok := h.rooms[docID]
+	h.mu.RUnlock()
+	if !ok {
+		return
+	}
+	room.mu.RLock()
+	clients := make([]*Client, 0, len(room.Clients))
+	for _, cl := range room.Clients {
+		clients = append(clients, cl)
+	}
+	room.mu.RUnlock()
+	for _, cl := range clients {
+		go func(cl *Client) {
+			if err := cl.authorize(); errors.Is(err, errAccessRevoked) {
+				cl.revoke()
+			}
+		}(cl)
+	}
+}
+
+// revoke tells the client why and closes the connection. Safe to call twice.
+func (c *Client) revoke() {
+	c.closeOnce.Do(func() {
+		log.Printf("[WS] access revoked: user=%s doc=%s — disconnecting", c.UserID, c.DocID)
+		msg, _ := json.Marshal(map[string]string{"type": "access", "reason": "revoked"})
+		c.mu.Lock()
+		c.Conn.SetWriteDeadline(time.Now().Add(writeDeadline))
+		c.Conn.WriteMessage(websocket.BinaryMessage, msg)
+		c.Conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(CloseAccessRevoked, "access revoked"))
+		c.mu.Unlock()
+		c.Conn.Close()
+	})
+}
+
+// isEdit reports whether a client message would change the shared document.
+func isEdit(data []byte) bool {
+	return len(data) >= 2 && data[0] == MsgSync && (data[1] == SyncStep2 || data[1] == SyncUpdate)
 }
 
 type Room struct {
@@ -530,6 +669,14 @@ func ServeWS(hub *Hub, c *gin.Context) {
 		DeptID:   "", // deprecated, teams replace departments
 	}
 	client.canWrite.Store(canWrite)
+	client.lastAuth.Store(time.Now().UnixNano())
+	if canWrite {
+		var lockedBy string
+		database.DB.QueryRow(`SELECT IFNULL(locked_by, '') FROM md_documents WHERE id = ?`, docID).Scan(&lockedBy)
+		if lockedBy != "" && lockedBy != userID && role != "admin" && role != "owner" {
+			client.canWrite.Store(false)
+		}
+	}
 
 	hub.register <- client
 
@@ -554,22 +701,10 @@ func (c *Client) readPump() {
 		return nil
 	})
 
-	// Periodic permission check — kick client if permission revoked
-	permTicker := time.NewTicker(permCheckInterval)
-	defer permTicker.Stop()
-
-	// Channel to signal permission check results
-	go func() {
-		for range permTicker.C {
-			perm := service.CheckTeamPermission(context.Background(), c.UserID, c.TeamID, c.TeamRole, "document", c.DocID)
-			if perm == "none" || perm == "" {
-				log.Printf("[WS] perm revoked: user=%s doc=%s — disconnecting", c.UserID, c.DocID)
-				c.Conn.Close()
-				return
-			}
-			c.canWrite.Store(service.PermAtLeast(perm, "write"))
-		}
-	}()
+	// Re-check access on a timer; stop when the connection ends.
+	done := make(chan struct{})
+	defer close(done)
+	go c.watchAccess(done)
 
 	for {
 		_, data, err := c.Conn.ReadMessage()
@@ -580,11 +715,36 @@ func (c *Client) readPump() {
 			break
 		}
 
+		// An edit from someone who was removed a moment ago must not land
+		// just because the timer has not fired yet.
+		if isEdit(data) && time.Since(time.Unix(0, c.lastAuth.Load())) > time.Duration(writeRecheckAfter.Load()) {
+			if err := c.authorize(); errors.Is(err, errAccessRevoked) {
+				c.revoke()
+				break
+			}
+		}
+
 		c.Hub.broadcast <- &Message{
 			DocID:    c.DocID,
 			Data:     data,
 			From:     c.UserID,
 			CanWrite: c.canWrite.Load(),
+		}
+	}
+}
+
+func (c *Client) watchAccess(done <-chan struct{}) {
+	ticker := time.NewTicker(time.Duration(permCheckInterval.Load()))
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			if err := c.authorize(); errors.Is(err, errAccessRevoked) {
+				c.revoke()
+				return
+			}
 		}
 	}
 }
@@ -603,12 +763,13 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case msg, ok := <-c.Send:
+			c.mu.Lock()
 			c.Conn.SetWriteDeadline(time.Now().Add(writeDeadline))
 			if !ok {
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				c.mu.Unlock()
 				return
 			}
-			c.mu.Lock()
 			err := c.Conn.WriteMessage(websocket.BinaryMessage, msg)
 			c.mu.Unlock()
 			if err != nil {
@@ -616,8 +777,12 @@ func (c *Client) writePump() {
 			}
 
 		case <-ticker.C:
+			// gorilla/websocket allows one writer at a time; revoke() writes too.
+			c.mu.Lock()
 			c.Conn.SetWriteDeadline(time.Now().Add(writeDeadline))
-			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			err := c.Conn.WriteMessage(websocket.PingMessage, nil)
+			c.mu.Unlock()
+			if err != nil {
 				return
 			}
 		}

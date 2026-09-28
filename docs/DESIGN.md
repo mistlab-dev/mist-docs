@@ -1,5 +1,14 @@
 # MistDocs 技术设计文档
 
+> **⚠️ 早期单机版设计，仅供参考。**
+> 本文描述的部门树、本地用户/部门管理、CSV 导入、MistTerm 同步、文件回收站等，
+> 已被统一认证 + 团队化方案取代（见 [UNIFIED-AUTH-DESIGN.md](UNIFIED-AUTH-DESIGN.md)），
+> 相关代码已删除，旧表 `md_users` / `md_departments` / `md_folders` 按
+> `scripts/archive-legacy-tables.sql` 归档。
+> 现状以这些文档为准：接口见 `internal/handler/api_docs.go`（`/api/docs`）与 [README.md](README.md)，
+> 部署见 [DEPLOYMENT.md](DEPLOYMENT.md)，协同编辑见 [WEBSOCKET.md](WEBSOCKET.md)，
+> 交期看板 / 插单预演 / 解释器见 [DESIGN-DEADLINE-AI.md](DESIGN-DEADLINE-AI.md)。
+
 ## 1. 系统架构
 
 ```
