@@ -253,6 +253,7 @@ CREATE TABLE IF NOT EXISTS `md_reminder_log` (
   `id` varchar(36) NOT NULL,
   `rule_id` varchar(36) NOT NULL,
   `deadline_id` varchar(36) NOT NULL,
+  `due_date` date DEFAULT NULL,
   `team_id` varchar(64) NOT NULL,
   `target_user_id` varchar(64) DEFAULT '',
   `channel` varchar(32) NOT NULL DEFAULT 'inapp',
@@ -260,7 +261,7 @@ CREATE TABLE IF NOT EXISTS `md_reminder_log` (
   `detail` varchar(255) DEFAULT '',
   `sent_at` datetime DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_once` (`rule_id`,`deadline_id`),
+  UNIQUE KEY `uk_once_due` (`rule_id`,`deadline_id`,`due_date`),
   KEY `idx_deadline` (`deadline_id`),
   KEY `idx_team_time` (`team_id`,`sent_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci

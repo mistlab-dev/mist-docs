@@ -11,7 +11,8 @@ import (
 // could not open them, although they were listed.
 func TestLegacyDocWithNullFolderOpens(t *testing.T) {
 	docID := createTestDoc(t, adminToken, "旧文档-无文件夹")
-	if _, err := database.DB.Exec(`UPDATE md_documents SET folder_id = NULL, updated_by = NULL WHERE id = ?`, docID); err != nil {
+	defer request("DELETE", teamPath("/documents/"+docID), nil, adminToken)
+	if _, err := database.DB.Exec(`UPDATE md_documents SET folder_id = NULL, updated_by = NULL, updated_at = NOW() + INTERVAL 1 MINUTE WHERE id = ?`, docID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -24,7 +25,7 @@ func TestLegacyDocWithNullFolderOpens(t *testing.T) {
 		t.Fatalf("unexpected detail: %v", data)
 	}
 
-	w = request("GET", teamPath("/documents/recent"), nil, adminToken)
+	w = request("GET", teamPath("/documents/recent?limit=50"), nil, adminToken)
 	if w.Code != 200 {
 		t.Fatalf("recent: %d", w.Code)
 	}
