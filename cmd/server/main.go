@@ -7,11 +7,14 @@ import (
 	"log"
 	"os"
 
+	_ "time/tzdata" // timezone works even without system zoneinfo
+
 	"github.com/c-wind/mist-docs/internal/config"
 	"github.com/c-wind/mist-docs/internal/crypto"
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/handler"
 	"github.com/c-wind/mist-docs/internal/middleware"
+	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/router"
 	"github.com/c-wind/mist-docs/internal/scheduler"
 	"github.com/c-wind/mist-docs/internal/ws"
@@ -41,6 +44,12 @@ func main() {
 		log.Fatalf("加载配置失败: %v", err)
 	}
 	log.Println("[BOOT] config loaded")
+	if err := model.SetTimezone(config.C.Timezone); err != nil {
+		log.Fatalf("timezone %q 无效: %v", config.C.Timezone, err)
+	}
+	if config.C.Timezone != "" {
+		log.Printf("[BOOT] deadline timezone: %s", config.C.Timezone)
+	}
 
 	log.Println("[BOOT] connecting database...")
 	if err := database.Init(config.C.Database); err != nil {

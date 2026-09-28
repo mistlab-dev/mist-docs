@@ -110,11 +110,11 @@ func TeamListDeadlines(c *gin.Context) {
 	// risk is computed, so it is expressed as a due_date range rather than a column.
 	switch c.Query("risk") {
 	case "overdue":
-		where = append(where, "status <> 'done'", "due_date < CURDATE()")
+		where = append(where, "status <> 'done'", "due_date < '"+model.TodayString()+"'")
 	case "critical":
-		where = append(where, "status <> 'done'", "due_date >= CURDATE()", "due_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY)")
+		where = append(where, "status <> 'done'", "due_date >= '"+model.TodayString()+"'", "due_date <= DATE_ADD('"+model.TodayString()+"', INTERVAL 3 DAY)")
 	case "warning":
-		where = append(where, "status <> 'done'", "due_date > DATE_ADD(CURDATE(), INTERVAL 3 DAY)", "due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)")
+		where = append(where, "status <> 'done'", "due_date > DATE_ADD('"+model.TodayString()+"', INTERVAL 3 DAY)", "due_date <= DATE_ADD('"+model.TodayString()+"', INTERVAL 7 DAY)")
 	case "open":
 		where = append(where, "status <> 'done'")
 	}
@@ -462,10 +462,10 @@ func TeamDeadlineBoard(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	type bucket struct {
-		Overdue  []*model.Deadline `json:"overdue"`
-		Today    []*model.Deadline `json:"today"`
-		Next3    []*model.Deadline `json:"next_3_days"`
-		Next7    []*model.Deadline `json:"next_7_days"`
+		Overdue []*model.Deadline `json:"overdue"`
+		Today   []*model.Deadline `json:"today"`
+		Next3   []*model.Deadline `json:"next_3_days"`
+		Next7   []*model.Deadline `json:"next_7_days"`
 	}
 
 	out := bucket{
@@ -494,15 +494,15 @@ func TeamDeadlineBoard(c *gin.Context) {
 		return items
 	}
 
-	out.Overdue = load("due_date < CURDATE()")
-	out.Today = load("due_date = CURDATE()")
-	out.Next3 = load("due_date > CURDATE() AND due_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY)")
-	out.Next7 = load("due_date > DATE_ADD(CURDATE(), INTERVAL 3 DAY) AND due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)")
+	out.Overdue = load("due_date < '" + model.TodayString() + "'")
+	out.Today = load("due_date = '" + model.TodayString() + "'")
+	out.Next3 = load("due_date > '" + model.TodayString() + "' AND due_date <= DATE_ADD('" + model.TodayString() + "', INTERVAL 3 DAY)")
+	out.Next7 = load("due_date > DATE_ADD('" + model.TodayString() + "', INTERVAL 3 DAY) AND due_date <= DATE_ADD('" + model.TodayString() + "', INTERVAL 7 DAY)")
 
 	var doneThisWeek, totalOpen int
 	database.DB.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM md_deadlines WHERE team_id = ? AND deleted_at IS NULL
-		 AND status = 'done' AND due_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`, teamID).Scan(&doneThisWeek)
+		 AND status = 'done' AND due_date >= DATE_SUB(?, INTERVAL 7 DAY)`, teamID, model.TodayString()).Scan(&doneThisWeek)
 	database.DB.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM md_deadlines WHERE team_id = ? AND deleted_at IS NULL AND status <> 'done'`, teamID).Scan(&totalOpen)
 
@@ -511,10 +511,10 @@ func TeamDeadlineBoard(c *gin.Context) {
 	var closed30, onTime30 int
 	database.DB.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM md_deadlines WHERE team_id = ? AND deleted_at IS NULL
-		 AND status = 'done' AND due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`, teamID).Scan(&closed30)
+		 AND status = 'done' AND due_date >= DATE_SUB(?, INTERVAL 30 DAY)`, teamID, model.TodayString()).Scan(&closed30)
 	database.DB.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM md_deadlines WHERE team_id = ? AND deleted_at IS NULL
-		 AND status = 'done' AND due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`, teamID).Scan(&onTime30)
+		 AND status = 'done' AND due_date >= DATE_SUB(?, INTERVAL 30 DAY)`, teamID, model.TodayString()).Scan(&onTime30)
 
 	onTimeRate := 0
 	if closed30 > 0 {
@@ -522,10 +522,10 @@ func TeamDeadlineBoard(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"overdue":       out.Overdue,
-		"today":         out.Today,
-		"next_3_days":   out.Next3,
-		"next_7_days":   out.Next7,
+		"overdue":     out.Overdue,
+		"today":       out.Today,
+		"next_3_days": out.Next3,
+		"next_7_days": out.Next7,
 		"counts": gin.H{
 			"overdue":     len(out.Overdue),
 			"today":       len(out.Today),

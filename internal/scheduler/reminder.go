@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
+	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/webhook"
 	"github.com/google/uuid"
 )
@@ -45,7 +46,7 @@ func StartReminderScheduler(interval time.Duration) {
 // offset, then notifies the target user once. Exported so it can be driven
 // directly from tests or a cron runner.
 func RunReminderScanOnce(now time.Time) {
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	today := model.DayOf(now) // the business zone's calendar day, not the server's
 
 	// Load all enabled rules across teams in one query.
 	ruleRows, err := database.DB.Query(

@@ -3,6 +3,10 @@
 # configs/config.yaml 已被 gitignore，不会进入仓库。
 # 生产环境使用 /etc/mistdocs/config.yaml，由运维单独维护。
 
+# 交期“今天”按哪个时区算（IANA 名称）。留空 = 服务器本地时区。
+# 只影响交期/提醒/插单预演的日期判断，不改变已存时间戳。
+timezone: "Asia/Shanghai"
+
 server:
   host: "0.0.0.0"
   port: 8900
@@ -20,6 +24,8 @@ jwt:
   # 必须与 Portal（mist-team-server）一致才能打通 SSO；使用强随机值
   secret: "<shared-jwt-secret>"
   issuer: "mist-docs"
+  # 其它视为正常的签发方（例如 Portal 的 "mist-team-server"），不再记“issuer 不一致”日志
+  accepted_issuers: ["mist-team-server"]
   expire_hours: 24
 
 storage:

@@ -16,6 +16,10 @@ type Config struct {
 	Portal    PortalConfig    `yaml:"portal"`
 	Billing   BillingConfig   `yaml:"billing"`
 	Log       LogConfig       `yaml:"log"`
+	// Timezone is the IANA zone ("Asia/Shanghai") that decides what "today"
+	// is for deadlines, reminders and the insert preview. Empty = the
+	// server's local zone. Stored timestamps are not affected.
+	Timezone string `yaml:"timezone"`
 }
 
 type ServerConfig struct {
@@ -44,12 +48,33 @@ type JWTConfig struct {
 	Secret      string `yaml:"secret"`
 	ExpireHours int    `yaml:"expire_hours"`
 	Issuer      string `yaml:"issuer"`
+	// AcceptedIssuers are extra token issuers treated as expected (for
+	// example the Portal's "mist-team-server"), so they are not logged as
+	// a mismatch. Issuer is still what locally minted tokens carry.
+	AcceptedIssuers []string `yaml:"accepted_issuers"`
+}
+
+// IssuerAccepted reports whether iss is the configured issuer or one of the
+// accepted ones. With no issuer configured at all, everything is accepted.
+func (j JWTConfig) IssuerAccepted(iss string) bool {
+	if j.Issuer == "" && len(j.AcceptedIssuers) == 0 {
+		return true
+	}
+	if iss == j.Issuer {
+		return true
+	}
+	for _, a := range j.AcceptedIssuers {
+		if iss == a {
+			return true
+		}
+	}
+	return false
 }
 
 type WebSocketConfig struct {
-	ReadBufferSize  int `yaml:"read_buffer_size"`
-	WriteBufferSize int `yaml:"write_buffer_size"`
-	PingInterval    int `yaml:"ping_interval"`
+	ReadBufferSize  int   `yaml:"read_buffer_size"`
+	WriteBufferSize int   `yaml:"write_buffer_size"`
+	PingInterval    int   `yaml:"ping_interval"`
 	MaxMessageSize  int64 `yaml:"max_message_size"`
 }
 
@@ -65,7 +90,7 @@ type PortalConfig struct {
 // When Enabled=false (private deployment), all features are unlocked.
 type BillingConfig struct {
 	Enabled     bool   `yaml:"enabled"`      // true = check plan via Portal API
-	PortalURL   string `yaml:"portal_url"`  // Portal API URL, e.g. https://api.mistlab.dev
+	PortalURL   string `yaml:"portal_url"`   // Portal API URL, e.g. https://api.mistlab.dev
 	AdminSecret string `yaml:"admin_secret"` // shared secret for internal API calls
 }
 

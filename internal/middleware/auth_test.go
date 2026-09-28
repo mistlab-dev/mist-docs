@@ -197,3 +197,25 @@ func TestTeamAuthNeedsTeamParam(t *testing.T) {
 		t.Fatalf("status %d, want 400", w.Code)
 	}
 }
+
+func TestAcceptedIssuersNotLogged(t *testing.T) {
+	withJWTConfig(t, testSecret, "mistlab")
+	config.C.JWT.AcceptedIssuers = []string{"mist-team-server"}
+	t.Cleanup(func() { config.C.JWT.AcceptedIssuers = nil })
+	logs := captureAuthLog(t)
+	for _, iss := range []string{"mistlab", "mist-team-server"} {
+		if uid, err := ParseMistLabToken(sign(t, portalClaims("u_3", iss, time.Now().Add(time.Hour)), testSecret)); err != nil || uid != "u_3" {
+			t.Fatalf("iss %q: uid=%q err=%v", iss, uid, err)
+		}
+	}
+	if len(*logs) != 0 {
+		t.Fatalf("accepted issuers must not be logged, got %v", *logs)
+	}
+	// Anything else is still logged (and still accepted, D9).
+	if _, err := ParseMistLabToken(sign(t, portalClaims("u_3", "other", time.Now().Add(time.Hour)), testSecret)); err != nil {
+		t.Fatal(err)
+	}
+	if len(*logs) != 1 || !strings.Contains((*logs)[0], "other") {
+		t.Fatalf("want one log line for unknown issuer, got %v", *logs)
+	}
+}

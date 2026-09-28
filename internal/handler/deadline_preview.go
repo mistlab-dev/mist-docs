@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
+	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/schedule"
 	"github.com/gin-gonic/gin"
 )
@@ -143,7 +144,7 @@ func buildPreview(teamID string, in previewInput) (schedule.Input, schedule.Resu
 	if err != nil {
 		return schedule.Input{}, zero, http.StatusInternalServerError, err.Error()
 	}
-	sin := schedule.Input{Today: time.Now(), Orders: orders, Insert: ins, Capacity: tc.Steps, KeyCustomers: tc.KeyCustomers}
+	sin := schedule.Input{Today: model.TodayStart(), Orders: orders, Insert: ins, Capacity: tc.Steps, KeyCustomers: tc.KeyCustomers}
 	return sin, schedule.Preview(sin), http.StatusOK, ""
 }
 
@@ -183,7 +184,7 @@ func TeamGetCapacity(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	today := time.Now()
+	today := model.TodayStart()
 	type step struct {
 		From   string `json:"effective_from"`
 		PerDay int    `json:"per_day"`
@@ -222,7 +223,7 @@ func TeamUpdateCapacity(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "每天产能应在 1～1000 单之间"})
 		return
 	}
-	from := time.Now().Format(dateLayout)
+	from := model.TodayString()
 	if in.EffectiveFrom != "" {
 		t, err := time.ParseInLocation(dateLayout, in.EffectiveFrom, time.Local)
 		if err != nil {
