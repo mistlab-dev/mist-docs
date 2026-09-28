@@ -40,7 +40,7 @@
 | 能力 | 位置 |
 |---|---|
 | 台账 CRUD + 看板查询（status/risk/owner/due 区间筛选） | `internal/handler/deadline.go` |
-| 分级提醒调度器（30 分钟一扫，`uk_once` 幂等） | `internal/scheduler/reminder.go` |
+| 分级提醒调度器（30 分钟一扫，`uk_once_due` 按 规则+订单+交期 幂等） | `internal/scheduler/reminder.go` |
 | 变更留痕（`reason` 字段已预留为 AI 燃料） | `md_deadline_events` |
 | 站内通知 | `createInAppNotification` → `md_notifications` |
 | Webhook 出站（含企微机器人可复用） | `internal/handler/webhook.go` |
@@ -341,7 +341,7 @@ CREATE TABLE md_proposals (
   - 同优先级按 due_date 稳定排序
 - `md_proposals` 状态机：pending→applied / pending→rejected / pending→stale
 - `apply-proposal` 的 409 冲突路径
-- 提醒联动：apply 后受影响单不重复触发已发过的提醒（`uk_once` 不破坏）
+- 提醒联动：同一交期不重复提醒；apply 确认改期后，新交期会按规则重新提醒（`uk_once_due` 含 due_date，2026-09 修正：原先改期后不再提醒）
 
 ### 9.2 AI 侧测试
 

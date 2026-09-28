@@ -218,7 +218,8 @@ func TestProposalHistory(t *testing.T) {
 	p1 := getString(preview(t, editorToken, map[string]interface{}{"order_no": "SO-H1", "due_date": pvDay(2)})["proposal_id"])
 	request("POST", teamPath("/proposals/"+p1+"/reject"), nil, editorToken)
 	p2 := getString(preview(t, editorToken, map[string]interface{}{"order_no": "SO-H2", "due_date": pvDay(2)})["proposal_id"])
-	database.DB.Exec(`UPDATE md_proposals SET created_at = created_at - INTERVAL 2 DAY WHERE id=?`, p2)
+	// Computed two days ago: both the row time and the baseline day move back.
+	database.DB.Exec(`UPDATE md_proposals SET created_at = created_at - INTERVAL 2 DAY, baseline = JSON_SET(baseline, '$.day', ?) WHERE id=?`, pvDay(-2), p2)
 
 	w := request("GET", teamPath("/proposals"), nil, viewerToken)
 	if w.Code != http.StatusOK {
@@ -252,10 +253,10 @@ func TestProposalHistory(t *testing.T) {
 	}
 }
 
-// Design §9.1: confirming does not make an already-sent reminder fire again
-// (uk_once is per rule and order, so a moved due date is not re-reminded,
-// the same as editing the date by hand).
-func TestProposalApplyKeepsReminderOnce(t *testing.T) {
+// Design §9.1 (revised): a reminder already sent for the old due date does
+// not block a reminder for the confirmed new date, and the new date is still
+// reminded only once.
+func TestProposalApplyRemindsAgainForNewDate(t *testing.T) {
 	defer seedPreviewOrders(t)()
 	cleanProposals()
 	defer cleanProposals()
@@ -263,18 +264,32 @@ func TestProposalApplyKeepsReminderOnce(t *testing.T) {
 	defer database.DB.Exec(`DELETE FROM md_reminder_rules WHERE id='test-pp-rule'`)
 	mustExec(t, `INSERT INTO md_reminder_rules (id, team_id, name, offset_days, channel, target, enabled, created_by)
 		VALUES ('test-pp-rule', ?, '提前2天', 2, 'inapp', 'owner', 1, ?)`, teamID, adminID)
-	mustExec(t, `INSERT INTO md_reminder_log (id, rule_id, deadline_id, team_id, target_user_id, channel, result)
-		VALUES ('test-pp-log', 'test-pp-rule', 'test-pv-1', ?, ?, 'inapp', 'ok')`, teamID, adminID)
+	// Already reminded for the old date (SO-T1 due tomorrow).
+	mustExec(t, `INSERT INTO md_reminder_log (id, rule_id, deadline_id, due_date, team_id, target_user_id, channel, result)
+		VALUES ('test-pp-log', 'test-pp-rule', 'test-pv-1', ?, ?, ?, 'inapp', 'ok')`, pvDay(1), teamID, adminID)
 
 	pid := getString(preview(t, editorToken, map[string]interface{}{"order_no": "SO-NEW", "due_date": pvDay(1)})["proposal_id"])
 	if w := request("POST", teamPath("/proposals/"+pid+"/apply"), nil, editorToken); w.Code != http.StatusOK {
 		t.Fatalf("apply: %d %s", w.Code, w.Body.String())
 	}
+	count := func() int {
+		var n int
+		database.DB.QueryRow(`SELECT COUNT(*) FROM md_reminder_log WHERE rule_id='test-pp-rule' AND deadline_id='test-pv-1'`).Scan(&n)
+		return n
+	}
 	// SO-T1 is now due in 3 days; tomorrow is "2 days before" the new date.
 	scheduler.RunReminderScanOnce(time.Now().AddDate(0, 0, 1))
-	var n int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM md_reminder_log WHERE rule_id='test-pp-rule' AND deadline_id='test-pv-1'`).Scan(&n)
-	if n != 1 {
-		t.Fatalf("reminder log rows for SO-T1 = %d, want 1", n)
+	if n := count(); n != 2 {
+		t.Fatalf("reminder log rows for SO-T1 = %d, want 2 (old date + new date)", n)
+	}
+	var newDue string
+	database.DB.QueryRow(`SELECT DATE_FORMAT(due_date,'%Y-%m-%d') FROM md_reminder_log WHERE rule_id='test-pp-rule' AND id<>'test-pp-log'`).Scan(&newDue)
+	if newDue != pvDay(3) {
+		t.Fatalf("new reminder due_date = %q, want %s", newDue, pvDay(3))
+	}
+	// Scanning again the same day must not send twice.
+	scheduler.RunReminderScanOnce(time.Now().AddDate(0, 0, 1))
+	if n := count(); n != 2 {
+		t.Fatalf("second scan: rows = %d, want still 2", n)
 	}
 }

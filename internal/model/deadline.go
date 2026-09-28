@@ -10,10 +10,10 @@ import "time"
 // needs `WHERE due_date = ...`, which is impossible against an encrypted
 // document blob.
 type Deadline struct {
-	ID      string `json:"id" db:"id"`
-	TeamID  string `json:"team_id" db:"team_id"`
-	OrderNo string `json:"order_no" db:"order_no"`
-	Title   string `json:"title" db:"title"`
+	ID       string `json:"id" db:"id"`
+	TeamID   string `json:"team_id" db:"team_id"`
+	OrderNo  string `json:"order_no" db:"order_no"`
+	Title    string `json:"title" db:"title"`
 	Customer string `json:"customer,omitempty" db:"customer"`
 	Quantity int    `json:"quantity" db:"quantity"`
 
@@ -37,12 +37,12 @@ type Deadline struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 
 	// Non-DB fields, filled in by the handler for the UI.
-	OwnerName     string `json:"owner_name,omitempty"`
-	StartDateStr  string `json:"start_date,omitempty"`
-	DueDateStr    string `json:"due_date"`
-	DaysLeft      int    `json:"days_left"`      // computed at read time, never stored
-	RiskLevel     string `json:"risk_level"`     // overdue|critical|warning|ok
-	IsArchived    bool   `json:"is_archived,omitempty"`
+	OwnerName    string `json:"owner_name,omitempty"`
+	StartDateStr string `json:"start_date,omitempty"`
+	DueDateStr   string `json:"due_date"`
+	DaysLeft     int    `json:"days_left"`  // computed at read time, never stored
+	RiskLevel    string `json:"risk_level"` // overdue|critical|warning|ok
+	IsArchived   bool   `json:"is_archived,omitempty"`
 }
 
 // ReminderRule is a configurable "T minus N days" notification rule.
@@ -81,11 +81,38 @@ type DeadlineEvent struct {
 
 // ==================== 交期计算 ====================
 
-// TodayStart returns local midnight, used as the reference for day counts.
-func TodayStart() time.Time {
-	n := time.Now()
-	return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, n.Location())
+// businessLoc is the zone that decides which calendar day it is for
+// deadlines (config "timezone"). The server may run in another zone.
+var businessLoc = time.Local
+
+// SetTimezone sets the zone used for "today". Empty keeps the server zone.
+func SetTimezone(name string) error {
+	if name == "" {
+		businessLoc = time.Local
+		return nil
+	}
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		return err
+	}
+	businessLoc = loc
+	return nil
 }
+
+// DayOf returns the calendar day of t in the business zone, as midnight in
+// time.Local. DATE columns are read as local midnight, so this is the value
+// to compare them with.
+func DayOf(t time.Time) time.Time {
+	b := t.In(businessLoc)
+	return time.Date(b.Year(), b.Month(), b.Day(), 0, 0, 0, 0, time.Local)
+}
+
+// TodayStart returns today (in the business zone) as local midnight, the
+// reference for day counts.
+func TodayStart() time.Time { return DayOf(time.Now()) }
+
+// TodayString is today in the business zone as YYYY-MM-DD.
+func TodayString() string { return TodayStart().Format("2006-01-02") }
 
 // DaysLeft returns whole days from today until due (negative when overdue).
 func DaysLeft(due time.Time) int {

@@ -27,3 +27,12 @@ export function canManageRecord(role: TeamRole | undefined | null, userId: strin
   if (isAdminRole(role)) return true
   return !!userId && canEditRole(role) && owners.some(o => !!o && o === userId)
 }
+
+/**
+ * Document actions in the list, by team role (mirrors the API: rename/move
+ * need write = editor+, delete needs document admin = team admin).
+ * Per-document ACL grants are not reflected here; the API still decides.
+ */
+export function docListActions(role?: TeamRole | null) {
+  return { rename: canEditRole(role), move: canEditRole(role), delete: isAdminRole(role) }
+}

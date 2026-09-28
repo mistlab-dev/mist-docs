@@ -57,7 +57,7 @@ func fireWebhooks(teamID, event, resourceType, resourceID, title, detail string)
 			Detail:    detail,
 		}
 		body, _ := json.Marshal(payload)
-		client := &http.Client{Timeout: 5 * time.Second}
+		client := webhook.Client(5 * time.Second) // refuses internal addresses
 
 		for _, t := range targets {
 			if !webhook.Subscribed(t.Events, event) {

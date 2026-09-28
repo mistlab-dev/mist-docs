@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
+	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/webhook"
 	"github.com/google/uuid"
 )
@@ -14,9 +15,9 @@ import (
 //
 // The scan is a plain indexed date range query, so running it hourly is cheap.
 // Correctness does not depend on the interval: the UNIQUE key on
-// md_reminder_log (rule_id, deadline_id) makes repeated runs idempotent, so a
-// deadline is never notified twice for the same rule no matter how often we
-// look at it.
+// md_reminder_log (rule_id, deadline_id, due_date) makes repeated runs
+// idempotent, so a deadline is never notified twice for the same rule and due
+// date no matter how often we look at it. A changed due date is reminded again.
 const ReminderScanInterval = 30 * time.Minute
 
 // StartReminderScheduler runs the due-date reminder scan until the process stops.
@@ -45,7 +46,7 @@ func StartReminderScheduler(interval time.Duration) {
 // offset, then notifies the target user once. Exported so it can be driven
 // directly from tests or a cron runner.
 func RunReminderScanOnce(now time.Time) {
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	today := model.DayOf(now) // the business zone's calendar day, not the server's
 
 	// Load all enabled rules across teams in one query.
 	ruleRows, err := database.DB.Query(
@@ -127,16 +128,17 @@ func RunReminderScanOnce(now time.Time) {
 
 // notifyOnce records and delivers a reminder, returning false if it was already sent.
 //
-// The guard is the INSERT itself: uk_once (rule_id, deadline_id) means a
-// duplicate attempt fails, so we skip delivery. Doing the claim *before* the
+// The guard is the INSERT itself: uk_once_due (rule_id, deadline_id,
+// due_date) means a duplicate attempt fails, so we skip delivery. A new due
+// date (confirmed change) is a new key, so it is reminded again. Doing the claim *before* the
 // send keeps concurrent or repeated scans from double-notifying.
 func notifyOnce(ruleID, ruleName, channel, teamID, deadlineID, targetUser, orderNo, title string, due time.Time, offsetDays int) bool {
 	logID := uuid.New().String()
 	res, err := database.DB.Exec(`
 		INSERT IGNORE INTO md_reminder_log
-			(id, rule_id, deadline_id, team_id, target_user_id, channel, result, detail, sent_at)
-		VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, NOW())`,
-		logID, ruleID, deadlineID, teamID, targetUser, channel, ruleName)
+			(id, rule_id, deadline_id, due_date, team_id, target_user_id, channel, result, detail, sent_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, NOW())`,
+		logID, ruleID, deadlineID, due.Format("2006-01-02"), teamID, targetUser, channel, ruleName)
 	if err != nil {
 		log.Printf("[reminder] 写提醒日志失败: %v", err)
 		return false

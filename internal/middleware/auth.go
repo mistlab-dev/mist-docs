@@ -124,7 +124,8 @@ func JWTAuth() gin.HandlerFunc {
 // Two transition checks only log for now (see UNIFIED-AUTH-DESIGN, D8/D9):
 //   - a legacy MistDocs token (user_id claim) is still accepted but logged,
 //     so we can see whether anyone still carries one before removing it;
-//   - a Portal token whose iss differs from jwt.issuer is accepted but logged.
+//   - a Portal token whose iss is neither jwt.issuer nor in
+//     jwt.accepted_issuers is accepted but logged.
 func ParseMistLabToken(tokenStr string) (string, error) {
 	uid, kind, iss, err := parseToken(tokenStr)
 	if err != nil {
@@ -134,8 +135,8 @@ func ParseMistLabToken(tokenStr string) (string, error) {
 	case tokenLegacy:
 		authLog.note("legacy:"+uid, "auth: legacy MistDocs token accepted for user %s (D8: logged only, not rejected)", uid)
 	case tokenPortal:
-		if want := config.C.JWT.Issuer; want != "" && iss != want {
-			authLog.note("iss:"+iss, "auth: token issuer %q does not match jwt.issuer %q (D9: logged only, not enforced)", iss, want)
+		if j := config.C.JWT; !j.IssuerAccepted(iss) {
+			authLog.note("iss:"+iss, "auth: token issuer %q does not match jwt.issuer %q / accepted_issuers %v (D9: logged only, not enforced)", iss, j.Issuer, j.AcceptedIssuers)
 		}
 	}
 	return uid, nil

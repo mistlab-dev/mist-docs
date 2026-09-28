@@ -3,9 +3,9 @@ package handler
 import (
 	"database/sql"
 	"net/http"
-	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
+	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/schedule"
 	"github.com/gin-gonic/gin"
 )
@@ -80,7 +80,7 @@ func TeamExplainDeadline(c *gin.Context) {
 		Start: d.StartDate, Due: d.DueDate, CreatedAt: d.CreatedAt,
 	}
 	ex := schedule.Explain(schedule.ExplainInput{
-		Today: time.Now(), Target: target, Orders: orders,
+		Today: model.TodayStart(), Target: target, Orders: orders,
 		Capacity: tc.Steps, KeyCustomers: tc.KeyCustomers, Events: events,
 	})
 	c.JSON(http.StatusOK, gin.H{"data": ex})

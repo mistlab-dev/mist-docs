@@ -223,8 +223,8 @@ func TeamListDocuments(c *gin.Context) {
 	var total int
 	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total)
 
-	query := `SELECT d.id, d.team_id, d.folder_id, d.title, d.type, d.file_size, d.version,
-		d.locked_by, d.locked_at, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at,
+	query := `SELECT d.id, d.team_id, IFNULL(d.folder_id, ''), d.title, d.type, d.file_size, d.version,
+		IFNULL(d.locked_by, ''), d.locked_at, d.status, IFNULL(d.created_by, ''), IFNULL(d.updated_by, ''), d.created_at, d.updated_at,
 		COALESCE(NULLIF(u1.display_name, ''), NULLIF(u1.username, ''), '') as creator_name,
 		COALESCE(NULLIF(u2.display_name, ''), NULLIF(u2.username, ''), '') as updater_name,
 		IFNULL(d.content_text, '')
@@ -412,8 +412,8 @@ func TeamSearchDocuments(c *gin.Context) {
 	var total int
 	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total)
 
-	query := `SELECT d.id, d.team_id, d.folder_id, d.title, d.type, d.file_size, d.version,
-		d.locked_by, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at,
+	query := `SELECT d.id, d.team_id, IFNULL(d.folder_id, ''), d.title, d.type, d.file_size, d.version,
+		IFNULL(d.locked_by, ''), d.status, IFNULL(d.created_by, ''), IFNULL(d.updated_by, ''), d.created_at, d.updated_at,
 		COALESCE(NULLIF(u1.display_name, ''), NULLIF(u1.username, ''), '') as creator_name
 		FROM md_documents d
 		LEFT JOIN users u1 ON d.created_by COLLATE utf8mb4_unicode_ci = u1.id ` + where +
@@ -469,7 +469,7 @@ func TeamRecentDocuments(c *gin.Context) {
 	}
 
 	rows, err := database.DB.Query(
-		`SELECT id, team_id, folder_id, title, type, version, updated_at, updated_by
+		`SELECT id, team_id, IFNULL(folder_id, ''), title, type, version, updated_at, IFNULL(updated_by, '')
 		 FROM md_documents WHERE team_id = ? AND status = 1
 		 ORDER BY updated_at DESC LIMIT ?`, teamID, limit)
 	if err != nil {
@@ -571,8 +571,8 @@ func TeamGetDocument(c *gin.Context) {
 	var version int
 	var fileSize int64
 	err := database.DB.QueryRow(
-		`SELECT id, team_id, folder_id, title, type, file_size, version,
-		 created_by, updated_by, created_at, updated_at
+		`SELECT id, team_id, IFNULL(folder_id, ''), title, type, file_size, version,
+		 IFNULL(created_by, ''), IFNULL(updated_by, ''), created_at, updated_at
 		 FROM md_documents WHERE id = ? AND team_id = ? AND status = 1`,
 		docID, teamID).Scan(&id, &teamID2, &folderID, &title, &docType, &fileSize, &version,
 		&createdBy, &updatedBy, &createdAt, &updatedAt)
@@ -687,7 +687,7 @@ func TeamGetDocumentContent(c *gin.Context) {
 	audit(c, "view", "document", docID, title, "")
 	lock := loadDocLock(docID)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
-		"content": string(content), "version": version,
+		"content": signMediaURLs(getTeamID(c), string(content)), "version": version,
 		"title": title, "type": docType, "updated_at": updatedAt,
 		"permission": docPermission(c, docID),
 		"locked_by":  lock.By, "locked_by_name": lock.ByName, "locked_at": lock.At,
@@ -1054,7 +1054,7 @@ func TeamGetVersionContent(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "版本不存在"})
 		return
 	}
-	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(signMediaURLs(getTeamID(c), string(content))))
 }
 
 func TeamRestoreVersion(c *gin.Context) {
@@ -1367,7 +1367,7 @@ func TeamExportDocument(c *gin.Context) {
 		return
 	}
 	content := readDocContent(docID)
-	if !serveDocumentExport(c, title, string(content), format) {
+	if !serveDocumentExport(c, title, signMediaURLs(getTeamID(c), string(content)), format) {
 		return
 	}
 	userName, _ := c.Get("username")
@@ -2036,8 +2036,8 @@ func TeamCreateWebhook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	if !validWebhookURL(req.URL) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook 地址必须是 http 或 https"})
+	if err := webhook.CheckURL(c.Request.Context(), req.URL); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	events, err := parseEventsInput(req.Events)
@@ -2089,8 +2089,8 @@ func TeamUpdateWebhook(c *gin.Context) {
 		sets, args = append(sets, "name=?"), append(args, strings.TrimSpace(*req.Name))
 	}
 	if req.URL != nil {
-		if !validWebhookURL(*req.URL) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook 地址必须是 http 或 https"})
+		if err := webhook.CheckURL(c.Request.Context(), *req.URL); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		sets, args = append(sets, "url=?"), append(args, *req.URL)
@@ -2319,7 +2319,7 @@ func TeamUploadFile(c *gin.Context) {
 		"filename": filename,
 		"original": header.Filename,
 		"size":     size,
-		"url":      "/api/teams/" + teamID + "/media/" + filename,
+		"url":      signedMediaURL(teamID, filename), // works in <img src> and share pages
 	}})
 }
 
@@ -2378,7 +2378,7 @@ func TeamListMedia(c *gin.Context) {
 			// name/url/type are what the editor's media library renders;
 			// the list used to return only filename, so it showed blanks.
 			"name":             name,
-			"url":              "/api/teams/" + teamID + "/media/" + e.Name(),
+			"url":              signedMediaURL(teamID, e.Name()),
 			"type":             mediaKind(e.Name()),
 			"filename":         e.Name(),
 			"original":         r.original,
@@ -2432,6 +2432,7 @@ func TeamGetMedia(c *gin.Context) {
 		return
 	}
 	path := filepath.Join(store.RootPath(), teamID, "media", filename)
+	setMediaHeaders(c)
 	c.File(path)
 }
 

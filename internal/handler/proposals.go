@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
+	"github.com/c-wind/mist-docs/internal/model"
 	"github.com/c-wind/mist-docs/internal/schedule"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -202,7 +203,7 @@ func TeamApplyProposal(c *gin.Context) {
 		markProposalStale(teamID, id)
 		c.JSON(http.StatusConflict, gin.H{"error": msg, "status": proposalStale})
 	}
-	if baseline.Day != time.Now().Format(dateLayout) {
+	if baseline.Day != model.TodayString() {
 		stale("预演是按前一天的数据算的，请重新预演")
 		return
 	}
@@ -370,22 +371,28 @@ func TeamRejectProposal(c *gin.Context) {
 // capacity changed since (same check as apply, so the history does not show
 // 待确认 for something that would be refused).
 func expirePendingProposals(teamID string) {
-	database.DB.Exec(`UPDATE md_proposals SET status='stale', decided_at=NOW()
-		WHERE team_id=? AND status='pending' AND created_at < CURDATE()`, teamID)
 	rows, err := database.DB.Query(`SELECT id, baseline FROM md_proposals WHERE team_id=? AND status='pending'`, teamID)
 	if err != nil {
 		return
 	}
 	type pend struct{ id, fp string }
 	var list []pend
+	var stale []string
 	for rows.Next() {
 		var id, text string
 		var b proposalBaseline
 		if rows.Scan(&id, &text) == nil && json.Unmarshal([]byte(text), &b) == nil {
+			if b.Day != model.TodayString() {
+				stale = append(stale, id) // computed on an earlier day
+				continue
+			}
 			list = append(list, pend{id, b.Fingerprint})
 		}
 	}
 	rows.Close()
+	for _, id := range stale {
+		markProposalStale(teamID, id)
+	}
 	if len(list) == 0 {
 		return
 	}

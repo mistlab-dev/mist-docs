@@ -84,11 +84,11 @@
       <el-table :data="typeRows" size="small"
         :header-cell-style="{ background: 'var(--md-surface-2)', color: 'var(--md-text-secondary)', fontWeight: 500, fontSize: '13px' }"
       >
-        <el-table-column prop="type" label="Type" min-width="180" />
+        <el-table-column prop="type" :label="t('admin.storage.colType')" min-width="180" />
         <el-table-column prop="human" :label="t('admin.storage.usage')" width="160" align="center">
           <template #default="{ row }"><span class="size-text">{{ row.human }}</span></template>
         </el-table-column>
-        <el-table-column prop="bytes" label="Bytes" width="140" align="center">
+        <el-table-column prop="bytes" :label="t('admin.storage.colBytes')" width="140" align="center">
           <template #default="{ row }"><code class="mono-id">{{ row.bytes }}</code></template>
         </el-table-column>
       </el-table>

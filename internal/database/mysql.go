@@ -249,7 +249,8 @@ func migrateDeadlines() error {
 
 	// 3. md_reminder_log — the idempotency guard.
 	// The scheduler runs repeatedly; the UNIQUE key is what prevents the same
-	// rule+deadline from notifying more than once. Without it users get
+	// rule+deadline+due date from notifying more than once (a confirmed date
+	// change is a new due date, so it is reminded again). Without it users get
 	// bombarded and switch notifications off, which kills the feature.
 	DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_reminder_log'`).Scan(&tblExists)
 	if tblExists == 0 {
@@ -257,18 +258,23 @@ func migrateDeadlines() error {
 			id VARCHAR(36) PRIMARY KEY,
 			rule_id VARCHAR(36) NOT NULL,
 			deadline_id VARCHAR(36) NOT NULL,
+			due_date DATE NULL,
 			team_id VARCHAR(64) NOT NULL,
 			target_user_id VARCHAR(64) DEFAULT '',
 			channel VARCHAR(32) NOT NULL DEFAULT 'inapp',
 			result VARCHAR(16) NOT NULL DEFAULT 'ok',
 			detail VARCHAR(255) DEFAULT '',
 			sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE KEY uk_once (rule_id, deadline_id),
+			UNIQUE KEY uk_once_due (rule_id, deadline_id, due_date),
 			INDEX idx_deadline (deadline_id),
 			INDEX idx_team_time (team_id, sent_at)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
 			return fmt.Errorf("create md_reminder_log: %w", err)
 		}
+	}
+
+	if err := migrateReminderLogDueDate(); err != nil {
+		return err
 	}
 
 	// 4. md_deadline_events — change history.
@@ -343,4 +349,37 @@ func Close() {
 	if DB != nil {
 		DB.Close()
 	}
+}
+
+// migrateReminderLogDueDate moves the reminder guard from (rule, deadline)
+// to (rule, deadline, due_date), so a deadline whose due date was changed is
+// reminded again for the new date. Idempotent.
+func migrateReminderLogDueDate() error {
+	if !tableExists("md_reminder_log") {
+		return nil
+	}
+	ensureColumn("md_reminder_log", "due_date", "due_date DATE NULL AFTER deadline_id")
+	hasIndex := func(name string) bool {
+		var n int
+		DB.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_reminder_log' AND INDEX_NAME=?`, name).Scan(&n)
+		return n > 0
+	}
+	if !hasIndex("uk_once") {
+		return nil // new table, or already migrated
+	}
+	// Old rows: the due date they were sent for is the scan day + offset.
+	DB.Exec(`UPDATE md_reminder_log l JOIN md_reminder_rules r ON r.id = l.rule_id
+		SET l.due_date = DATE_ADD(DATE(l.sent_at), INTERVAL r.offset_days DAY)
+		WHERE l.due_date IS NULL AND l.sent_at IS NOT NULL`)
+	DB.Exec(`UPDATE md_reminder_log l JOIN md_deadlines d ON d.id = l.deadline_id
+		SET l.due_date = d.due_date WHERE l.due_date IS NULL`)
+	if !hasIndex("uk_once_due") {
+		if _, err := DB.Exec(`ALTER TABLE md_reminder_log ADD UNIQUE KEY uk_once_due (rule_id, deadline_id, due_date)`); err != nil {
+			return fmt.Errorf("md_reminder_log add uk_once_due: %w", err)
+		}
+	}
+	if _, err := DB.Exec(`ALTER TABLE md_reminder_log DROP INDEX uk_once`); err != nil {
+		return fmt.Errorf("md_reminder_log drop uk_once: %w", err)
+	}
+	return nil
 }

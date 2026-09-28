@@ -15,8 +15,9 @@ func RegisterAPI(r gin.IRouter) {
 	{
 		// 公开
 		api.POST("/auth/login", handler.Login)
-		api.GET("/files/:filename", handler.GetFile)
 		api.GET("/openapi.json", handler.APIDocs)
+		// 文档内图片：带签名的公开地址（<img> 与分享页无法带登录头）
+		api.GET("/media/:team_id/:filename", handler.PublicGetMedia)
 
 		// 公开分享链接
 		api.GET("/s/:token", handler.AccessShare)
@@ -29,6 +30,8 @@ func RegisterAPI(r gin.IRouter) {
 			auth.POST("/auth/logout", handler.Logout)
 			auth.GET("/auth/me", handler.Me)
 			auth.PUT("/auth/password", handler.ChangePassword)
+			// 旧版上传目录，需登录（原先公开）
+			auth.GET("/files/:filename", handler.GetFile)
 
 			// 团队级 API
 			teams := auth.Group("/teams/:team_id")

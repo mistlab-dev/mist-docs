@@ -60,7 +60,7 @@
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.247l4.959 2.479A3 3 0 1015 12a3 3 0 00-2.965 2.574l-4.96-2.48a3.013 3.013 0 000-2.188l4.96-2.48A3 3 0 1015 8z"/></svg>
                 {{ t("docEditor.share") }}
               </el-dropdown-item>
-              <el-dropdown-item command="move">
+              <el-dropdown-item v-if="hasWritePerm" command="move">
                 <svg class="menu-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
                 {{ t("docEditor.moveMenu") }}
               </el-dropdown-item>

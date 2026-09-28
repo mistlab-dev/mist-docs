@@ -35,7 +35,7 @@ func CheckTeamPermission(ctx context.Context, userID, teamID, teamRole, resource
 	if resourceType == "document" {
 		var folderID string
 		database.DB.QueryRowContext(ctx,
-			`SELECT folder_id FROM md_documents WHERE id=?`, resourceID,
+			`SELECT IFNULL(folder_id, '') FROM md_documents WHERE id=?`, resourceID,
 		).Scan(&folderID)
 		if folderID != "" {
 			if inherited := checkFolderPermissionRecursive(ctx, userID, folderID); inherited != "" {

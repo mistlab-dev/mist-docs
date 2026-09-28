@@ -62,7 +62,7 @@ func AccessShare(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"title":   docTitle,
 		"type":    docType,
-		"content": string(content),
+		"content": signMediaURLs(teamID, string(content)),
 	})
 }
 
