@@ -223,8 +223,8 @@ func TeamListDocuments(c *gin.Context) {
 	var total int
 	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total)
 
-	query := `SELECT d.id, d.team_id, d.folder_id, d.title, d.type, d.file_size, d.version,
-		d.locked_by, d.locked_at, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at,
+	query := `SELECT d.id, d.team_id, IFNULL(d.folder_id, ''), d.title, d.type, d.file_size, d.version,
+		IFNULL(d.locked_by, ''), d.locked_at, d.status, IFNULL(d.created_by, ''), IFNULL(d.updated_by, ''), d.created_at, d.updated_at,
 		COALESCE(NULLIF(u1.display_name, ''), NULLIF(u1.username, ''), '') as creator_name,
 		COALESCE(NULLIF(u2.display_name, ''), NULLIF(u2.username, ''), '') as updater_name,
 		IFNULL(d.content_text, '')
@@ -412,8 +412,8 @@ func TeamSearchDocuments(c *gin.Context) {
 	var total int
 	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total)
 
-	query := `SELECT d.id, d.team_id, d.folder_id, d.title, d.type, d.file_size, d.version,
-		d.locked_by, d.status, d.created_by, d.updated_by, d.created_at, d.updated_at,
+	query := `SELECT d.id, d.team_id, IFNULL(d.folder_id, ''), d.title, d.type, d.file_size, d.version,
+		IFNULL(d.locked_by, ''), d.status, IFNULL(d.created_by, ''), IFNULL(d.updated_by, ''), d.created_at, d.updated_at,
 		COALESCE(NULLIF(u1.display_name, ''), NULLIF(u1.username, ''), '') as creator_name
 		FROM md_documents d
 		LEFT JOIN users u1 ON d.created_by COLLATE utf8mb4_unicode_ci = u1.id ` + where +
@@ -469,7 +469,7 @@ func TeamRecentDocuments(c *gin.Context) {
 	}
 
 	rows, err := database.DB.Query(
-		`SELECT id, team_id, folder_id, title, type, version, updated_at, updated_by
+		`SELECT id, team_id, IFNULL(folder_id, ''), title, type, version, updated_at, IFNULL(updated_by, '')
 		 FROM md_documents WHERE team_id = ? AND status = 1
 		 ORDER BY updated_at DESC LIMIT ?`, teamID, limit)
 	if err != nil {
@@ -571,8 +571,8 @@ func TeamGetDocument(c *gin.Context) {
 	var version int
 	var fileSize int64
 	err := database.DB.QueryRow(
-		`SELECT id, team_id, folder_id, title, type, file_size, version,
-		 created_by, updated_by, created_at, updated_at
+		`SELECT id, team_id, IFNULL(folder_id, ''), title, type, file_size, version,
+		 IFNULL(created_by, ''), IFNULL(updated_by, ''), created_at, updated_at
 		 FROM md_documents WHERE id = ? AND team_id = ? AND status = 1`,
 		docID, teamID).Scan(&id, &teamID2, &folderID, &title, &docType, &fileSize, &version,
 		&createdBy, &updatedBy, &createdAt, &updatedAt)
