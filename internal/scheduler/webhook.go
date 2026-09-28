@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/c-wind/mist-docs/internal/webhook"
 )
 
 // postWebhook delivers one JSON payload to a webhook URL.
@@ -32,7 +34,7 @@ func postWebhook(url, secret, teamID string, payload map[string]any) error {
 		req.Header.Set("X-Team-Id", teamID)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := webhook.Client(5 * time.Second) // refuses internal addresses
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

@@ -2036,8 +2036,8 @@ func TeamCreateWebhook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	if !validWebhookURL(req.URL) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook 地址必须是 http 或 https"})
+	if err := webhook.CheckURL(c.Request.Context(), req.URL); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	events, err := parseEventsInput(req.Events)
@@ -2089,8 +2089,8 @@ func TeamUpdateWebhook(c *gin.Context) {
 		sets, args = append(sets, "name=?"), append(args, strings.TrimSpace(*req.Name))
 	}
 	if req.URL != nil {
-		if !validWebhookURL(*req.URL) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook 地址必须是 http 或 https"})
+		if err := webhook.CheckURL(c.Request.Context(), *req.URL); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		sets, args = append(sets, "url=?"), append(args, *req.URL)

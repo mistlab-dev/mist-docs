@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -21,14 +20,6 @@ func safeBaseName(name string) (string, bool) {
 		return "", false
 	}
 	return base, true
-}
-
-func validWebhookURL(raw string) bool {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" || u.User != nil {
-		return false
-	}
-	return u.Scheme == "http" || u.Scheme == "https"
 }
 
 func denyNotFound(c *gin.Context, msg string) {

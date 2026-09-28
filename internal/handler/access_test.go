@@ -14,20 +14,6 @@ func TestSafeBaseName(t *testing.T) {
 	}
 }
 
-func TestValidWebhookURL(t *testing.T) {
-	if !validWebhookURL("https://example.com/hook") {
-		t.Error("https should pass")
-	}
-	if !validWebhookURL("http://hooks.internal:8080/docs") {
-		t.Error("http with port should pass")
-	}
-	for _, bad := range []string{"", "javascript:alert(1)", "file:///etc/passwd", "https://user:pass@example.com/hook", "notaurl", "ftp://example.com/x"} {
-		if validWebhookURL(bad) {
-			t.Errorf("should reject %q", bad)
-		}
-	}
-}
-
 func TestResolveCollabPermission(t *testing.T) {
 	if p, ok := resolveCollabPermission("", "viewer"); !ok || p != "read" {
 		t.Fatalf("role viewer: %q %v", p, ok)

@@ -20,6 +20,7 @@ import (
 	"github.com/c-wind/mist-docs/internal/middleware"
 	approuter "github.com/c-wind/mist-docs/internal/router"
 	"github.com/c-wind/mist-docs/internal/store"
+	"github.com/c-wind/mist-docs/internal/webhook"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
@@ -49,6 +50,8 @@ var (
 
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
+	// Test receivers listen on 127.0.0.1; production blocks internal targets.
+	webhook.AllowPrivateTargets = true
 
 	env := func(key, def string) string {
 		if v := os.Getenv(key); v != "" {
