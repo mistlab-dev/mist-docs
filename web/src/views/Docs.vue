@@ -46,9 +46,9 @@
           <div class="batch-dot" />
           <span v-html="t('docs.selectedCount', [selectedDocs.length])"></span>
         </div>
-        <el-button size="small" @click="showBatchMove = true">{{ t('docs.batchMove') }}</el-button>
+        <el-button v-if="docActs.move" size="small" data-test="batch-move" @click="showBatchMove = true">{{ t('docs.batchMove') }}</el-button>
         <el-button size="small" @click="batchExport">{{ t('docs.batchExport') }}</el-button>
-        <el-button size="small" type="danger" @click="batchDelete">{{ t('common.delete') }}</el-button>
+        <el-button v-if="docActs.delete" size="small" type="danger" data-test="batch-delete" @click="batchDelete">{{ t('common.delete') }}</el-button>
         <el-button size="small" link @click="selectedDocs = []">{{ t('common.cancel') }}</el-button>
       </div>
     </transition>
@@ -194,9 +194,9 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="openDoc(doc)">{{ t('docs.open') }}</el-dropdown-item>
-                    <el-dropdown-item @click="showRename(doc)">{{ t('docs.contextRename') }}</el-dropdown-item>
-                    <el-dropdown-item @click="showMove(doc)">{{ t('docs.moveTo') }}</el-dropdown-item>
-                    <el-dropdown-item @click="deleteDoc(doc)" divided>
+                    <el-dropdown-item v-if="docActs.rename" data-test="doc-rename" @click="showRename(doc)">{{ t('docs.contextRename') }}</el-dropdown-item>
+                    <el-dropdown-item v-if="docActs.move" data-test="doc-move" @click="showMove(doc)">{{ t('docs.moveTo') }}</el-dropdown-item>
+                    <el-dropdown-item v-if="docActs.delete" data-test="doc-delete" @click="deleteDoc(doc)" divided>
                       <span style="color:#f56c6c">{{ t('common.delete') }}</span>
                     </el-dropdown-item>
                   </el-dropdown-menu>
@@ -258,9 +258,10 @@
                     <el-icon :size="16" style="cursor:pointer"><MoreFilled /></el-icon>
                     <template #dropdown>
                       <el-dropdown-menu>
-                        <el-dropdown-item @click="showRename(row)">{{ t('docs.contextRename') }}</el-dropdown-item>
-                        <el-dropdown-item @click="showMove(row)">{{ t('docs.batchMove') }}</el-dropdown-item>
-                        <el-dropdown-item @click="deleteDoc(row)" divided><span style="color:#f56c6c">{{ t('common.delete') }}</span></el-dropdown-item>
+                        <el-dropdown-item @click="openDoc(row)">{{ t('docs.open') }}</el-dropdown-item>
+                        <el-dropdown-item v-if="docActs.rename" data-test="doc-rename" @click="showRename(row)">{{ t('docs.contextRename') }}</el-dropdown-item>
+                        <el-dropdown-item v-if="docActs.move" data-test="doc-move" @click="showMove(row)">{{ t('docs.batchMove') }}</el-dropdown-item>
+                        <el-dropdown-item v-if="docActs.delete" data-test="doc-delete" @click="deleteDoc(row)" divided><span style="color:#f56c6c">{{ t('common.delete') }}</span></el-dropdown-item>
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
@@ -398,6 +399,7 @@ import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
 import GuardedButton from '@/components/GuardedButton.vue'
 import { useAuthStore } from '@/stores/auth'
+import { docListActions } from '@/utils/roles'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -448,6 +450,8 @@ const renameFolderId = ref('')
 const auth = useAuthStore()
 const canEdit = computed(() => auth.canEditTeam)
 const isAdmin = computed(() => auth.isTeamAdmin)
+// Viewers must not see actions the API refuses (rename/move: editor+, delete: admin).
+const docActs = computed(() => docListActions(auth.currentTeamRole))
 const folderCtxMenu = reactive({ show: false, x: 0, y: 0, nodeId: '', nodeName: '' })
 const newDocTitle = ref('')
 const newDocTemplate = ref('')

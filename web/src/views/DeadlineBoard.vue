@@ -653,9 +653,9 @@ function statusTagType(s: string) {
 }
 
 function offsetText(n: number) {
-  if (n > 0) return `${n} 天前提醒`
-  if (n === 0) return '当天提醒'
-  return `逾期 ${-n} 天提醒`
+  if (n > 0) return t('deadlines.offsetBefore', { n })
+  if (n === 0) return t('deadlines.offsetSameDay')
+  return t('deadlines.offsetAfter', { n: -n })
 }
 
 function eventText(tp: string) {
