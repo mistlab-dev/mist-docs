@@ -120,3 +120,48 @@ func TestReminderWebhookRespectsSubscription(t *testing.T) {
 		t.Fatalf("document-events hook received %d reminder(s)", got)
 	}
 }
+
+// An existing md_reminder_log with the old (rule_id, deadline_id) key is
+// moved to (rule_id, deadline_id, due_date) on startup, and old rows get the
+// due date they were sent for (sent day + rule offset).
+func TestReminderLogMigratesToDueDateKey(t *testing.T) {
+	db := database.DB
+	cleanup := func() {
+		db.Exec(`DELETE FROM md_reminder_log WHERE rule_id='test-mig-rule'`)
+		db.Exec(`DELETE FROM md_reminder_rules WHERE id='test-mig-rule'`)
+	}
+	cleanup()
+	defer cleanup()
+	mustExec(t, `INSERT INTO md_reminder_rules (id, team_id, name, offset_days, channel, target, enabled, created_by)
+		VALUES ('test-mig-rule', ?, '提前3天', 3, 'inapp', 'owner', 0, ?)`, teamID, adminID)
+	// Back to the old schema.
+	mustExec(t, `ALTER TABLE md_reminder_log DROP INDEX uk_once_due, ADD UNIQUE KEY uk_once (rule_id, deadline_id)`)
+	mustExec(t, `INSERT INTO md_reminder_log (id, rule_id, deadline_id, due_date, team_id, channel, result, sent_at)
+		VALUES ('test-mig-log', 'test-mig-rule', 'test-mig-dl', NULL, ?, 'inapp', 'ok', '2026-09-10 08:00:00')`, teamID)
+
+	if err := database.Migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	var due string
+	db.QueryRow(`SELECT DATE_FORMAT(due_date,'%Y-%m-%d') FROM md_reminder_log WHERE id='test-mig-log'`).Scan(&due)
+	if due != "2026-09-13" {
+		t.Fatalf("backfilled due_date = %q, want 2026-09-13", due)
+	}
+	var oldKey, newKey int
+	db.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_reminder_log' AND INDEX_NAME='uk_once'`).Scan(&oldKey)
+	db.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='md_reminder_log' AND INDEX_NAME='uk_once_due'`).Scan(&newKey)
+	if oldKey != 0 || newKey != 3 {
+		t.Fatalf("indexes after migrate: uk_once=%d uk_once_due columns=%d", oldKey, newKey)
+	}
+	// Same rule+order, other due date: allowed. Same due date: refused.
+	if _, err := db.Exec(`INSERT INTO md_reminder_log (id, rule_id, deadline_id, due_date, team_id) VALUES ('test-mig-2','test-mig-rule','test-mig-dl','2026-09-20',?)`, teamID); err != nil {
+		t.Fatalf("new due date refused: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO md_reminder_log (id, rule_id, deadline_id, due_date, team_id) VALUES ('test-mig-3','test-mig-rule','test-mig-dl','2026-09-20',?)`, teamID); err == nil {
+		t.Fatal("duplicate due date accepted")
+	}
+	// Running it again is a no-op.
+	if err := database.Migrate(); err != nil {
+		t.Fatalf("second migrate: %v", err)
+	}
+}
