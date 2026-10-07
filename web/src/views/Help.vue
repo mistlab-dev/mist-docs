@@ -17,9 +17,9 @@
             <div v-for="item in section.items" :key="item.q" class="help-card" @click="toggleItem(item)">
               <div class="help-card-header">
                 <span class="help-q">{{ item.q }}</span>
-                <el-icon :class="{ rotated: item.open }"><ArrowDown /></el-icon>
+                <el-icon :class="{ rotated: openMap[item.q] }"><ArrowDown /></el-icon>
               </div>
-              <div v-if="item.open" class="help-card-body" v-html="item.a"></div>
+              <div v-if="openMap[item.q]" class="help-card-body" v-html="item.a"></div>
             </div>
           </div>
         </div>
@@ -46,7 +46,6 @@ const { t, tm } = useI18n()
 interface HelpItem {
   q: string
   a: string
-  open?: boolean
 }
 
 interface HelpSection {
@@ -56,6 +55,9 @@ interface HelpSection {
 }
 
 const keyword = ref('')
+// Keep open state outside the computed list — mutating item.open on
+// objects rebuilt by computed/t() never stuck, so cards could not expand.
+const openMap = ref<Record<string, boolean>>({})
 
 const sections = computed<HelpSection[]>(() => {
   const helpSections = tm('help.sections') as Record<string, any>
@@ -99,7 +101,7 @@ const sections = computed<HelpSection[]>(() => {
 })
 
 function toggleItem(item: HelpItem) {
-  item.open = !item.open
+  openMap.value[item.q] = !openMap.value[item.q]
 }
 
 const filteredSections = computed(() => {
