@@ -68,6 +68,7 @@ const sections = computed<HelpSection[]>(() => {
     security: '<svg viewBox="0 0 20 20" fill=\'currentColor\' width=\'20\' height=\'20\'><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm2 6H8V6a2 2 0 114 0v2z"/></svg>',
     adminSection: '<svg viewBox="0 0 20 20" fill=\'currentColor\' width=\'20\' height=\'20\'><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 11H9v-2h2v2zm0-4H9V5h2v4z"/></svg>',
     mobile: '<svg viewBox="0 0 20 20" fill=\'currentColor\' width=\'20\' height=\'20\'><path d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm2 0v8h10V5H5zm1 12h8v2H6v-2z"/></svg>',
+    portal: '<svg viewBox="0 0 20 20" fill=\'currentColor\' width=\'20\' height=\'20\'><path d="M3 3h6v6H3V3zm8 0h6v6h-6V3zM3 11h6v6H3v-6zm8 0h6v6h-6v-6z"/></svg>',
   }
 
   const result: HelpSection[] = []

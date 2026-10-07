@@ -472,7 +472,7 @@ export default {
   },
   help: {
     title: 'Help Center',
-    subtitle: 'MistDocs User Guide',
+    subtitle: 'MistDocs and the mistlab.dev console',
     searchPlaceholder: 'Search help...',
     noResults: 'No results found',
     footer: 'Still have questions? Contact your administrator',
@@ -521,9 +521,70 @@ export default {
         items: {
           userMgmt: { q: 'How to manage users and teams?', a: '<p>Accounts, passwords, and team membership are managed in the MistLab Portal (mistlab.dev). MistDocs has no user or department admin page.</p>' },
           deptMgmt: { q: 'Where are team and member limits applied?', a: '<p>Team count and member count are Portal limits. MistDocs does not check them. When billing is on and Portal does not return a plan, this service falls back to 10 documents and checks media uploads against 500 MB. Document saves are not blocked by that storage cap. When billing is off, MistDocs does not apply these caps.</p>' },
-          auditLog: { q: 'How to view audit logs?', a: '<p>Team admins can open Audit Log to see document actions such as create, edit, delete, and share. This is not a command audit, and it is not a default block on edits.</p>' },
+          auditLog: { q: 'How to view audit logs?', a: '<p>Team admins can open Audit Log on this site to see document actions such as create, edit, delete, and share. This is not a command audit, and it is not a default block on edits.<br>Command records and approvals on servers are under Command records and Approvals in the mistlab.dev console.</p>' },
           storageMonitor: { q: 'How to monitor storage?', a: '<p>Open Storage to see documents, versions, media, and trash for the current team. A storage cap, when billing applies one, is enforced on media upload. It is not enforced when you save document text.</p>' },
           backup: { q: 'How to backup and restore?', a: '<p>MistDocs does not run automatic backups. Back up MySQL yourself (for example mysqldump) and copy the file storage directory. Restore means loading that dump and putting the files back.</p>' },
+        },
+      },
+      portal: {
+        title: 'Console basics (mistlab.dev)',
+        items: {
+          openConsole: {
+            q: 'How is the console different from MistDocs?',
+            a: '<p>The <b>console</b> is at <a href="https://mistlab.dev/dashboard" target="_blank" rel="noopener">mistlab.dev/dashboard</a>: teams, hosts, saved commands, collaboration sessions, monitor, and command records.<br><b>MistDocs</b> (this site) is for team documents and sheets. Both use the same MistLab account.</p>',
+          },
+          collabNew: {
+            q: 'How do I start a collaboration session?',
+            a: '<p>1. Open the console → Collaboration.<br>2. Pick a team, then click New session.<br>3. In the dialog, choose one of that team\'s registered hosts. Title is optional; if you leave it blank it becomes "Collab · &lt;host name&gt;".<br>4. Click Create. There is no audience-limit field; the system default is used.<br>If the team has no hosts, you\'ll be asked to add one under Server Groups first. You need editor access on the team to start a session.</p>',
+          },
+          collabEnd: {
+            q: 'How do I end a collaboration session?',
+            a: '<p>In the Collaboration list, click End on an active session and confirm. Ended sessions may still appear in the list (marked ended). There is no separate delete action today; that is expected.</p>',
+          },
+          monitor: {
+            q: 'What does the Monitor page show?',
+            a: '<p>Console → Monitor shows each server group and how many hosts it has. Status is currently <b>Unknown</b> — online detection is not wired yet, so the page does not claim Online or Offline. Recent activity below lists the team\'s latest command records, or says there is no recent activity.</p>',
+          },
+          snippets: {
+            q: 'How do I manage saved commands?',
+            a: '<p>Console → Snippets (saved commands): pick a team, then search, filter, create, edit, or delete. These commands go into the team library and are also available in MistTerm. Only change items that belong to your team.</p>',
+          },
+          serverGroups: {
+            q: 'How do I group servers?',
+            a: '<p>Console → Server Groups: pick a team to see group tags and hosts. Tag hosts (for example staging, web); Monitor and batch actions use those groups.</p>',
+          },
+          globalSearch: {
+            q: 'What does the top search find?',
+            a: '<p>The search box at the top of the console searches the current team\'s saved commands, hosts, and command records. Clicking a result opens the matching tab.</p>',
+          },
+          approvals: {
+            q: 'How do command approvals work?',
+            a: '<p>Console → Approvals: when the team turns on the related rules, risky commands show up here for approve or reject. By default nothing is approved or blocked; that only happens after the team enables the rules.</p>',
+          },
+          auditExport: {
+            q: 'How do I view and export command records?',
+            a: '<p>Console → Command records: pick a team, filter, then export CSV. The admin panel (/admin) Audit tab is a separate event log; its export also downloads with your signed-in credentials.</p>',
+          },
+          apiKeys: {
+            q: 'How do I create an API key?',
+            a: '<p>Console → API keys (or the matching admin page): pick a team, create a key, set name and permissions. The full key is shown only once at creation — save it immediately. Delete keys you no longer need.</p>',
+          },
+          webhooks: {
+            q: 'How do I set up a webhook?',
+            a: '<p>Console → Webhooks: pick a team, create one, and enter a real reachable https URL. Fake or private addresses are rejected. MistDocs has its own webhooks (document and comment events) under this site\'s admin; that is separate from the Portal console.</p>',
+          },
+          notifications: {
+            q: 'What is the bell in the top right?',
+            a: '<p>After you sign in, the bell shows notifications and unread counts. It refreshes in the background and stops when you sign out.</p>',
+          },
+          language: {
+            q: 'How do I switch language?',
+            a: '<p>Use the language control in the top right (中文 / EN). The console, admin panel, and this Help Center follow it. Your choice is remembered after refresh.</p>',
+          },
+          loginError: {
+            q: 'What happens if I enter the wrong password?',
+            a: '<p>You stay on the login page and see "Wrong email/username or password" (Chinese: 邮箱/用户名或密码不对). It is not treated as an expired session, so the page does not reload. There is no forgot-password link yet; ask an administrator if you need a password reset.</p>',
+          },
         },
       },
       mobile: {
