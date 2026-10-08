@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +18,9 @@ import (
 // MistLabClaims matches the Portal (mist-team-server) JWT format
 type MistLabClaims struct {
 	UserID string `json:"uid"`
+	// SessionID is set on tokens from a browser sign-in (mistlab.dev or
+	// docs.mistlab.dev). Signing out on either site revokes it.
+	SessionID string `json:"sid,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -41,6 +46,11 @@ func JWTAuth() gin.HandlerFunc {
 		}
 
 		userID, err := ParseMistLabToken(tokenStr)
+		if errors.Is(err, errSignedOut) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "已退出登录", "code": "signed_out"})
+			c.Abort()
+			return
+		}
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "token 无效"})
 			c.Abort()
@@ -127,9 +137,12 @@ func JWTAuth() gin.HandlerFunc {
 //   - a Portal token whose iss is neither jwt.issuer nor in
 //     jwt.accepted_issuers is accepted but logged.
 func ParseMistLabToken(tokenStr string) (string, error) {
-	uid, kind, iss, err := parseToken(tokenStr)
+	uid, kind, iss, sid, err := parseToken(tokenStr)
 	if err != nil {
 		return "", err
+	}
+	if sid != "" && sessionRevoked(sid) {
+		return "", errSignedOut
 	}
 	switch kind {
 	case tokenLegacy:
@@ -150,7 +163,7 @@ const (
 )
 
 // parseToken does the signature/expiry check and reports which format matched.
-func parseToken(tokenStr string) (uid string, kind tokenKind, issuer string, err error) {
+func parseToken(tokenStr string) (uid string, kind tokenKind, issuer, sid string, err error) {
 	secret := []byte(config.C.JWT.Secret)
 	keyFunc := func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -162,18 +175,39 @@ func parseToken(tokenStr string) (uid string, kind tokenKind, issuer string, err
 	// MistLab (Portal) token: { uid: "u_xxx" }
 	if token, err := jwt.ParseWithClaims(tokenStr, &MistLabClaims{}, keyFunc); err == nil {
 		if claims, ok := token.Claims.(*MistLabClaims); ok && token.Valid && claims.UserID != "" {
-			return claims.UserID, tokenPortal, claims.Issuer, nil
+			return claims.UserID, tokenPortal, claims.Issuer, claims.SessionID, nil
 		}
 	}
 
 	// Legacy MistDocs token: { user_id: "xxx", ... }
 	if token, err := jwt.ParseWithClaims(tokenStr, &LegacyClaims{}, keyFunc); err == nil {
 		if claims, ok := token.Claims.(*LegacyClaims); ok && token.Valid && claims.UserID != "" {
-			return claims.UserID, tokenLegacy, claims.Issuer, nil
+			return claims.UserID, tokenLegacy, claims.Issuer, "", nil
 		}
 	}
 
-	return "", 0, "", fmt.Errorf("invalid token")
+	return "", 0, "", "", fmt.Errorf("invalid token")
+}
+
+var errSignedOut = errors.New("signed out")
+
+// sessionRevoked reports whether a browser sign-in (auth_sessions, kept by
+// mist-team-server in the shared database) has been signed out. A missing
+// row counts as signed out; a database error does not lock anyone out.
+func sessionRevoked(sid string) bool {
+	if database.DB == nil {
+		return false
+	}
+	var revoked sql.NullTime
+	err := database.DB.QueryRow(`SELECT revoked_at FROM auth_sessions WHERE id = ?`, sid).Scan(&revoked)
+	if errors.Is(err, sql.ErrNoRows) {
+		return true
+	}
+	if err != nil {
+		authLog.note("sess-err", "auth: session check failed (allowed): %v", err)
+		return false
+	}
+	return revoked.Valid
 }
 
 // throttledLog prints a message at most once per key per interval, so a

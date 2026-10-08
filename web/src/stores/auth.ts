@@ -19,6 +19,9 @@ interface User {
 }
 
 const TEAM_KEY = 'mist-docs-team'
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://api.mistlab.dev/v1').replace(/\/+$/, '')
+
+export type SessionState = 'in' | 'out' | 'unknown'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('mist-docs-token') || '')
@@ -81,6 +84,58 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function setTokens(access: string, refresh?: string) {
+    token.value = access
+    localStorage.setItem('mist-docs-token', access)
+    if (refresh) {
+      refreshToken.value = refresh
+      localStorage.setItem('mist-docs-refresh-token', refresh)
+    }
+  }
+
+  // mistlab.dev and docs.mistlab.dev share one sign-in, kept by the API in an
+  // HttpOnly cookie. 'in': fresh tokens adopted; 'out': signed out on some
+  // site, local state cleared; 'unknown': offline or an older API.
+  async function syncSession(): Promise<SessionState> {
+    const before = token.value
+    try {
+      const resp = await fetch(`${API_BASE}/auth/session`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (resp.ok) {
+        const data = await resp.json().catch(() => ({}))
+        if (!data.access_token) return 'unknown'
+        if (data.user?.id && user.value && user.value.id !== data.user.id) {
+          // signed in as someone else meanwhile: start clean
+          logout()
+        }
+        setTokens(data.access_token, data.refresh_token)
+        return 'in'
+      }
+      if (resp.status === 401) {
+        if (token.value === before) logout()
+        return token.value ? 'in' : 'out'
+      }
+    } catch { /* offline: keep what we have */ }
+    return 'unknown'
+  }
+
+  // Sign out here and on mistlab.dev.
+  async function signOut() {
+    const tok = token.value
+    logout()
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+        keepalive: true,
+        headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+      })
+    } catch { /* the local sign-out already happened */ }
+  }
+
   function logout() {
     token.value = ''
     refreshToken.value = ''
@@ -111,6 +166,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     token, refreshToken, user, currentTeamId, currentTeamRole,
     isLoggedIn, isAdmin, isTeamAdmin, canEditTeam,
-    redirectToPortalLogin, handleSSOCallback, logout, fetchMe, setTeam
+    redirectToPortalLogin, handleSSOCallback, logout, fetchMe, setTeam,
+    syncSession, signOut
   }
 })

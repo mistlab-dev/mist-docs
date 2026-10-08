@@ -326,9 +326,9 @@ function formatTime(ts: string): string {
   return formatRelative(ts, t, { locale: locale.value })
 }
 
-function handleCommand(cmd: string) {
+async function handleCommand(cmd: string) {
   if (cmd === 'logout') {
-    auth.logout()
+    await auth.signOut()
     auth.redirectToPortalLogin()
   } else if (cmd === 'account') {
     window.open(portalUrl, '_blank', 'noopener')
@@ -348,6 +348,14 @@ onMounted(() => {
   }
   loadNotifications()
   setInterval(loadNotifications, 60000)
+
+  // Signed out on mistlab.dev meanwhile? Notice when this tab comes back.
+  let lastSync = Date.now()
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible' || Date.now() - lastSync < 5000) return
+    lastSync = Date.now()
+    if (await auth.syncSession() === 'out') auth.redirectToPortalLogin()
+  })
 })
 </script>
 
