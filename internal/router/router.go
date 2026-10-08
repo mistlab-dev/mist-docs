@@ -147,6 +147,7 @@ func RegisterAPI(r gin.IRouter) {
 
 				// Import
 				teams.POST("/import", handler.TeamImportDocument)
+				teams.POST("/import/folder", handler.TeamImportFolder)
 
 				// Dashboard
 				teams.GET("/dashboard", handler.TeamDashboardStats)

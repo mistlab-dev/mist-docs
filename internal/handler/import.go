@@ -350,59 +350,6 @@ func parseSimpleInt(s string) (int, error) {
 
 // ─── Text converters ───
 
-func markdownToHTML(md string) string {
-	lines := strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n")
-	var html strings.Builder
-	inCode, inList := false, false
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "```") {
-			if inCode {
-				html.WriteString("</code></pre>")
-				inCode = false
-			} else {
-				html.WriteString("<pre><code>")
-				inCode = true
-			}
-			continue
-		}
-		if inCode {
-			html.WriteString(escapeHTML(line) + "\n")
-			continue
-		}
-		if inList && !strings.HasPrefix(strings.TrimSpace(line), "- ") && !strings.HasPrefix(strings.TrimSpace(line), "* ") {
-			html.WriteString("</ul>")
-			inList = false
-		}
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		if strings.HasPrefix(trimmed, "### ") {
-			html.WriteString("<h3>" + escapeHTML(trimmed[4:]) + "</h3>")
-		} else if strings.HasPrefix(trimmed, "## ") {
-			html.WriteString("<h2>" + escapeHTML(trimmed[3:]) + "</h2>")
-		} else if strings.HasPrefix(trimmed, "# ") {
-			html.WriteString("<h1>" + escapeHTML(trimmed[2:]) + "</h1>")
-		} else if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
-			if !inList {
-				html.WriteString("<ul>")
-				inList = true
-			}
-			html.WriteString("<li>" + escapeHTML(trimmed[2:]) + "</li>")
-		} else {
-			html.WriteString("<p>" + escapeHTML(trimmed) + "</p>")
-		}
-	}
-	if inCode {
-		html.WriteString("</code></pre>")
-	}
-	if inList {
-		html.WriteString("</ul>")
-	}
-	return html.String()
-}
-
 func textToHTML(txt string) string {
 	lines := strings.Split(strings.ReplaceAll(txt, "\r\n", "\n"), "\n")
 	var html strings.Builder

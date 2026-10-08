@@ -302,6 +302,11 @@ onMounted(loadShare)
 .doc-body :deep(code) { background: var(--md-code-bg); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
 .doc-body :deep(blockquote) { border-left: 4px solid var(--md-link); padding-left: 16px; color: var(--md-text-muted); margin: 12px 0; }
 .doc-body :deep(ul), .doc-body :deep(ol) { padding-left: 24px; }
+.doc-body :deep(table p) { margin: 0; }
+.doc-body :deep(ul[data-type="taskList"]) { list-style: none; padding-left: 4px; }
+.doc-body :deep(ul[data-type="taskList"] li) { display: flex; align-items: flex-start; gap: 8px; }
+.doc-body :deep(ul[data-type="taskList"] li > label) { flex: 0 0 auto; margin-top: 0.35em; }
+.doc-body :deep(ul[data-type="taskList"] li p) { margin: 0; }
 .doc-body :deep(a) { color: var(--md-link); text-decoration: none; }
 .doc-body :deep(a:hover) { text-decoration: underline; }
 

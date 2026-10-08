@@ -12,7 +12,7 @@
         <GuardedButton :allowed="canEdit" :reason="t('perm.needEditor')" @click="showNewSheet = true">
           <el-icon><Grid /></el-icon> {{ t('docs.newSheet') }}
         </GuardedButton>
-        <GuardedButton :allowed="canEdit" :reason="t('perm.needEditor')" @click="showImportDialog = true">
+        <GuardedButton :allowed="canEdit" :reason="t('perm.needEditor')" :title="t('docs.import')" data-test="import-btn" @click="showImportDialog = true">
           <el-icon><Upload /></el-icon>
         </GuardedButton>
       </div>
@@ -96,6 +96,7 @@
               <el-button v-else size="small" text @click="newFolderParentId = null; showNewFolder = true" class="section-add">{{ t('docs.newFolderBtn') }}</el-button>
             </div>
             <el-tree
+              ref="folderTreeRef"
               :data="treeData"
               :props="{ label: 'name', children: 'children' }"
               node-key="id"
@@ -311,6 +312,13 @@
               <div class="tpl-label">{{ t.name }}</div>
             </div>
           </div>
+          <div class="tpl-section" data-test="ops-templates">{{ t('docs.opsTemplates') }}</div>
+          <div class="template-grid">
+            <div v-for="o in opsTemplateList" :key="o.key" class="tpl-card" :class="{ active: newDocTemplate === o.key }" :data-test="`tpl-${o.key}`" @click="newDocTemplate = o.key">
+              <div class="tpl-icon" v-html="o.icon"></div>
+              <div class="tpl-label">{{ o.name }}</div>
+            </div>
+          </div>
           <div v-if="customTemplates.length" style="margin-top:8px;font-size:12px;color:var(--md-text-dim)">{{ t('docs.customTemplateHint') }}</div>
         </el-form-item>
       </el-form>
@@ -330,16 +338,44 @@
     </el-dialog>
 
     <!-- 导入 -->
-    <el-dialog v-model="showImportDialog" :title="t('docs.importDialogTitle')" width="500">
-      <p class="import-hint">{{ t('docs.importHint') }}</p>
-      <el-upload ref="importUpload" :auto-upload="false" :limit="20" multiple accept=".txt,.md,.html,.htm,.docx,.xlsx" :on-change="onImportFileChange" drag>
-        <el-icon :size="32" color="var(--md-text-faint)"><Upload /></el-icon>
-        <div class="upload-text">{{ t('docs.importDragText') }} <em>{{ t('docs.importClickUpload') }}</em></div>
-      </el-upload>
+    <el-dialog v-model="showImportDialog" :title="t('docs.importDialogTitle')" width="520" @closed="resetImport">
+      <el-radio-group v-model="importMode" size="small" class="import-mode">
+        <el-radio-button value="files">{{ t('docs.importModeFiles') }}</el-radio-button>
+        <el-radio-button value="folder" data-test="import-mode-folder">{{ t('docs.importModeFolder') }}</el-radio-button>
+      </el-radio-group>
+      <template v-if="importMode === 'files'">
+        <p class="import-hint">{{ t('docs.importHint') }}</p>
+        <el-upload ref="importUpload" :auto-upload="false" :limit="20" multiple accept=".txt,.md,.html,.htm,.docx,.xlsx" :on-change="onImportFileChange" drag>
+          <el-icon :size="32" color="var(--md-text-faint)"><Upload /></el-icon>
+          <div class="upload-text">{{ t('docs.importDragText') }} <em>{{ t('docs.importClickUpload') }}</em></div>
+        </el-upload>
+      </template>
+      <template v-else>
+        <p class="import-hint">{{ t('docs.importFolderHint') }}</p>
+        <p v-if="!isAdmin" class="import-warn">{{ t('docs.importFolderAdminOnly') }}</p>
+        <template v-else>
+          <div class="import-pick">
+            <el-button @click="folderInput?.click()" data-test="pick-folder">{{ t('docs.importPickFolder') }}</el-button>
+            <el-button @click="zipInput?.click()">{{ t('docs.importPickZip') }}</el-button>
+            <input ref="folderInput" type="file" webkitdirectory directory multiple style="display:none" @change="onFolderPicked" />
+            <input ref="zipInput" type="file" accept=".zip,application/zip" style="display:none" @change="onZipPicked" />
+          </div>
+          <div v-if="folderPick" class="import-summary" data-test="folder-summary">
+            <div><strong>{{ folderPick.name }}</strong></div>
+            <div v-if="folderPick.zip">{{ t('docs.importZipSummary', [formatSize(folderPick.size)]) }}</div>
+            <div v-else>{{ t('docs.importFolderSummary', [folderPick.docs, folderPick.images, formatSize(folderPick.size)]) }}</div>
+            <div v-if="folderPick.skipped" class="import-dim">{{ t('docs.importFolderSkipped', [folderPick.skipped]) }}</div>
+            <div class="import-dim">{{ t('docs.importFolderTarget', [currentFolderName || t('docs.importFolderRoot')]) }}</div>
+          </div>
+        </template>
+      </template>
       <template #footer>
         <el-button @click="showImportDialog = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="doImport" :loading="importing" :disabled="!importFiles.length">
+        <el-button v-if="importMode === 'files'" type="primary" @click="doImport" :loading="importing" :disabled="!importFiles.length">
           {{ t('docs.importButton', [importFiles.length ? importFiles.length : '']) }}
+        </el-button>
+        <el-button v-else type="primary" data-test="import-folder-go" @click="doImportFolder" :loading="importing" :disabled="!folderPick || !isAdmin">
+          {{ t('docs.importFolderButton') }}
         </el-button>
       </template>
     </el-dialog>
@@ -390,7 +426,7 @@
 
 <script setup lang="ts">
 import { formatRelative } from '@/utils/time'
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -400,6 +436,7 @@ import teamApi from '@/utils/team-api'
 import GuardedButton from '@/components/GuardedButton.vue'
 import { useAuthStore } from '@/stores/auth'
 import { docListActions } from '@/utils/roles'
+import { opsTemplateKeys, isOpsTemplate, opsTemplateHTML } from '@/utils/opsTemplates'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -437,6 +474,16 @@ const showNewSheet = ref(false)
 const showImportDialog = ref(false)
 const importFiles = ref<any[]>([])
 const importing = ref(false)
+const importMode = ref<'files' | 'folder'>('files')
+const folderTreeRef = ref<any>(null)
+const folderInput = ref<HTMLInputElement | null>(null)
+const zipInput = ref<HTMLInputElement | null>(null)
+// What the admin picked for a folder import: a browser folder (files with
+// their relative paths) or a single .zip.
+const folderPick = ref<null | {
+  name: string; zip?: File; files: { file: File; path: string }[]
+  docs: number; images: number; skipped: number; size: number
+}>(null)
 const renameDialog = ref(false)
 const renameTitle = ref('')
 const renameDoc = ref<any>(null)
@@ -476,6 +523,19 @@ const templateList = computed(() => {
   }))
   return [...builtinTemplateList, ...customs]
 })
+
+const opsIcons: Record<string, string> = {
+  release: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l5 5h-3v6H8V7H5l5-5zM4 15h12v3H4v-3z"/></svg>',
+  rollback: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 3L3 8l5 5V9.5h4a3 3 0 010 6H7V18h5a5.5 5.5 0 000-11H8V3z"/></svg>',
+  dbchange: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2c-3.9 0-7 1.3-7 3v10c0 1.7 3.1 3 7 3s7-1.3 7-3V5c0-1.7-3.1-3-7-3zm0 2c3.3 0 5 .9 5 1s-1.7 1-5 1-5-.9-5-1 1.7-1 5-1zM5 7.6c1.3.6 3.1.9 5 .9s3.7-.3 5-.9V10c0 .1-1.7 1-5 1s-5-.9-5-1V7.6zm0 5c1.3.6 3.1.9 5 .9s3.7-.3 5-.9V15c0 .1-1.7 1-5 1s-5-.9-5-1v-2.4z"/></svg>',
+  certrenew: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a4 4 0 00-4 4v2H5a1 1 0 00-1 1v8a1 1 0 001 1h10a1 1 0 001-1V9a1 1 0 00-1-1h-1V6a4 4 0 00-4-4zm-2 6V6a2 2 0 114 0v2H8zm2 3a1.5 1.5 0 01.75 2.8V15h-1.5v-1.2A1.5 1.5 0 0110 11z"/></svg>',
+  onboarding: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 9a3 3 0 100-6 3 3 0 000 6zm-6 8a6 6 0 0112 0H2zm13-9V6h2v2h2v2h-2v2h-2v-2h-2V8h2z"/></svg>',
+}
+const opsNames: Record<string, string> = {
+  release: 'docs.templateRelease', rollback: 'docs.templateRollback', dbchange: 'docs.templateDbChange',
+  certrenew: 'docs.templateCertRenew', onboarding: 'docs.templateOnboarding',
+}
+const opsTemplateList = computed(() => opsTemplateKeys.map(k => ({ key: k, icon: opsIcons[k], name: t(opsNames[k]) })))
 
 const templates: Record<string, string> = {
   meeting: '<h2>会议纪要</h2><p><strong>日期：</strong>' + new Date().toLocaleDateString() + '</p><h3>讨论内容</h3><ul><li></li></ul><h3>决议</h3><ul><li></li></ul><h3>待办事项</h3><table><thead><tr><th>任务</th><th>负责人</th><th>截止日期</th><th>状态</th></tr></thead><tbody><tr><td></td><td></td><td></td><td></td></tr></tbody></table>',
@@ -700,6 +760,8 @@ async function createDoc(type: string) {
         const { data: tplResp } = await teamApi.get(`/templates/${tplId}`)
         tplContent = tplResp.data?.content || ''
       } catch { tplContent = '' }
+    } else if (isOpsTemplate(tplKey)) {
+      tplContent = opsTemplateHTML(tplKey, String(locale.value))
     } else {
       tplContent = templates[tplKey] || ''
     }
@@ -851,6 +913,113 @@ async function doImport() {
     ElMessage.error(e?.response?.data?.error || t('docs.importFailed'))
   }
   importing.value = false
+}
+
+const importDocExts = ['.md', '.markdown', '.txt', '.html', '.htm', '.docx', '.xlsx']
+const importImageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp']
+const maxFolderImportBytes = 100 * 1024 * 1024
+
+const currentFolderName = computed(() => {
+  const find = (nodes: any[]): string => {
+    for (const n of nodes || []) {
+      if (n.id === currentFolder.value) return n.name
+      const hit = find(n.children)
+      if (hit) return hit
+    }
+    return ''
+  }
+  return currentFolder.value ? find(treeData.value) : ''
+})
+
+function formatSize(n: number) {
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
+function extOf(name: string) {
+  const i = name.lastIndexOf('.')
+  return i >= 0 ? name.slice(i).toLowerCase() : ''
+}
+
+function resetImport() {
+  folderPick.value = null
+  if (folderInput.value) folderInput.value.value = ''
+  if (zipInput.value) zipInput.value.value = ''
+}
+
+function onFolderPicked(e: Event) {
+  const list = Array.from((e.target as HTMLInputElement).files || [])
+  if (!list.length) return
+  const files: { file: File; path: string }[] = []
+  let docs = 0, images = 0, skipped = 0, size = 0
+  for (const f of list) {
+    const path = (f as any).webkitRelativePath || f.name
+    // Hidden folders (.git …) and system files are never uploaded.
+    if (path.split('/').some((seg: string) => seg.startsWith('.') || seg === '__MACOSX' || seg === 'node_modules')) continue
+    const ext = extOf(f.name)
+    if (importDocExts.includes(ext)) docs++
+    else if (importImageExts.includes(ext)) images++
+    else { skipped++; continue }
+    files.push({ file: f, path })
+    size += f.size
+  }
+  const name = (list[0] as any).webkitRelativePath?.split('/')[0] || t('docs.importModeFolder')
+  folderPick.value = { name, files, docs, images, skipped, size }
+}
+
+function onZipPicked(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  if (!f) return
+  folderPick.value = { name: f.name.replace(/\.zip$/i, ''), zip: f, files: [], docs: 0, images: 0, skipped: 0, size: f.size }
+}
+
+async function doImportFolder() {
+  const pick = folderPick.value
+  if (!pick) return
+  if (!pick.zip && !pick.docs) return ElMessage.warning(t('docs.importFolderNoDocs'))
+  if (pick.size > maxFolderImportBytes) return ElMessage.warning(t('docs.importFolderTooBig'))
+  const fd = new FormData()
+  if (pick.zip) {
+    fd.append('archive', pick.zip)
+  } else {
+    for (const { file, path } of pick.files) {
+      fd.append('files', file)
+      fd.append('paths', path)
+    }
+  }
+  if (currentFolder.value) fd.append('folder_id', currentFolder.value)
+  importing.value = true
+  try {
+    const { data } = await teamApi.post('/import/folder', fd, { timeout: 300000 })
+    showImportDialog.value = false
+    const notes = [
+      ...(data.results || []).filter((r: any) => r.status !== 'created').map((r: any) => `${r.title}：${r.error || r.status}`),
+      ...(data.warnings || []).map((w: any) => `${w.path}：${w.message}`),
+    ]
+    await loadTree()
+    if (data.data?.folder_id) {
+      onFolderClick({ id: data.data.folder_id })
+      await nextTick()
+      folderTreeRef.value?.setCurrentKey(data.data.folder_id)
+    }
+    if (notes.length) {
+      ElMessageBox.alert(
+        `<p>${escapeHtml(data.message)}</p><p>${escapeHtml(t('docs.importFolderNotes', [notes.length]))}</p><ul class="import-notes">${notes.slice(0, 50).map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`,
+        t('docs.importDialogTitle'), { dangerouslyUseHTMLString: true },
+      ).catch(() => {})
+    } else {
+      ElMessage.success(data.message || t('docs.importSuccess'))
+    }
+  } catch (e: any) {
+    const status = e?.response?.status
+    ElMessage.error(status === 413 ? t('docs.importFolderTooBig') : (e?.response?.data?.error || t('docs.importFailed')))
+  } finally {
+    importing.value = false
+  }
+}
+
+function escapeHtml(s: string) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 onMounted(async () => {
@@ -1088,10 +1257,17 @@ async function filterByTag(tagId: string) {
 .tpl-card:hover { border-color: var(--md-link); background: var(--md-hover-soft); }
 .tpl-card.active { border-color: var(--md-link); background: var(--md-hover); }
 .tpl-icon { font-size: 28px; margin-bottom: 6px; }
+.tpl-icon :deep(svg) { width: 28px; height: 28px; color: var(--md-text-muted); }
 .tpl-label { font-size: 13px; color: var(--md-text-muted); }
 
 /* 导入 */
-.import-hint { color: var(--md-text-dim); font-size: 13px; margin-bottom: 12px; }
+.import-hint { color: var(--md-text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.6; }
+.import-mode { margin-bottom: 12px; }
+.import-warn { color: var(--el-color-warning); font-size: 13px; }
+.import-pick { display: flex; gap: 8px; flex-wrap: wrap; }
+.import-summary { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--md-hover-soft); font-size: 13px; line-height: 1.8; }
+.import-dim { color: var(--md-text-dim); }
+.tpl-section { margin: 14px 0 8px; font-size: 13px; color: var(--md-text-dim); }
 .upload-text { color: var(--md-text-dim); font-size: 14px; margin-top: 8px; }
 .upload-text em { color: var(--md-link); font-style: normal; }
 
