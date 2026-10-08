@@ -2179,6 +2179,14 @@ document.addEventListener('keydown', handleGlobalKeydown)
   border: 1px solid var(--md-border-strong); padding: 8px 12px; min-width: 80px;
 }
 .tiptap-editor :deep(.tiptap table th) { background: var(--md-bg); font-weight: 600; }
+.tiptap-editor :deep(.tiptap table p) { margin: 0; }
+/* Task lists: checkbox and text on one line, no bullet */
+.tiptap-editor :deep(.tiptap ul[data-type="taskList"]) { list-style: none; padding-left: 4px; }
+.tiptap-editor :deep(.tiptap ul[data-type="taskList"] li) { display: flex; align-items: flex-start; gap: 8px; }
+.tiptap-editor :deep(.tiptap ul[data-type="taskList"] li > label) { flex: 0 0 auto; margin-top: 0.3em; user-select: none; }
+.tiptap-editor :deep(.tiptap ul[data-type="taskList"] li > div) { flex: 1 1 auto; min-width: 0; }
+.tiptap-editor :deep(.tiptap ul[data-type="taskList"] li > div > p) { margin: 0; }
+.tiptap-editor :deep(.tiptap ul[data-type="taskList"] li[data-checked="true"] > div) { color: var(--md-text-dim); }
 
 /* 大纲 */
 .outline-panel {
