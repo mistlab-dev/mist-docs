@@ -539,11 +539,11 @@ export default {
           },
           collabEnd: {
             q: 'How do I end a collaboration session?',
-            a: '<p>In the Collaboration list, click End on an active session and confirm. Ended sessions may still appear in the list (marked ended). There is no separate delete action today; that is expected.</p>',
+            a: '<p>In the Collaboration list, click End on an active session and confirm. The session is then marked Ended and gets a Delete button that removes it from the list. A running session cannot be deleted; end it first.</p>',
           },
           monitor: {
             q: 'What does the Monitor page show?',
-            a: '<p>Console → Monitor shows each server group and how many hosts it has. Status is currently <b>Unknown</b> — online detection is not wired yet, so the page does not claim Online or Offline. Recent activity below lists the team\'s latest command records, or says there is no recent activity.</p>',
+            a: '<p>Console → Server status: the top line shows how many servers and groups the team has; each card is one group and its server count, and servers without a tag are under Ungrouped. A server with several tags counts once in each of those groups. Status is currently <b>Unknown</b> — online detection is not wired yet, so the page does not claim Online or Offline. Recent activity below lists the team\'s latest command records; when there are none it says so.</p>',
           },
           snippets: {
             q: 'How do I manage saved commands?',
@@ -583,7 +583,19 @@ export default {
           },
           loginError: {
             q: 'What happens if I enter the wrong password?',
-            a: '<p>You stay on the login page and see "Wrong email/username or password" (Chinese: 邮箱/用户名或密码不对). It is not treated as an expired session, so the page does not reload. There is no forgot-password link yet; ask an administrator if you need a password reset.</p>',
+            a: '<p>You stay on the login page and see "Wrong email/username or password" (Chinese: 邮箱/用户名或密码不对). It is not treated as an expired session, so the page does not reload. Too many wrong tries lock the login for a short while. If you forgot the password, use "Forgot password?" on the login page (see the next item).</p>',
+          },
+          forgotPassword: {
+            q: 'I forgot my password. What now?',
+            a: '<p>On the mistlab.dev login page, click "Forgot password?" and enter the email you signed up with. The email contains a link to set a new password; it works once, for 30 minutes.<br>If the page says password reset by email is not available and to contact your administrator, the server cannot send mail yet; ask your team admin.</p>',
+          },
+          twoFactor: {
+            q: 'How do I turn on two-factor sign-in?',
+            a: '<p>Console → Account security → Turn on two-factor sign-in. Scan the QR code with an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, 1Password…), then enter the 6-digit code it shows. After that, password logins also ask for the code.<br>You can turn it off on the same page with a current code. Accounts that only sign in with Google or GitHub and never set a password cannot turn it on. If the page says the server is missing its encryption key, contact your administrator.</p>',
+          },
+          installAgent: {
+            q: 'How do I install the command-audit script on a server?',
+            a: '<p>A team admin clicks "Issue install token" under Command audit in the console. The dialog shows a ready command; run it on the server as root:<br><code>curl -fsSL https://mistlab.dev/install-agent &#124; sudo bash -s -- TEAM_ID TOKEN</code><br>The token works once, for 30 minutes. Today it records commands that the root account runs directly with <code>ssh host "command"</code>; commands typed after logging in are not recorded yet. To remove it, run <code>mist-agent-uninstall</code>.<br>Note: <code>https://mistlab.dev/install</code> is a different script; it installs the mist command line on your own computer.</p>',
           },
         },
       },
