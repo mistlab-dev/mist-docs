@@ -65,7 +65,9 @@ export default {
   },
   mainLayout: {
     docs: 'Documents',
-    openPortal: 'Open Portal',
+    products: 'MistLab products',
+    productConsole: 'Console',
+    productDownload: 'Download MistTerm',
     trash: 'Trash',
     admin: 'Admin',
     help: 'Help',
@@ -89,7 +91,7 @@ export default {
     markAllRead: 'Mark all read',
     markRead: 'Read',
     viewDoc: 'View',
-    accountSettings: 'Account settings (Portal)',
+    accountSettings: 'Account settings (Console)',
     logout: 'Log Out',
     darkMode: 'Dark Mode',
     lightMode: 'Light Mode',
@@ -536,14 +538,14 @@ export default {
         items: {
           dataSecurity: { q: 'Is my data secure?', a: '<p>Documents are stored on the server with AES-256-GCM. Traffic uses TLS. Only people with access can open a document.</p>' },
           watermark: { q: 'What is watermark?', a: '<p>Watermark is a semi-transparent overlay showing the current username and time. It\'s automatically displayed for regular users viewing documents to prevent screenshot leaks. Admins can toggle it on or off.</p>' },
-          changePassword: { q: 'How to change my password?', a: '<p>Change it on the MistLab Portal at mistlab.dev. MistDocs does not manage Portal passwords.</p>' },
+          changePassword: { q: 'How to change my password?', a: '<p>Change it in the console at mistlab.dev. MistDocs does not manage passwords.</p>' },
         },
       },
       adminSection: {
         title: 'System Administration (Admin)',
         items: {
-          userMgmt: { q: 'How to manage users and teams?', a: '<p>Accounts, passwords, and team membership are managed in the MistLab Portal (mistlab.dev). MistDocs has no user or department admin page.</p>' },
-          deptMgmt: { q: 'Where are team and member limits applied?', a: '<p>Team count and member count are Portal limits. MistDocs does not check them. When billing is on and Portal does not return a plan, this service falls back to 10 documents and checks media uploads against 500 MB. Document saves are not blocked by that storage cap. When billing is off, MistDocs does not apply these caps.</p>' },
+          userMgmt: { q: 'How to manage users and teams?', a: '<p>Accounts, passwords, and team membership are managed in the console at mistlab.dev. MistDocs has no user or department admin page.</p>' },
+          deptMgmt: { q: 'Where are team and member limits applied?', a: '<p>Team count and member count are console limits. MistDocs does not check them. When billing is on and the console does not return a plan, this service falls back to 10 documents and checks media uploads against 500 MB. Document saves are not blocked by that storage cap. When billing is off, MistDocs does not apply these caps.</p>' },
           auditLog: { q: 'How to view audit logs?', a: '<p>Team admins can open Audit Log on this site to see document actions such as create, edit, delete, and share. This is not a command audit, and it is not a default block on edits.<br>Command records and approvals on servers are under Command records and Approvals in the mistlab.dev console.</p>' },
           storageMonitor: { q: 'How to monitor storage?', a: '<p>Open Storage to see documents, versions, media, and trash for the current team. A storage cap, when billing applies one, is enforced on media upload. It is not enforced when you save document text.</p>' },
           backup: { q: 'How to backup and restore?', a: '<p>MistDocs does not run automatic backups. Back up MySQL yourself (for example mysqldump) and copy the file storage directory. Restore means loading that dump and putting the files back.</p>' },
@@ -598,7 +600,7 @@ export default {
           },
           webhooks: {
             q: 'How do I set up a webhook?',
-            a: '<p>Console → Webhooks: pick a team, create one, and enter a real reachable https URL. Fake or private addresses are rejected. MistDocs has its own webhooks (document and comment events) under this site\'s admin; that is separate from the Portal console.</p>',
+            a: '<p>Console → Webhooks: pick a team, create one, and enter a real reachable https URL. Fake or private addresses are rejected. MistDocs has its own webhooks (document and comment events) under this site\'s admin; that is separate from the mistlab.dev console.</p>',
           },
           notifications: {
             q: 'What is the bell in the top right?',

@@ -77,6 +77,15 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
+  // ?team=<id> from the console's product links: open that team here too.
+  if (typeof to.query.team === 'string') {
+    auth.setTeam(to.query.team)
+    const query = { ...to.query }
+    delete query.team
+    next({ path: to.path, query, hash: to.hash, replace: true })
+    return
+  }
+
   // Admin pages: check team role
   if (to.meta.admin && !auth.isTeamAdmin) {
     next('/docs')

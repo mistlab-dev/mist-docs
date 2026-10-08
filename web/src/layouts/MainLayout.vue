@@ -95,10 +95,21 @@
           </el-breadcrumb>
         </div>
         <div class="user-area">
-          <a class="portal-link" href="https://mistlab.dev" target="_blank" rel="noopener noreferrer">
-            <span class="portal-link-mark">&gt;_</span>
-            {{ t('mainLayout.openPortal') }}
-          </a>
+          <el-dropdown trigger="click" @command="openProduct">
+            <span class="portal-link">
+              <span class="portal-link-mark">&gt;_</span>
+              {{ t('mainLayout.products') }}
+              <el-icon><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="console">{{ t('mainLayout.productConsole') }}</el-dropdown-item>
+                <el-dropdown-item command="docs">MistDocs</el-dropdown-item>
+                <el-dropdown-item command="deadlines">{{ t('mainLayout.deadlines') }}</el-dropdown-item>
+                <el-dropdown-item command="download">{{ t('mainLayout.productDownload') }}</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
 
           <div v-if="currentTeamName" class="team-chip">
             <el-dropdown v-if="teamChoices.length > 1" trigger="click" @command="switchTeam">
@@ -277,6 +288,16 @@ function onMenuSelect() {
 
 // Accounts (password, email, sign-in methods) live in the Portal (D1).
 const portalUrl = import.meta.env.VITE_PORTAL_URL || 'https://mistlab.dev'
+
+// MistLab product switcher (same items as the console). Links to the console
+// carry the current team so it opens on the same team.
+function openProduct(cmd: string) {
+  const team = auth.currentTeamId ? `?team=${encodeURIComponent(auth.currentTeamId)}` : ''
+  if (cmd === 'console') window.location.href = `${portalUrl}/dashboard${team}`
+  else if (cmd === 'docs') router.push('/docs')
+  else if (cmd === 'deadlines') router.push('/deadlines')
+  else if (cmd === 'download') window.location.href = `${portalUrl}/download.html`
+}
 
 // Notifications
 const showNotifications = ref(false)
