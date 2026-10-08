@@ -582,7 +582,11 @@ export default {
           },
           approvals: {
             q: 'How do command approvals work?',
-            a: '<p>Console → Approvals: when the team turns on the related rules, risky commands show up here for approve or reject. By default nothing is approved or blocked; that only happens after the team enables the rules.</p>',
+            a: '<p>Console → Approvals is usually empty for now: neither MistTerm nor the server agent sends commands there for approval yet. When the team turns on a "confirm" rule, MistTerm asks the person running the command in a dialog, and with <code>ssh host "command"</code> a confirm rule simply blocks. By default nothing is blocked and nothing needs confirming.</p>',
+          },
+          auditScope: {
+            q: 'Which commands does command audit check?',
+            a: '<p>By default commands are only recorded, not blocked. Once a team admin turns on rules:</p><ul><li>MistTerm checks commands sent from saved commands, command history, the AI ops assistant and batch runs.</li><li>On servers with the agent, only commands root runs directly with <code>ssh host "command"</code> are checked and recorded.</li></ul><p>Commands typed straight into the MistTerm terminal, or typed after logging in to a server over ssh, are not checked yet. Command audit catches slips and reminds new teammates; it won&#39;t stop someone set on getting around it. To guard against people, use the agent together with account permissions. See mistlab.dev/audit.html.</p>',
           },
           auditExport: {
             q: 'How do I view and export command records?',
