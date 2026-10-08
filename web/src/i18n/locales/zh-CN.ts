@@ -65,7 +65,9 @@ export default {
   },
   mainLayout: {
     docs: '文档',
-    openPortal: '打开 Portal',
+    products: 'MistLab 产品',
+    productConsole: '控制台',
+    productDownload: '下载 MistTerm',
     trash: '回收站',
     admin: '管理后台',
     help: '帮助',
@@ -89,7 +91,7 @@ export default {
     markAllRead: '全部已读',
     markRead: '已读',
     viewDoc: '查看',
-    accountSettings: '账号设置（Portal）',
+    accountSettings: '账号设置（控制台）',
     logout: '退出登录',
     darkMode: '深色模式',
     lightMode: '浅色模式',
@@ -650,14 +652,14 @@ export default {
         items: {
           dataSecurity: { q: '我的数据安全吗？', a: '<p>文档在服务器上用 AES-256-GCM 加密存储，传输走 TLS。只有有权限的人能打开文档。</p>' },
           watermark: { q: '水印是什么？', a: '<p>水印是覆盖在文档上的半透明文字，显示当前用户名和时间。普通用户查看文档时会自动显示水印，用于防止截图泄露。管理员可以手动开启或关闭水印。</p>' },
-          changePassword: { q: '如何修改密码？', a: '<p>到 MistLab Portal（mistlab.dev）改密码。MistDocs 不管 Portal 账号的密码。</p>' },
+          changePassword: { q: '如何修改密码？', a: '<p>到 mistlab.dev 控制台改密码。MistDocs 不管账号密码。</p>' },
         },
       },
       adminSection: {
         title: '系统管理（管理员）',
         items: {
-          userMgmt: { q: '如何管理用户和团队？', a: '<p>账号、密码和团队成员都在 MistLab Portal（mistlab.dev）里管。MistDocs 没有用户管理或部门管理页面。</p>' },
-          deptMgmt: { q: '团队人数和存储上限在哪里生效？', a: '<p>团队数量和成员数量是 Portal 的限制，MistDocs 不检查。计费打开、Portal 又没返回套餐时，本服务才会退回到 10 篇文档，并在上传媒体时检查 500MB。保存文档正文不会被这个存储上限拦住。计费关闭时，这些上限都不生效。</p>' },
+          userMgmt: { q: '如何管理用户和团队？', a: '<p>账号、密码和团队成员都在 mistlab.dev 控制台里管。MistDocs 没有用户管理或部门管理页面。</p>' },
+          deptMgmt: { q: '团队人数和存储上限在哪里生效？', a: '<p>团队数量和成员数量是控制台的限制，MistDocs 不检查。计费打开、控制台又没返回套餐时，本服务才会退回到 10 篇文档，并在上传媒体时检查 500MB。保存文档正文不会被这个存储上限拦住。计费关闭时，这些上限都不生效。</p>' },
           auditLog: { q: '如何查看审计日志？', a: '<p>团队管理员可以在本站「审计日志」里看文档操作，例如创建、编辑、删除、分享。这不是命令审计，也不会默认拦住编辑。<br>服务器上的命令记录和审批，请到 mistlab.dev 控制台的「命令记录」「命令审批」查看。</p>' },
           storageMonitor: { q: '如何查看存储？', a: '<p>打开「存储」可以看到当前团队的文档、版本、媒体和回收站占用。有存储上限时，只在上传媒体时检查。保存文档正文不按这个上限拦截。</p>' },
           backup: { q: '如何备份和恢复？', a: '<p>MistDocs 不会自动备份。数据库自己用 mysqldump，文件目录单独拷贝。恢复就是把这份备份导回去，再把文件放回原目录。</p>' },
@@ -712,7 +714,7 @@ export default {
           },
           webhooks: {
             q: '如何配置 Webhook？',
-            a: '<p>控制台 →「事件通知」：选团队后新建，填写一个真实可访问的 https 地址。假地址或内网地址会被拒绝。MistDocs 自己的 Webhook（文档/评论等事件）在本站管理里配置，和 Portal 控制台是两套。</p>',
+            a: '<p>控制台 →「事件通知」：选团队后新建，填写一个真实可访问的 https 地址。假地址或内网地址会被拒绝。MistDocs 自己的 Webhook（文档/评论等事件）在本站管理里配置，和 mistlab.dev 控制台是两套。</p>',
           },
           notifications: {
             q: '右上角铃铛是什么？',
