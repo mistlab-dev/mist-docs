@@ -44,12 +44,20 @@ const router = createRouter({
   routes,
 })
 
+// Checked once per page load: are we signed in on mistlab.dev / here?
+let sessionChecked = false
+
 router.beforeEach(async (to, _from, next) => {
   const auth = useAuthStore()
 
   // Public pages
   if (to.meta.public) {
     return next()
+  }
+
+  if (!sessionChecked) {
+    sessionChecked = true
+    await auth.syncSession()
   }
 
   // Not logged in → redirect to Portal
