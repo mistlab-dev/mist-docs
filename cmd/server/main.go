@@ -116,7 +116,9 @@ func main() {
 	log.Println("[BOOT] crypto ready")
 
 	// 初始化路由
-	r := gin.Default()
+	// Same as gin.Default(), but the request log hides secret query values (token, sig, password...).
+	r := gin.New()
+	r.Use(middleware.RequestLogger(), gin.Recovery())
 	// 信任本机 nginx 反代（docs.conf proxy_pass 127.0.0.1:8900）的 XFF，
 	// 保留真实客户端 IP（用于限流/审计），同时消除 “trusted all proxies” 警告。
 	if err := r.SetTrustedProxies([]string{"127.0.0.1", "::1"}); err != nil {
