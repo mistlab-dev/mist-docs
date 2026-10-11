@@ -18,9 +18,7 @@
         :default-active="route.path"
         :collapse="collapsed"
         router
-        background-color="#15151e"
-        text-color="#94a3b8"
-        active-text-color="#818cf8"
+        class="sidebar-menu"
         @select="onMenuSelect"
       >
         <el-menu-item index="/docs">
@@ -383,18 +381,34 @@ onMounted(() => {
 <style scoped>
 .main-layout { height: 100%; min-height: 0; }
 .sidebar {
-  background: #1d1e2c;
-  transition: width 0.3s;
+  background: var(--md-sidebar-bg, #fff);
+  border-right: 1px solid var(--md-sidebar-border, var(--md-border));
+  transition: width 0.3s, background-color 0.2s, border-color 0.2s;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
 }
-.sidebar :deep(.el-menu) {
+.sidebar :deep(.el-menu),
+.sidebar :deep(.sidebar-menu) {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   border-right: none;
+  background-color: var(--md-sidebar-bg, #fff) !important;
+}
+.sidebar :deep(.el-menu-item) {
+  color: var(--md-sidebar-text) !important;
+}
+.sidebar :deep(.el-menu-item .el-icon) {
+  color: inherit;
+}
+.sidebar :deep(.el-menu-item:hover) {
+  background-color: var(--md-sidebar-hover) !important;
+}
+.sidebar :deep(.el-menu-item.is-active) {
+  color: var(--md-sidebar-text-active) !important;
+  background-color: var(--md-sidebar-active-bg) !important;
 }
 .sidebar-top {
   display: flex;
@@ -404,7 +418,7 @@ onMounted(() => {
   height: 56px;
   padding: 0 10px 0 14px;
   flex-shrink: 0;
-  border-bottom: 1px solid #2a2b3d;
+  border-bottom: 1px solid var(--md-sidebar-border);
 }
 .sidebar.collapsed .sidebar-top { padding: 0; justify-content: center; }
 .brand {
@@ -417,7 +431,7 @@ onMounted(() => {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #f8fafc;
+  color: var(--md-sidebar-brand);
   cursor: pointer;
 }
 .sidebar.collapsed .brand { flex: none; }
@@ -433,28 +447,28 @@ onMounted(() => {
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0.01em;
-  color: #f8fafc;
+  color: var(--md-sidebar-brand);
   white-space: nowrap;
 }
 .sidebar-hide-btn {
   width: 24px; height: 24px; border: none; background: transparent;
-  color: #a0a4b8; font-size: 14px; cursor: pointer; border-radius: 4px;
+  color: var(--md-sidebar-text); font-size: 14px; cursor: pointer; border-radius: 4px;
   flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
 }
-.sidebar-hide-btn:hover { background: #2a2b3d; color: var(--md-on-accent); }
+.sidebar-hide-btn:hover { background: var(--md-sidebar-hover); color: var(--md-sidebar-text-active); }
 .sidebar-bottom {
   margin-top: auto;
   padding: 8px 0 12px;
-  border-top: 1px solid #2a2b3d;
+  border-top: 1px solid var(--md-sidebar-border);
 }
 .help-btn {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 20px; cursor: pointer;
-  color: #a0a4b8; font-size: 14px;
+  color: var(--md-sidebar-text); font-size: 14px;
   transition: all 0.2s;
 }
-.help-btn:hover { background: #2a2b3d; color: var(--md-on-accent); }
+.help-btn:hover { background: var(--md-sidebar-hover); color: var(--md-sidebar-text-active); }
 .help-btn .el-icon { font-size: 18px; }
 .sidebar.collapsed .help-btn { justify-content: center; padding: 10px 0; }
 .topbar {
@@ -495,7 +509,7 @@ onMounted(() => {
 }
 .user-avatar { background: var(--md-accent, #6366f1); color: var(--md-on-accent); font-size: 13px; flex-shrink: 0; }
 .notif-badge { margin-right: 4px; }
-.el-divider { margin: 8px 16px; border-color: #2a2b3d; }
+.el-divider { margin: 8px 16px; border-color: var(--md-sidebar-border); }
 
 .notif-header { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .notif-item { padding: 12px; border-bottom: 1px solid var(--md-border-light); }

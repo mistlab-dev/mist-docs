@@ -149,6 +149,15 @@
   --md-quote-bar: #409eff;
   --md-stat-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
   --md-card-shadow: 0 2px 10px rgba(15, 23, 42, 0.1);
+
+  /* Primary app nav (left rail) — follows theme */
+  --md-sidebar-bg: #ffffff;
+  --md-sidebar-border: var(--md-border);
+  --md-sidebar-text: var(--md-text-muted);
+  --md-sidebar-text-active: var(--md-brand);
+  --md-sidebar-brand: var(--md-text-title);
+  --md-sidebar-hover: var(--md-hover);
+  --md-sidebar-active-bg: var(--md-active);
 }
 
 html.dark {
@@ -291,6 +300,14 @@ html.dark {
   --md-stat-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
   --md-card-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 
+  --md-sidebar-bg: #1d1e2c;
+  --md-sidebar-border: #2a2b3d;
+  --md-sidebar-text: #94a3b8;
+  --md-sidebar-text-active: #818cf8;
+  --md-sidebar-brand: #f8fafc;
+  --md-sidebar-hover: #2a2b3d;
+  --md-sidebar-active-bg: #2a2b45;
+
   /* Element Plus binding — keep buttons on the stock dark primary palette */
   --el-bg-color: var(--md-surface);
   --el-bg-color-overlay: var(--md-surface-2);
@@ -333,13 +350,12 @@ html.dark .el-table {
   --el-table-expanded-cell-bg-color: var(--md-surface);
 }
 
-/* Main nav chrome is dark in both themes. In dark mode the default hover mix
-   can flash a light fill; pin it to the same navy family. */
+/* Pin dark-mode nav hover/active so Element Plus fill mix stays on navy. */
 html.dark .sidebar .el-menu-item.is-active {
-  background-color: #2a2b45 !important;
+  background-color: var(--md-sidebar-active-bg) !important;
 }
 html.dark .sidebar .el-menu-item:hover {
-  background-color: #2a2b3d !important;
+  background-color: var(--md-sidebar-hover) !important;
 }
 
 /* Print stays on paper, regardless of the screen theme. */
