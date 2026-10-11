@@ -99,27 +99,59 @@ export const useAuthStore = defineStore('auth', () => {
   async function syncSession(): Promise<SessionState> {
     const before = token.value
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      // Bearer lets the API heal a missing cookie so full page navigations do
+      // not wipe a still-valid local session.
+      if (before) headers.Authorization = `Bearer ${before}`
       const resp = await fetch(`${API_BASE}/auth/session`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
       })
       if (resp.ok) {
         const data = await resp.json().catch(() => ({}))
-        if (!data.access_token) return 'unknown'
+        if (!data.access_token) return before ? 'in' : 'unknown'
         if (data.user?.id && user.value && user.value.id !== data.user.id) {
           // signed in as someone else meanwhile: start clean
           logout()
         }
-        setTokens(data.access_token, data.refresh_token)
+        setTokens(data.access_token, data.refresh_token || refreshToken.value || undefined)
         return 'in'
       }
       if (resp.status === 401) {
+        // Cookie signed out — only clear local state after refresh proves the
+        // session is dead. Otherwise switching pages looked like a logout.
+        if (token.value !== before) return 'in'
+        const refresh = refreshToken.value || localStorage.getItem('mist-docs-refresh-token')
+        if (refresh) {
+          try {
+            const r = await fetch(`${API_BASE}/auth/refresh`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refresh_token: refresh }),
+            })
+            if (r.ok) {
+              const data = await r.json().catch(() => ({}))
+              if (data.access_token) {
+                setTokens(data.access_token, data.refresh_token || refresh)
+                return 'in'
+              }
+            }
+          } catch { /* fall through */ }
+        }
+        if (before) {
+          try {
+            const me = await fetch(`${API_BASE}/me`, {
+              headers: { Authorization: `Bearer ${before}` },
+            })
+            if (me.ok) return 'in'
+          } catch { /* fall through */ }
+        }
         if (token.value === before) logout()
         return token.value ? 'in' : 'out'
       }
     } catch { /* offline: keep what we have */ }
-    return 'unknown'
+    return before ? 'in' : 'unknown'
   }
 
   // Sign out here and on mistlab.dev.
