@@ -509,15 +509,35 @@ func TeamCreateDocument(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Title    string `json:"title" binding:"required"`
-		Type     string `json:"type"`
-		FolderID string `json:"folder_id"`
-		Content  string `json:"content"`
+	var rawReq struct {
+		Title    string      `json:"title" binding:"required"`
+		Type     string      `json:"type"`
+		FolderID interface{} `json:"folder_id"`
+		Content  string      `json:"content"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&rawReq); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
 		return
+	}
+
+	var req struct {
+		Title    string
+		Type     string
+		FolderID string
+		Content  string
+	}
+	req.Title = rawReq.Title
+	req.Type = rawReq.Type
+	req.Content = rawReq.Content
+	if rawReq.FolderID != nil {
+		switch v := rawReq.FolderID.(type) {
+		case string:
+			req.FolderID = strings.TrimSpace(v)
+		case float64:
+			if int64(v) != 0 {
+				req.FolderID = fmt.Sprintf("%.0f", v)
+			}
+		}
 	}
 
 	if req.Type == "" {
