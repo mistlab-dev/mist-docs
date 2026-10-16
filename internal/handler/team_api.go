@@ -554,15 +554,11 @@ func TeamCreateDocument(c *gin.Context) {
 	req.Title = rawReq.Title
 	req.Type = rawReq.Type
 	req.Content = rawReq.Content
-	if rawReq.FolderID != nil {
-		switch v := rawReq.FolderID.(type) {
-		case string:
-			req.FolderID = strings.TrimSpace(v)
-		case float64:
-			if int64(v) != 0 {
-				req.FolderID = fmt.Sprintf("%.0f", v)
-			}
-		}
+	if fid, ok := parseFolderIDField(rawReq.FolderID); ok {
+		req.FolderID = fid
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: folder_id 格式不正确"})
+		return
 	}
 
 	if req.Type == "" {
@@ -657,14 +653,12 @@ func TeamUpdateDocument(c *gin.Context) {
 	var folderIDStr string
 	if rawReq.FolderID != nil {
 		hasFolderID = true
-		switch v := rawReq.FolderID.(type) {
-		case string:
-			folderIDStr = strings.TrimSpace(v)
-		case float64:
-			if int64(v) != 0 {
-				folderIDStr = fmt.Sprintf("%.0f", v)
-			}
+		fid, ok := parseFolderIDField(rawReq.FolderID)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: folder_id 格式不正确"})
+			return
 		}
+		folderIDStr = fid
 	}
 
 	if rawReq.Title == nil && !hasFolderID {
