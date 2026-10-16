@@ -45,6 +45,7 @@ func buildPaths() map[string]interface{} {
 	add("/files/{filename}", "get", "旧版上传文件", "读取存储目录 uploads/ 下的旧文件，需要 Portal JWT（原先公开，已收紧）。当前版本不再往该目录写文件，团队媒体请用 /teams/{team_id}/media。")
 	add("/media/{team_id}/{filename}", "get", "文档内图片（签名地址）", "不要求登录，但必须带 sig 参数。签名由服务器在返回文档内容、版本、导出、分享内容和上传结果时生成，只对该团队的该文件有效。")
 	add("/auth/logout", "post", "退出", "需要 Portal JWT。")
+	add("/mcp", "post", "MCP endpoint for AI agents", "Model Context Protocol (JSON-RPC 2.0 over HTTP)。AI Agent（Claude Desktop、Cursor、MistTerm 运维助手等）通过此端点检索/读取/创建团队文档。需要 Portal JWT；每个工具调用必须显式携带 team_id，服务端校验调用者是该团队成员，权限与 REST API 完全一致。支持 initialize/tools/list/tools/call/resources/read 等方法。")
 	add("/auth/me", "get", "当前用户", "读取 Portal JWT，返回共享 users 表中的用户和团队。")
 	add("/auth/password", "put", "已停用（410）", "密码在 Portal 管理。返回 410 和 portal_url。")
 
