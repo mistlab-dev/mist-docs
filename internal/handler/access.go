@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"database/sql"
+	"errors"
+	"math"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/c-wind/mist-docs/internal/database"
@@ -58,6 +62,74 @@ func folderInTeam(teamID, folderID string) bool {
 		return false
 	}
 	return n > 0
+}
+
+// maxFolderDepth bounds the parent walk in isDescendantFolder.
+const maxFolderDepth = 50
+
+// isDescendantFolder reports whether candidateChildID is the same as or a descendant
+// of folderID within the team. This prevents cyclic folder hierarchies. It fails
+// closed: a query error or a chain deeper than maxFolderDepth counts as a cycle.
+func isDescendantFolder(teamID, folderID, candidateChildID string) bool {
+	if teamID == "" {
+		return false
+	}
+	return folderChainReaches(func(id string) (string, error) {
+		var parentID string
+		err := database.DB.QueryRow(`SELECT IFNULL(parent_id, '') FROM md_team_folders WHERE id=? AND team_id=?`, id, teamID).Scan(&parentID)
+		return parentID, err
+	}, folderID, candidateChildID)
+}
+
+// folderChainReaches walks parent links from candidateChildID and reports whether
+// folderID is reached. parentOf returns sql.ErrNoRows for a missing folder.
+func folderChainReaches(parentOf func(id string) (string, error), folderID, candidateChildID string) bool {
+	if folderID == "" || candidateChildID == "" {
+		return false
+	}
+	if folderID == candidateChildID {
+		return true
+	}
+	curr := candidateChildID
+	for i := 0; i < maxFolderDepth; i++ {
+		parentID, err := parentOf(curr)
+		if errors.Is(err, sql.ErrNoRows) {
+			return false
+		}
+		if err != nil {
+			return true
+		}
+		if parentID == "" {
+			return false
+		}
+		if parentID == folderID {
+			return true
+		}
+		curr = parentID
+	}
+	return true
+}
+
+// parseFolderIDField normalizes a JSON folder_id: strings are trimmed, integral
+// numbers are formatted (0 means root). Any other type, or a non-integer
+// number, is rejected.
+func parseFolderIDField(v interface{}) (string, bool) {
+	switch x := v.(type) {
+	case nil:
+		return "", true
+	case string:
+		return strings.TrimSpace(x), true
+	case float64:
+		if x != math.Trunc(x) || math.IsInf(x, 0) || math.Abs(x) > 1<<53 {
+			return "", false
+		}
+		if x == 0 {
+			return "", true
+		}
+		return strconv.FormatInt(int64(x), 10), true
+	default:
+		return "", false
+	}
 }
 
 // requireDoc ensures the document belongs to the caller's team and the caller
