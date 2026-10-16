@@ -60,6 +60,32 @@ func folderInTeam(teamID, folderID string) bool {
 	return n > 0
 }
 
+// isDescendantFolder reports whether candidateChildID is the same as or a descendant
+// of folderID within the team. This prevents cyclic folder hierarchies.
+func isDescendantFolder(teamID, folderID, candidateChildID string) bool {
+	if folderID == "" || candidateChildID == "" || teamID == "" {
+		return false
+	}
+	if folderID == candidateChildID {
+		return true
+	}
+
+	curr := candidateChildID
+	// Bound iteration depth to prevent infinite loops in already-corrupted data
+	for i := 0; i < 50; i++ {
+		var parentID string
+		err := database.DB.QueryRow(`SELECT IFNULL(parent_id, '') FROM md_team_folders WHERE id=? AND team_id=?`, curr, teamID).Scan(&parentID)
+		if err != nil || parentID == "" {
+			return false
+		}
+		if parentID == folderID {
+			return true
+		}
+		curr = parentID
+	}
+	return false
+}
+
 // requireDoc ensures the document belongs to the caller's team and the caller
 // has at least need (read/write/admin). Missing documents are 404 so another
 // team's id cannot be distinguished from a typo.

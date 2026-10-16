@@ -151,9 +151,16 @@ func UpdateTeamFolder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	if req.ParentID != "" && !folderInTeam(teamID, req.ParentID) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "上级文件夹不存在"})
-		return
+	req.ParentID = strings.TrimSpace(req.ParentID)
+	if req.ParentID != "" {
+		if !folderInTeam(teamID, req.ParentID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "上级文件夹不存在"})
+			return
+		}
+		if isDescendantFolder(teamID, id, req.ParentID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "不能将文件夹移动到自身或其子文件夹下"})
+			return
+		}
 	}
 
 	_, err := database.DB.Exec(
@@ -178,13 +185,31 @@ func DeleteTeamFolder(c *gin.Context) {
 		denyNotFound(c, "文件夹不存在")
 		return
 	}
-	// Move documents in this folder to team root
-	database.DB.Exec(`UPDATE md_documents SET folder_id='' WHERE folder_id=? AND team_id=?`, id, teamID)
-	// Move sub-folders to root
-	database.DB.Exec(`UPDATE md_team_folders SET parent_id='' WHERE parent_id=? AND team_id=?`, id, teamID)
-	_, err := database.DB.Exec(`DELETE FROM md_team_folders WHERE id=? AND team_id=?`, id, teamID)
+
+	tx, err := database.DB.Begin()
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "启动事务失败: " + err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	// Move documents in this folder to team root
+	if _, err := tx.Exec(`UPDATE md_documents SET folder_id='' WHERE folder_id=? AND team_id=?`, id, teamID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	// Move sub-folders to root
+	if _, err := tx.Exec(`UPDATE md_team_folders SET parent_id='' WHERE parent_id=? AND team_id=?`, id, teamID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM md_team_folders WHERE id=? AND team_id=?`, id, teamID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "提交事务失败: " + err.Error()})
 		return
 	}
 
@@ -619,23 +644,38 @@ func TeamUpdateDocument(c *gin.Context) {
 	if !requireDoc(c, docID, "write", true) {
 		return
 	}
-	var req struct {
-		Title    *string `json:"title"`
-		FolderID *string `json:"folder_id"`
+	var rawReq struct {
+		Title    *string     `json:"title"`
+		FolderID interface{} `json:"folder_id"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&rawReq); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	if req.Title == nil && req.FolderID == nil {
+
+	var hasFolderID bool
+	var folderIDStr string
+	if rawReq.FolderID != nil {
+		hasFolderID = true
+		switch v := rawReq.FolderID.(type) {
+		case string:
+			folderIDStr = strings.TrimSpace(v)
+		case float64:
+			if int64(v) != 0 {
+				folderIDStr = fmt.Sprintf("%.0f", v)
+			}
+		}
+	}
+
+	if rawReq.Title == nil && !hasFolderID {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
 
 	userID := c.GetString("user_id")
 	teamID := getTeamID(c)
-	if req.Title != nil {
-		title := strings.TrimSpace(*req.Title)
+	if rawReq.Title != nil {
+		title := strings.TrimSpace(*rawReq.Title)
 		if title == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "标题不能为空"})
 			return
@@ -651,20 +691,20 @@ func TeamUpdateDocument(c *gin.Context) {
 			return
 		}
 	}
-	if req.FolderID != nil {
-		if *req.FolderID != "" && !folderInTeam(teamID, *req.FolderID) {
+	if hasFolderID {
+		if folderIDStr != "" && !folderInTeam(teamID, folderIDStr) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "文件夹不存在"})
 			return
 		}
 		if _, err := database.DB.Exec(
 			`UPDATE md_documents SET folder_id=?, updated_by=? WHERE id=? AND team_id=?`,
-			*req.FolderID, userID, docID, teamID); err != nil {
+			folderIDStr, userID, docID, teamID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		var title string
 		database.DB.QueryRow(`SELECT title FROM md_documents WHERE id=? AND team_id=?`, docID, teamID).Scan(&title)
-		audit(c, "move", "document", docID, title, fmt.Sprintf(`{"folder_id":"%s"}`, *req.FolderID))
+		audit(c, "move", "document", docID, title, fmt.Sprintf(`{"folder_id":"%s"}`, folderIDStr))
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "已更新"})
 }
