@@ -1307,6 +1307,8 @@ function handleWikiLinkTrigger(match: WikiLinkMatch | null, coords?: { left: num
 function searchDocsForWikiLink(q: string) {
   clearTimeout(wikiSearchTimer!)
   wikiLinkState.loading = true
+  // 一触发就弹浮层,让 loading 和空结果(未找到)都看得见
+  wikiLinkState.show = true
   wikiSearchTimer = setTimeout(async () => {
     try {
       const params: any = {}
@@ -1319,10 +1321,11 @@ function searchDocsForWikiLink(q: string) {
       }))
       wikiLinkState.results = list.slice(0, 8)
       wikiLinkState.selectedIndex = 0
-      wikiLinkState.show = wikiLinkState.results.length > 0
+      wikiLinkState.show = true
     } catch {
       wikiLinkState.results = []
-      wikiLinkState.show = false
+      // 网络错误也保留浮层,提示暂无结果而非直接消失
+      wikiLinkState.show = true
     } finally {
       wikiLinkState.loading = false
     }

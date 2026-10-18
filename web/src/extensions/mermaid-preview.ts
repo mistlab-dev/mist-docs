@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import DOMPurify from 'dompurify'
 import { renderMermaidSvg } from '../utils/mermaid'
 
 const mermaidPluginKey = new PluginKey('mermaid-preview')
@@ -14,25 +15,43 @@ function createMermaidWidget(source: string): HTMLElement {
   container.setAttribute('contenteditable', 'false')
 
   if (!source.trim()) {
-    container.innerHTML = '<div class="mermaid-empty">Mermaid: 请输入图表语法</div>'
+    const empty = document.createElement('div')
+    empty.className = 'mermaid-empty'
+    empty.textContent = 'Mermaid: 请输入图表语法'
+    container.appendChild(empty)
     return container
   }
 
   const cached = svgCache.get(source)
   if (cached) {
-    container.innerHTML = `<div class="mermaid-svg-wrapper">${cached}</div>`
+    const wrapper = document.createElement('div')
+    wrapper.className = 'mermaid-svg-wrapper'
+    wrapper.innerHTML = DOMPurify.sanitize(cached)
+    container.appendChild(wrapper)
     return container
   }
 
-  container.innerHTML = '<div class="mermaid-loading">正在渲染图表...</div>'
+  const loading = document.createElement('div')
+  loading.className = 'mermaid-loading'
+  loading.textContent = '正在渲染图表...'
+  container.appendChild(loading)
 
   renderMermaidSvg(source)
     .then((svg) => {
       svgCache.set(source, svg)
-      container.innerHTML = `<div class="mermaid-svg-wrapper">${svg}</div>`
+      container.innerHTML = ''
+      const wrapper = document.createElement('div')
+      wrapper.className = 'mermaid-svg-wrapper'
+      wrapper.innerHTML = DOMPurify.sanitize(svg)
+      container.appendChild(wrapper)
     })
     .catch((err) => {
-      container.innerHTML = `<div class="mermaid-error">图表渲染失败: ${err?.message || err}</div>`
+      // 错误信息用 textContent 渲染，避免异常文本本身携带的标记被当 HTML 解析
+      container.innerHTML = ''
+      const errorDiv = document.createElement('div')
+      errorDiv.className = 'mermaid-error'
+      errorDiv.textContent = `图表渲染失败: ${err?.message || err}`
+      container.appendChild(errorDiv)
     })
 
   return container

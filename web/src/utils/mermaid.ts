@@ -7,7 +7,9 @@ export function initMermaid() {
   mermaid.initialize({
     startOnLoad: false,
     theme: 'default',
-    securityLevel: 'loose',
+    // strict: 图表内容来自协作文档，队友可写入。strict 禁止脚本并过滤
+    // javascript: 链接，避免图表源码携带的 XSS 影响其他协作者。
+    securityLevel: 'strict',
     fontFamily: 'inherit',
   })
   initialized = true
