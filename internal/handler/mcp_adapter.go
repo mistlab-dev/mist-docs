@@ -9,8 +9,8 @@ import (
 // internal/mcp stays free of the service package.
 type mcpStore struct{ inner service.MCPStore }
 
-func (s mcpStore) SearchDocuments(teamID, keyword string, limit int) ([]mcp.DocHit, error) {
-	hits, err := s.inner.SearchDocuments(teamID, keyword, limit)
+func (s mcpStore) SearchDocuments(teamID, userID, keyword string, limit int) ([]mcp.DocHit, error) {
+	hits, err := s.inner.SearchDocuments(teamID, userID, keyword, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -21,8 +21,8 @@ func (s mcpStore) SearchDocuments(teamID, keyword string, limit int) ([]mcp.DocH
 	return out, nil
 }
 
-func (s mcpStore) RecentDocuments(teamID string, limit int) ([]mcp.DocMeta, error) {
-	docs, err := s.inner.RecentDocuments(teamID, limit)
+func (s mcpStore) RecentDocuments(teamID, userID string, limit int) ([]mcp.DocMeta, error) {
+	docs, err := s.inner.RecentDocuments(teamID, userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +50,10 @@ func (s mcpStore) CreateDocument(teamID, title, folderID, content, userID string
 
 func (s mcpStore) CanRead(teamID, docID, userID string) (bool, error) {
 	return s.inner.CanRead(teamID, docID, userID)
+}
+
+func (s mcpStore) CanCreate(teamID, userID string) (bool, string, error) {
+	return s.inner.CanCreate(teamID, userID)
 }
 
 func (s mcpStore) IsMember(teamID, userID string) (bool, error) {

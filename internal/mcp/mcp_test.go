@@ -33,9 +33,13 @@ func (f *fakeStore) IsMember(teamID, userID string) (bool, error) {
 	return f.member[teamID+":"+userID], nil
 }
 
-func (f *fakeStore) SearchDocuments(teamID, keyword string, limit int) ([]DocHit, error) {
+func (f *fakeStore) SearchDocuments(teamID, userID, keyword string, limit int) ([]DocHit, error) {
 	var out []DocHit
 	for _, d := range f.docs[teamID] {
+		can, _ := f.CanRead(teamID, d.ID, userID)
+		if !can {
+			continue
+		}
 		if strings.Contains(d.Title, keyword) || strings.Contains(d.Content, keyword) {
 			out = append(out, DocHit{ID: d.ID, Title: d.Title, Excerpt: d.Content})
 			if len(out) >= limit {
@@ -46,9 +50,13 @@ func (f *fakeStore) SearchDocuments(teamID, keyword string, limit int) ([]DocHit
 	return out, nil
 }
 
-func (f *fakeStore) RecentDocuments(teamID string, limit int) ([]DocMeta, error) {
+func (f *fakeStore) RecentDocuments(teamID, userID string, limit int) ([]DocMeta, error) {
 	var out []DocMeta
 	for _, d := range f.docs[teamID] {
+		can, _ := f.CanRead(teamID, d.ID, userID)
+		if !can {
+			continue
+		}
 		out = append(out, DocMeta{ID: d.ID, Title: d.Title, UpdatedAt: d.UpdatedAt})
 		if len(out) >= limit {
 			break
@@ -73,9 +81,23 @@ func (f *fakeStore) CreateDocument(teamID, title, folderID, content, userID stri
 	return id, nil
 }
 
+func (f *fakeStore) CanCreate(teamID, userID string) (bool, string, error) {
+	ok, _ := f.IsMember(teamID, userID)
+	if !ok {
+		return false, "not a member", nil
+	}
+	if userID == "viewer_user" {
+		return false, "editor or admin role required to create documents", nil
+	}
+	return true, "", nil
+}
+
 func (f *fakeStore) CanRead(teamID, docID, userID string) (bool, error) {
 	ok, _ := f.IsMember(teamID, userID)
 	if !ok {
+		return false, nil
+	}
+	if docID == "secret_doc" && userID != "admin_user" {
 		return false, nil
 	}
 	_, found, _ := f.ReadDocument(teamID, docID)
@@ -317,5 +339,45 @@ func TestInvalidJSONRPCVersion(t *testing.T) {
 	}
 	if int(errObj["code"].(float64)) != -32600 {
 		t.Fatalf("code = %v, want -32600", errObj["code"])
+	}
+}
+
+func TestCreateDocRejectsViewer(t *testing.T) {
+	f := newFake()
+	f.member["t1:viewer_user"] = true
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("user_id", "viewer_user") })
+	r.POST("/api/mcp", New(f).Serve)
+
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":101,"method":"tools/call","params":{"name":"create_doc","arguments":{"team_id":"t1","title":"未授权创建"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	if result["isError"] != true {
+		t.Fatalf("expected isError for viewer creating doc, got %v", result)
+	}
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "editor or admin role required") {
+		t.Fatalf("expected role error, got text = %q", text)
+	}
+}
+
+func TestSearchDocsFiltersUnreadable(t *testing.T) {
+	f := newFake()
+	f.docs["t1"] = append(f.docs["t1"], DocContent{
+		ID:      "secret_doc",
+		Title:   "机密运维指南",
+		Content: "超级密码",
+	})
+	r := newServer(f) // user_id is u1, cannot read secret_doc
+
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":102,"method":"tools/call","params":{"name":"search_docs","arguments":{"team_id":"t1","query":"机密"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	content, _ := result["content"].([]any)
+	text := content[0].(map[string]any)["text"].(string)
+	if strings.Contains(text, "secret_doc") || strings.Contains(text, "机密运维指南") {
+		t.Fatalf("search_docs leaked secret_doc: %q", text)
+	}
+	if !strings.Contains(text, "No documents matched") {
+		t.Fatalf("expected no matched documents, got %q", text)
 	}
 }

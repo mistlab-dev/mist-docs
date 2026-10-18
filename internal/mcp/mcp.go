@@ -47,10 +47,11 @@ const (
 // the shared database layer and stubbed in tests.
 type Store interface {
 	// SearchDocuments returns up to limit documents of teamID whose title or
-	// body contains keyword, newest first.
-	SearchDocuments(teamID, keyword string, limit int) ([]DocHit, error)
-	// RecentDocuments returns up to limit recently updated documents.
-	RecentDocuments(teamID string, limit int) ([]DocMeta, error)
+	// body contains keyword and that userID is permitted to read, newest first.
+	SearchDocuments(teamID, userID, keyword string, limit int) ([]DocHit, error)
+	// RecentDocuments returns up to limit recently updated documents that userID
+	// is permitted to read.
+	RecentDocuments(teamID, userID string, limit int) ([]DocMeta, error)
 	// ReadDocument returns the document body plus metadata. The second result
 	// is false when the document does not exist, is soft-deleted, or belongs
 	// to another team.
@@ -59,6 +60,9 @@ type Store interface {
 	CreateDocument(teamID, title, folderID, content, userID string) (string, error)
 	// CanRead reports whether userID may read docID inside teamID.
 	CanRead(teamID, docID, userID string) (bool, error)
+	// CanCreate reports whether userID is allowed to create documents in teamID
+	// (must have editor/admin role and not exceed plan document limit).
+	CanCreate(teamID, userID string) (bool, string, error)
 	// IsMember reports whether userID belongs to teamID.
 	IsMember(teamID, userID string) (bool, error)
 }
@@ -223,7 +227,7 @@ func (h *Handler) toolsCall(c *gin.Context, req jsonrpcRequest, userID string) {
 
 	switch params.Name {
 	case "search_docs":
-		h.toolSearch(c, req.ID, teamID, args)
+		h.toolSearch(c, req.ID, teamID, userID, args)
 	case "read_doc":
 		h.toolRead(c, req.ID, teamID, userID, args)
 	case "create_doc":
@@ -233,7 +237,7 @@ func (h *Handler) toolsCall(c *gin.Context, req jsonrpcRequest, userID string) {
 	}
 }
 
-func (h *Handler) toolSearch(c *gin.Context, id json.RawMessage, teamID string, args map[string]any) {
+func (h *Handler) toolSearch(c *gin.Context, id json.RawMessage, teamID, userID string, args map[string]any) {
 	query, _ := args["query"].(string)
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -250,7 +254,7 @@ func (h *Handler) toolSearch(c *gin.Context, id json.RawMessage, teamID string, 
 		}
 	}
 
-	hits, err := h.store.SearchDocuments(teamID, query, limit)
+	hits, err := h.store.SearchDocuments(teamID, userID, query, limit)
 	if err != nil {
 		writeToolError(c, id, "search failed: "+err.Error())
 		return
@@ -305,6 +309,19 @@ func (h *Handler) toolRead(c *gin.Context, id json.RawMessage, teamID, userID st
 }
 
 func (h *Handler) toolCreate(c *gin.Context, id json.RawMessage, teamID, userID string, args map[string]any) {
+	can, reason, err := h.store.CanCreate(teamID, userID)
+	if err != nil {
+		writeToolError(c, id, "permission check failed: "+err.Error())
+		return
+	}
+	if !can {
+		if reason == "" {
+			reason = "editor or admin role required to create documents"
+		}
+		writeToolError(c, id, reason)
+		return
+	}
+
 	title, _ := args["title"].(string)
 	title = strings.TrimSpace(title)
 	if title == "" {
@@ -361,7 +378,7 @@ func (h *Handler) resourcesRead(c *gin.Context, req jsonrpcRequest, userID strin
 		writeError(c, req.ID, -32001, "not a member of team "+teamID)
 		return
 	}
-	docs, err := h.store.RecentDocuments(teamID, 20)
+	docs, err := h.store.RecentDocuments(teamID, userID, 20)
 	if err != nil {
 		writeError(c, req.ID, -32002, "read failed: "+err.Error())
 		return
@@ -473,7 +490,7 @@ func tools() []map[string]any {
 		},
 		{
 			"name":        "create_doc",
-			"description": "Create a new document in the team, e.g. to file an incident write-up or an operational note after a change. Returns the new document id.",
+			"description": "Create a new document in the team, e.g. to file an incident write-up or an operational note after a change. Requires editor or admin role. Returns the new document id.",
 			"inputSchema": map[string]any{
 				"type":     "object",
 				"properties": map[string]any{
