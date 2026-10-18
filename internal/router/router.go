@@ -16,6 +16,9 @@ func RegisterAPI(r gin.IRouter) {
 		// 公开
 		api.POST("/auth/login", handler.Login)
 		api.GET("/openapi.json", handler.APIDocs)
+		// MCP endpoint for AI agents. Same JWT and team-membership model as the
+		// REST API; tools are scoped per-call by team_id in the request.
+		api.POST("/mcp", middleware.JWTAuth(), handler.MCPServe)
 		// 文档内图片：带签名的公开地址（<img> 与分享页无法带登录头）
 		api.GET("/media/:team_id/:filename", handler.PublicGetMedia)
 

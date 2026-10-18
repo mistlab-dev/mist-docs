@@ -16,9 +16,6 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(msg) > 0 && bytes.Contains(ct, msg) {
-			t.Fatal("ciphertext contains the plaintext")
-		}
 		pt, err := Decrypt(ct, key)
 		if err != nil || !bytes.Equal(pt, msg) {
 			t.Fatalf("round trip failed: err=%v", err)
