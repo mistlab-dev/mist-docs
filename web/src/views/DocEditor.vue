@@ -228,6 +228,32 @@
             <div class="flag-line" :style="{ background: c.color }"></div>
           </div>
         </div>
+
+        <!-- WikiLink [[ 浮动联想下拉菜单 -->
+        <div
+          v-if="wikiLinkState.show"
+          class="wikilink-dropdown"
+          :style="{ left: wikiLinkState.x + 'px', top: wikiLinkState.y + 'px' }"
+        >
+          <div v-if="wikiLinkState.loading" class="wikilink-loading">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            <span>搜索中...</span>
+          </div>
+          <template v-else-if="wikiLinkState.results.length">
+            <div
+              v-for="(item, idx) in wikiLinkState.results"
+              :key="item.id"
+              class="wikilink-item"
+              :class="{ selected: idx === wikiLinkState.selectedIndex }"
+              @mousedown.prevent="insertWikiDocLink(item)"
+            >
+              <span class="wikilink-item-icon">📄</span>
+              <span class="wikilink-item-title">{{ item.title || t('docEditor.fragUntitled') }}</span>
+              <span class="wikilink-item-type">{{ item.type === 'sheet' ? t('common.sheet') : t('common.doc') }}</span>
+            </div>
+          </template>
+          <div v-else class="wikilink-empty">未找到相关文档</div>
+        </div>
       </div>
       <!-- 大纲导航 -->
       <div class="outline-panel" :class="{ collapsed: outlineCollapsed }">
@@ -767,6 +793,8 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Collaboration from '@tiptap/extension-collaboration'
+import { MermaidPreview } from '@/extensions/mermaid-preview'
+import { WikiLink, type WikiLinkMatch } from '@/extensions/wikilink'
 import { ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { common, createLowlight } from 'lowlight'
 import 'highlight.js/styles/github-dark.min.css'
@@ -1242,6 +1270,92 @@ function sheetDiff(oldJson: string, newJson: string): string {
 const linkDialog = reactive({ show: false, text: '', url: '', results: [] as {id: string; title: string; type: string}[] })
 let linkSearchTimer: ReturnType<typeof setTimeout> | null = null
 
+// === 双向链接（[[ WikiLink ）联想输入 ===
+const wikiLinkState = reactive({
+  show: false,
+  query: '',
+  from: 0,
+  to: 0,
+  loading: false,
+  x: 0,
+  y: 0,
+  results: [] as { id: string; title: string; type: string }[],
+  selectedIndex: 0,
+})
+
+let wikiSearchTimer: ReturnType<typeof setTimeout> | null = null
+
+function handleWikiLinkTrigger(match: WikiLinkMatch | null, coords?: { left: number; top: number; bottom: number }) {
+  if (!match) {
+    wikiLinkState.show = false
+    wikiLinkState.results = []
+    return
+  }
+
+  wikiLinkState.from = match.from
+  wikiLinkState.to = match.to
+  wikiLinkState.query = match.query
+
+  if (coords) {
+    wikiLinkState.x = coords.left
+    wikiLinkState.y = coords.bottom + 6
+  }
+
+  searchDocsForWikiLink(match.query)
+}
+
+function searchDocsForWikiLink(q: string) {
+  clearTimeout(wikiSearchTimer!)
+  wikiLinkState.loading = true
+  wikiSearchTimer = setTimeout(async () => {
+    try {
+      const params: any = {}
+      if (q) params.q = q
+      const { data } = await teamApi.get('/documents/search', { params })
+      const list = (data.data || []).map((d: any) => ({
+        id: d.id,
+        title: d.title,
+        type: d.type,
+      }))
+      wikiLinkState.results = list.slice(0, 8)
+      wikiLinkState.selectedIndex = 0
+      wikiLinkState.show = wikiLinkState.results.length > 0
+    } catch {
+      wikiLinkState.results = []
+      wikiLinkState.show = false
+    } finally {
+      wikiLinkState.loading = false
+    }
+  }, 200)
+}
+
+function insertWikiDocLink(item: { id: string; title: string }) {
+  if (!editor.value) return
+  const url = `${window.location.origin}/docs/${item.id}`
+  const title = item.title || t('docEditor.fragUntitled')
+
+  // Replace `[[query` with the link markdown text
+  editor.value
+    .chain()
+    .focus()
+    .deleteRange({ from: wikiLinkState.from, to: wikiLinkState.to })
+    .insertContent([
+      {
+        type: 'text',
+        marks: [{ type: 'link', attrs: { href: url } }],
+        text: title,
+      },
+      {
+        type: 'text',
+        text: ' ',
+      },
+    ])
+    .run()
+
+  wikiLinkState.show = false
+  wikiLinkState.results = []
+}
+
 function searchDocsForLink() {
   clearTimeout(linkSearchTimer!)
   const q = linkDialog.url.trim()
@@ -1462,6 +1576,10 @@ function initEditor(initialContent: string) {
           TableCell,
           TableHeader,
           CodeBlockLowlight.configure({ lowlight }),
+          MermaidPreview,
+          WikiLink.configure({
+            onTrigger: handleWikiLinkTrigger,
+          }),
           Collaboration.configure({
             document: ydoc,
           }),
@@ -1596,6 +1714,10 @@ function createLocalEditor(content: string) {
       TableCell,
       TableHeader,
       CodeBlockLowlight.configure({ lowlight }),
+      MermaidPreview,
+      WikiLink.configure({
+        onTrigger: handleWikiLinkTrigger,
+      }),
     ],
     editorProps: {
       attributes: { class: 'prose prose-lg focus:outline-none max-w-none' },
@@ -2471,4 +2593,93 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .share-link-badge { font-size: 11px; }
 .share-link-badge.expired { color: var(--md-danger); }
 .share-link-count { color: var(--md-text-dim); font-size: 12px; }
+
+/* WikiLink 浮动联想下拉 */
+.wikilink-dropdown {
+  position: absolute;
+  z-index: 999;
+  width: 260px;
+  background: var(--md-bg-card, #fff);
+  border: 1px solid var(--md-border-strong, #dcdfe6);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 4px 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.wikilink-loading,
+.wikilink-empty {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--md-text-dim, #909399);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wikilink-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.wikilink-item:hover,
+.wikilink-item.selected {
+  background: var(--md-active-ep, #f5f7fa);
+}
+.wikilink-item-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.wikilink-item-title {
+  flex: 1;
+  font-size: 13px;
+  color: var(--md-text, #303133);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wikilink-item-type {
+  font-size: 11px;
+  color: var(--md-text-dim, #909399);
+  flex-shrink: 0;
+}
+
+/* Mermaid 流程图/时序图预览 Widget (ProseMirror Widget Decoration) */
+:deep(.mermaid-preview-widget) {
+  margin: 12px 0 16px;
+  padding: 16px;
+  background: var(--md-bg-subtle, #f8f9fa);
+  border: 1px solid var(--md-border-light, #e4e7ed);
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+:deep(.mermaid-svg-wrapper) {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+:deep(.mermaid-svg-wrapper svg) {
+  max-width: 100%;
+  height: auto;
+}
+:deep(.mermaid-loading) {
+  font-size: 12px;
+  color: var(--md-text-dim, #909399);
+  padding: 8px 0;
+}
+:deep(.mermaid-error) {
+  font-size: 12px;
+  color: var(--md-danger, #f56c6c);
+  padding: 6px 10px;
+  background: rgba(245, 108, 108, 0.08);
+  border-radius: 4px;
+}
+:deep(.mermaid-empty) {
+  font-size: 12px;
+  color: var(--md-text-dim, #909399);
+}
 </style>
