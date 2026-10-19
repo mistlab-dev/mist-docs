@@ -740,7 +740,7 @@
           <div class="comment-content">{{ c.content }}</div>
           <div class="comment-actions">
             <el-button v-if="canComment && !c.resolved_at" link size="small" @click="replyTo(c)">{{ t('docEditor.replyBtn') }}</el-button>
-            <el-button v-if="canResolveComment(c)" link size="small" type="primary" @click="toggleResolve(c)">
+            <el-button v-if="canResolveComment(c)" link size="small" type="primary" :loading="resolvingIds.has(c.id)" :disabled="resolvingIds.has(c.id)" @click="toggleResolve(c)">
               {{ c.resolved_at ? t('docEditor.unresolveBtn') : t('docEditor.resolveBtn') }}
             </el-button>
             <el-button v-if="c.user_id === currentUserId" link type="danger" size="small" @click="deleteComment(c.id)">{{ t('common.delete') }}</el-button>
@@ -2299,7 +2299,13 @@ function canResolveComment(c: any) {
   return c.user_id === currentUserId.value || isTeamAdmin.value
 }
 
+// 正在切换 resolve 状态的评论 id。请求期间禁用按钮：连点两次 toggle 会把
+// 状态切回原点，且两次并发 UPDATE 可能交错写库。
+const resolvingIds = ref(new Set<string>())
+
 async function toggleResolve(c: any) {
+  if (resolvingIds.value.has(c.id)) return
+  resolvingIds.value.add(c.id)
   try {
     const { data } = await teamApi.post(`/comments/${c.id}/resolve`)
     c.resolved_at = data.data?.resolved_at || ''
@@ -2309,6 +2315,8 @@ async function toggleResolve(c: any) {
     ElMessage.success(c.resolved_at ? t('docEditor.resolvedTag') : t('common.updateSuccess'))
   } catch (e: any) {
     ElMessage.error(e.response?.data?.error || t('common.networkError'))
+  } finally {
+    resolvingIds.value.delete(c.id)
   }
 }
 
