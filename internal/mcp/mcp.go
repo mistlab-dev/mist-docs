@@ -65,6 +65,20 @@ type Store interface {
 	CanCreate(teamID, userID string) (bool, string, error)
 	// IsMember reports whether userID belongs to teamID.
 	IsMember(teamID, userID string) (bool, error)
+	// CanWrite reports whether userID may edit docID inside teamID, mirroring
+	// the REST requireDoc("write") gate. The string result explains a denial.
+	CanWrite(teamID, docID, userID string) (bool, string, error)
+	// UpdateDocument writes new title and/or content to docID using the same
+	// version-bucket path as REST, returning the new version. Title-only calls
+	// leave content untouched.
+	UpdateDocument(teamID, docID, title, content string, hasTitle, hasContent bool, userID string) (int, error)
+	// IsLockConflict reports whether err means someone else holds the doc lock.
+	IsLockConflict(err error) bool
+	// ListDocuments returns documents of teamID filtered by folderID / docType /
+	// tag (any may be empty) with limit/offset paging, ACL-filtered.
+	ListDocuments(teamID, userID, folderID, docType, tag string, limit, offset int) ([]DocMeta, int, error)
+	// SearchDocContent performs paragraph search with excerpts, ACL-filtered.
+	SearchDocContent(teamID, userID, keyword string, limit int) ([]DocHit, error)
 }
 
 // DocHit is one search result.
@@ -79,7 +93,10 @@ type DocMeta struct {
 	ID        string `json:"id"`
 	Title     string `json:"title"`
 	Type      string `json:"type,omitempty"`
+	FolderID  string `json:"folder_id,omitempty"`
 	UpdatedAt string `json:"updated_at,omitempty"`
+	Version   int    `json:"version,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
 }
 
 // DocContent is a full document.
@@ -232,6 +249,12 @@ func (h *Handler) toolsCall(c *gin.Context, req jsonrpcRequest, userID string) {
 		h.toolRead(c, req.ID, teamID, userID, args)
 	case "create_doc":
 		h.toolCreate(c, req.ID, teamID, userID, args)
+	case "update_doc":
+		h.toolUpdate(c, req.ID, teamID, userID, args)
+	case "list_docs":
+		h.toolList(c, req.ID, teamID, userID, args)
+	case "search_doc_content":
+		h.toolSearchContent(c, req.ID, teamID, userID, args)
 	default:
 		writeError(c, req.ID, -32602, "unknown tool: "+params.Name)
 	}
@@ -346,6 +369,170 @@ func (h *Handler) toolCreate(c *gin.Context, id json.RawMessage, teamID, userID 
 		return
 	}
 	writeText(c, id, fmt.Sprintf("Created document %q (id: %s) in team %s.", title, docID, teamID))
+}
+
+// toolUpdate edits a document's title and/or content. Permission is checked
+// through the same ACL path as REST PUT /documents/:id(/content), so viewer
+// tokens are rejected here too. At least one of title/content is required.
+func (h *Handler) toolUpdate(c *gin.Context, id json.RawMessage, teamID, userID string, args map[string]any) {
+	docID, _ := args["doc_id"].(string)
+	docID = strings.TrimSpace(docID)
+	if docID == "" {
+		writeToolError(c, id, "doc_id is required")
+		return
+	}
+	if len(docID) > maxDocIDLen {
+		writeToolError(c, id, "doc_id is too long")
+		return
+	}
+
+	titleRaw, hasTitle := args["title"]
+	contentRaw, hasContent := args["content"]
+	if !hasTitle && !hasContent {
+		writeToolError(c, id, "at least one of title or content is required")
+		return
+	}
+	var title, content string
+	if hasTitle {
+		title, _ = titleRaw.(string)
+		title = strings.TrimSpace(title)
+		if title == "" {
+			writeToolError(c, id, "title must not be empty")
+			return
+		}
+		if len([]rune(title)) > 200 {
+			writeToolError(c, id, "title must be at most 200 characters")
+			return
+		}
+	}
+	if hasContent {
+		content, _ = contentRaw.(string)
+	}
+
+	// Same gate as REST requireDoc("write"): membership + document ACL.
+	if can, reason, err := h.store.CanWrite(teamID, docID, userID); err != nil {
+		writeToolError(c, id, "permission check failed: "+err.Error())
+		return
+	} else if !can {
+		if reason == "" {
+			reason = "document not found or not writable"
+		}
+		writeToolError(c, id, reason)
+		return
+	}
+
+	version, err := h.store.UpdateDocument(teamID, docID, title, content, hasTitle, hasContent, userID)
+	if err != nil {
+		if h.store.IsLockConflict(err) {
+			writeToolError(c, id,
+				"document is locked by another user; ask them to unlock, or edit it from the web UI")
+			return
+		}
+		writeToolError(c, id, "update failed: "+err.Error())
+		return
+	}
+	updated := []string{}
+	if hasTitle {
+		updated = append(updated, "title")
+	}
+	if hasContent {
+		updated = append(updated, "content")
+	}
+	writeText(c, id, fmt.Sprintf("Updated %s of document %s (id: %s), version %d.",
+		strings.Join(updated, " and "), strconv.Quote(title), docID, version))
+}
+
+// toolList pages through team documents with optional folder/type/tag filters.
+func (h *Handler) toolList(c *gin.Context, id json.RawMessage, teamID, userID string, args map[string]any) {
+	limit := 20
+	if raw, ok := args["limit"]; ok {
+		if n, err := toInt(raw); err == nil && n > 0 && n <= 50 {
+			limit = n
+		}
+	}
+	page := 1
+	if raw, ok := args["page"]; ok {
+		if n, err := toInt(raw); err == nil && n > 0 {
+			page = n
+		}
+	}
+	folderID, _ := args["folder_id"].(string)
+	docType, _ := args["type"].(string)
+	tag, _ := args["tag"].(string)
+	folderID = strings.TrimSpace(folderID)
+	if len(folderID) > maxDocIDLen {
+		writeToolError(c, id, "folder_id is too long")
+		return
+	}
+
+	docs, total, err := h.store.ListDocuments(
+		teamID, userID, strings.TrimSpace(folderID), strings.TrimSpace(docType),
+		strings.TrimSpace(tag), limit, (page-1)*limit)
+	if err != nil {
+		writeToolError(c, id, "list failed: "+err.Error())
+		return
+	}
+	if len(docs) == 0 {
+		writeText(c, id, "No documents matched (total "+strconv.Itoa(total)+").")
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d of %d document(s) (page %d):\n", len(docs), total, page)
+	for _, d := range docs {
+		fmt.Fprintf(&b, "\n- %s (id: %s", d.Title, d.ID)
+		if d.Type != "" {
+			fmt.Fprintf(&b, ", type: %s", d.Type)
+		}
+		if d.FolderID != "" {
+			fmt.Fprintf(&b, ", folder: %s", d.FolderID)
+		}
+		if d.UpdatedAt != "" {
+			fmt.Fprintf(&b, ", updated: %s", d.UpdatedAt)
+		}
+		b.WriteString(")")
+	}
+	b.WriteString("\n\nUse read_doc with an id above to fetch content.")
+	writeText(c, id, b.String())
+}
+
+// toolSearchContent is the paragraph search: hits inside document bodies with
+// a plain-text excerpt window, unlike search_docs which matches whole bodies.
+func (h *Handler) toolSearchContent(c *gin.Context, id json.RawMessage, teamID, userID string, args map[string]any) {
+	query, _ := args["query"].(string)
+	query = strings.TrimSpace(query)
+	if query == "" {
+		writeToolError(c, id, "query is required")
+		return
+	}
+	if len(query) > maxQueryLen {
+		query = query[:maxQueryLen]
+	}
+	limit := 10
+	if raw, ok := args["limit"]; ok {
+		if n, err := toInt(raw); err == nil && n > 0 && n <= 20 {
+			limit = n
+		}
+	}
+
+	hits, err := h.store.SearchDocContent(teamID, userID, query, limit)
+	if err != nil {
+		writeToolError(c, id, "paragraph search failed: "+err.Error())
+		return
+	}
+	if len(hits) == 0 {
+		writeText(c, id, "No paragraphs matched "+strconv.Quote(query)+".")
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d paragraph(s) matched %s:\n", len(hits), strconv.Quote(query))
+	for _, d := range hits {
+		fmt.Fprintf(&b, "\n- %s (id: %s)", d.Title, d.ID)
+		if d.Excerpt != "" {
+			fmt.Fprintf(&b, "\n  %s", oneLine(d.Excerpt))
+		}
+	}
+	b.WriteString("\n\nUse read_doc with an id above to fetch full content.")
+	writeText(c, id, b.String())
 }
 
 // resourcesRead serves docs://recent.
@@ -500,6 +687,49 @@ func tools() []map[string]any {
 					"folder_id": strProp("Optional folder id. Omit to place at the team root."),
 				},
 				"required": required("team_id", "title"),
+			},
+		},
+		{
+			"name": "update_doc",
+			"description": "Edit an existing document's title and/or content. Requires write permission on that document (owner/admin/editor role, or an explicit write grant) — viewer tokens are rejected, same rule as the REST API. Sending only title renames without touching content; sending only content rewrites the body. Creates a new version. Documents locked by another user are rejected.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"team_id":  teamProp,
+					"doc_id":   strProp("Document id to update, from search_docs, list_docs or read_doc."),
+					"title":    strProp("New title, up to 200 characters. Omit to keep the current title."),
+					"content":  strProp("Full replacement body for the document. Omit to keep the current content."),
+				},
+				"required": required("team_id", "doc_id"),
+			},
+		},
+		{
+			"name":        "list_docs",
+			"description": "List this team's documents with optional folder/type/tag filters, paged. Only documents you can read are returned. Use this to browse a folder or enumerate the knowledge base; use search_docs to find documents by keyword.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"team_id":   teamProp,
+					"folder_id": strProp("Only documents in this folder. Omit for the team root."),
+					"type":      strProp("Only documents of this type (e.g. doc, sheet). Omit for all types."),
+					"tag":       strProp("Only documents carrying this tag name. Omit for all tags."),
+					"limit":     map[string]any{"type": "integer", "description": "Page size (1-50, default 20)."},
+					"page":      map[string]any{"type": "integer", "description": "Page number, 1-based (default 1)."},
+				},
+				"required": required("team_id"),
+			},
+		},
+		{
+			"name": "search_doc_content",
+			"description": "Paragraph-level search inside document bodies: returns the documents whose title or body contain the keyword together with a plain-text excerpt window around the hit. Cheaper than search_docs for locating the exact section; follow up with read_doc for full content.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"team_id": teamProp,
+					"query":   strProp("Keyword to find inside documents. Up to 512 characters."),
+					"limit":   map[string]any{"type": "integer", "description": "Max results (1-20, default 10)."},
+				},
+				"required": required("team_id", "query"),
 			},
 		},
 	}

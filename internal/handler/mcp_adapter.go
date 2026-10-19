@@ -60,4 +60,43 @@ func (s mcpStore) IsMember(teamID, userID string) (bool, error) {
 	return s.inner.IsMember(teamID, userID)
 }
 
+func (s mcpStore) CanWrite(teamID, docID, userID string) (bool, string, error) {
+	return s.inner.CanWrite(teamID, docID, userID)
+}
+
+func (s mcpStore) UpdateDocument(teamID, docID, title, content string, hasTitle, hasContent bool, userID string) (int, error) {
+	return s.inner.UpdateDocument(teamID, docID, title, content, hasTitle, hasContent, userID)
+}
+
+func (s mcpStore) IsLockConflict(err error) bool {
+	return service.IsLockConflict(err)
+}
+
+func (s mcpStore) ListDocuments(teamID, userID, folderID, docType, tag string, limit, offset int) ([]mcp.DocMeta, int, error) {
+	docs, total, err := s.inner.ListDocuments(teamID, userID, folderID, docType, tag, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]mcp.DocMeta, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, mcp.DocMeta{
+			ID: d.ID, Title: d.Title, Type: d.Type,
+			FolderID: d.FolderID, Version: d.Version, UpdatedAt: d.UpdatedAt,
+		})
+	}
+	return out, total, nil
+}
+
+func (s mcpStore) SearchDocContent(teamID, userID, keyword string, limit int) ([]mcp.DocHit, error) {
+	hits, err := s.inner.SearchDocContent(teamID, userID, keyword, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]mcp.DocHit, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, mcp.DocHit{ID: h.ID, Title: h.Title, Excerpt: h.Excerpt})
+	}
+	return out, nil
+}
+
 var _ mcp.Store = mcpStore{}
