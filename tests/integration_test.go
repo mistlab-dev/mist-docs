@@ -1210,6 +1210,57 @@ func TestSearchFullTextContent(t *testing.T) {
 	if !ok || len(data) == 0 {
 		t.Errorf("should find doc by content text, got: %v", resp)
 	}
+
+	// 1. 验证含英文常用字母/停用词（a/i）的英文关键词不会被 ngram 停用词表吃掉（走纯 LIKE 路径）
+	stopwordKeyword := "api_config_mail_" + fmt.Sprintf("%d", time.Now().UnixNano())
+	w = request("PUT", teamPath("/documents/"+docID+"/content"), map[string]interface{}{
+		"content": "<p>important data about " + stopwordKeyword + " settings</p>",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("save stopword content failed: %d", w.Code)
+	}
+	w = request("GET", teamPath("/documents/search?q="+stopwordKeyword), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("search stopword failed: %d", w.Code)
+	}
+	resp = parseJSON(t, w)
+	data, _ = resp["data"].([]interface{})
+	if len(data) == 0 {
+		t.Errorf("English keyword containing stopwords like a/i should be found via LIKE, got: %v", resp)
+	}
+
+	// 2. 验证中文 MATCH 有真实命中（走 ft_content_ngram 索引）
+	chineseKw := "协同知识库测试词"
+	w = request("PUT", teamPath("/documents/"+docID+"/content"), map[string]interface{}{
+		"content": "<p>这是一段包含 " + chineseKw + " 的正文内容用于测试分词</p>",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("save chinese content failed: %d", w.Code)
+	}
+	w = request("GET", teamPath("/documents/search?q="+chineseKw), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("search chinese keyword failed: %d", w.Code)
+	}
+	resp = parseJSON(t, w)
+	data, _ = resp["data"].([]interface{})
+	if len(data) == 0 {
+		t.Errorf("Chinese keyword should be found via MATCH ngram, got: %v", resp)
+	}
+
+	// 3. 验证数据库底层：ft_content_text 已删除，且直接 MATCH 断言中文分词命中有返回
+	var ftCount int
+	_ = database.DB.QueryRow(`SELECT COUNT(*) FROM information_schema.statistics
+		WHERE table_schema = DATABASE() AND table_name = 'md_documents' AND index_name = 'ft_content_text'`).Scan(&ftCount)
+	if ftCount > 0 {
+		t.Errorf("legacy index ft_content_text should have been dropped, but still exists")
+	}
+
+	var matchHits int
+	_ = database.DB.QueryRow(`SELECT COUNT(*) FROM md_documents
+		WHERE id = ? AND MATCH(content_text) AGAINST(? IN BOOLEAN MODE)`, docID, `"`+chineseKw+`"`).Scan(&matchHits)
+	if matchHits == 0 {
+		t.Errorf("expected direct MATCH(content_text) on ngram index to hit, got 0")
+	}
 }
 
 // ==================== 18. 无效输入测试 ====================

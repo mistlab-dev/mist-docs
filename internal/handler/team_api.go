@@ -435,18 +435,19 @@ func TeamSearchDocuments(c *gin.Context) {
 	}
 	offset := (page - 1) * pageSize
 
-	// ngram 可用时用 MATCH 走 FULLTEXT 索引（中文分词），否则退回 LIKE 全表扫。
-	// MATCH 命中数为 0 时（ngram_token_size=2 单字/短词搜不到）再用 LIKE 兑底。
-	useNgram := database.HasNgram() && len([]rune(strings.TrimSpace(keyword))) >= 2
+	// ngram parser 会把含英文停用词（默认词表含 a/i）的 token 丢弃，
+	// 导致纯英文或含字母关键词（如 api、data、config、mail 等）正文 MATCH 不到；
+	// 且 title LIKE 命中时 total > 0 不会进全 0 兜底，导致此类正文被静默吃掉。
+	// 因此仅在关键词包含 CJK 字符且长度 >= 2 时才走 MATCH，纯英文/数字关键词直接走 LIKE。
+	useNgram := database.HasNgram() && containsCJK(keyword) && len([]rune(strings.TrimSpace(keyword))) >= 2
 	var matchExpr, where string
 	var args []interface{}
 	pattern := "%" + keyword + "%"
 	if useNgram {
-		// BOOLEAN MODE treats `- * " @` and spaces as operators/syntax, so a
-		// user-typed keyword could change meaning or error out (the error used
-		// to be swallowed by Scan and masked by the LIKE fallback). Escape it
-		// into a single quoted phrase instead: ".
-		phrase := `"` + strings.ReplaceAll(keyword, `"`, `""`) + `"`
+		// BOOLEAN MODE 中引号是短语定界符但并不支持转义，直接将 " 替换为空格避免语法破坏；
+		// 外层包一层引号强制按短语查询。
+		cleanKw := strings.ReplaceAll(keyword, `"`, " ")
+		phrase := `"` + strings.TrimSpace(cleanKw) + `"`
 		matchExpr = "MATCH(d.content_text) AGAINST(? IN BOOLEAN MODE)"
 		where = `WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR ` + matchExpr + `)`
 		args = []interface{}{teamID, pattern, phrase}
@@ -578,30 +579,30 @@ func snippetAround(body, keyword string, width int) string {
 	return s
 }
 
-// indexFoldRune returns the rune index of the first case-insensitive hit of
-// needle in body, or -1. Matching runs over the lowercase rune sequences so
-// multi-byte characters never split; the caller maps the rune index back to
-// a byte offset in the original string (ToLower keeps rune count for all
-// practical inputs; only exotic case mappings like U+0130 differ).
+// indexFoldRune returns the byte offset in body of the first case-insensitive
+// match of needle, or -1. It compares runes in the original body with needle
+// using unicode.ToLower without slicing lowercase strings, avoiding offset
+// drift or panics when ToLower changes UTF-8 byte length (e.g. Ⱥ -> ⱥ).
 func indexFoldRune(body, needle string) int {
 	if needle == "" {
 		return 0
 	}
-	bodyRunes := []rune(strings.ToLower(body))
 	needleRunes := []rune(strings.ToLower(needle))
-	if len(needleRunes) == 0 || len(bodyRunes) < len(needleRunes) {
+	if len(needleRunes) == 0 {
 		return -1
 	}
+
+	bodyRunes := []rune(body)
 	for i := 0; i+len(needleRunes) <= len(bodyRunes); i++ {
 		match := true
 		for j := range needleRunes {
-			if bodyRunes[i+j] != needleRunes[j] {
+			if unicode.ToLower(bodyRunes[i+j]) != needleRunes[j] {
 				match = false
 				break
 			}
 		}
 		if match {
-			return len(string(bodyRunes[:i])) // byte offset in original body
+			return len(string(bodyRunes[:i]))
 		}
 	}
 	return -1
@@ -1605,6 +1606,24 @@ func findMention(runes []rune, needle string) bool {
 			runes[k] = ' '
 		}
 		return true
+	}
+	return false
+}
+
+// isCJK reports whether r is in a CJK / East Asian script block.
+func isCJK(r rune) bool {
+	return unicode.Is(unicode.Han, r) ||
+		unicode.Is(unicode.Hiragana, r) ||
+		unicode.Is(unicode.Katakana, r) ||
+		unicode.Is(unicode.Hangul, r)
+}
+
+// containsCJK reports whether s contains any CJK character.
+func containsCJK(s string) bool {
+	for _, r := range s {
+		if isCJK(r) {
+			return true
+		}
 	}
 	return false
 }
