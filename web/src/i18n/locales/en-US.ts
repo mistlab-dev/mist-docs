@@ -428,7 +428,7 @@ export default {
     imageUploaded: 'Image uploaded',
     docSaved: 'Saved',
     draftRecoverTitle: 'Local draft found',
-    draftRecoverBody: 'A local draft from {0} that never reached the server was found (likely from a lost connection or a closed tab). Restore it? Restoring merges with other editors through the collaboration channel.',
+    draftRecoverBody: 'A local draft from {0} that never reached the server was found (likely from a lost connection or a closed tab). Restore it? Restoring replaces the current content through the collaboration channel and syncs it to other editors.',
     draftRestore: 'Restore draft',
     draftDiscard: 'Discard, keep server version',
     draftRecovered: 'Local draft restored',

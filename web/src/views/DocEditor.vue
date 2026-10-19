@@ -1641,8 +1641,8 @@ async function loadDoc() {
     })) {
       pendingRecover.value = { content: draft.content, savedAt: draft.savedAt }
       showDraftRecover.value = true
-    } else if (draft && draft.content === (doc.value?.content || '')) {
-      // 草稿与服务端一致，直接清掉避免重复提示
+    } else if (draft) {
+      // 草稿已过时（早于服务端最后写入）或与服务端一致：不再提示，直接清理
       removeDraft(docId)
     }
   }
@@ -1670,13 +1670,14 @@ function writeDraftNow() {
   })
 }
 
-// 恢复草稿：走正常协同通道 setContent，会合并他人编辑而非覆盖
+// 恢复草稿：setContent 写入 Y.Doc，内容经协同通道同步给其他编辑者
 async function applyRecoveredDraft() {
   const rec = pendingRecover.value
   if (!rec || !editor.value) return
   editor.value.commands.setContent(rec.content)
   pendingRecover.value = null
-  removeDraft(docId)
+  // 不立即清草稿：等 autosave 成功（doSave 成功分支 removeDraft）。
+  // 保存前崩溃时草稿仍在，下次打开还能再提示恢复。
   scheduleAutoSave()
   ElMessage.success(t('docEditor.draftRecovered'))
 }

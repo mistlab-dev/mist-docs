@@ -542,7 +542,7 @@ export default {
     imageUploaded: '图片已上传',
     docSaved: '已保存',
     draftRecoverTitle: '发现本地草稿',
-    draftRecoverBody: '检测到 {0} 有一份未同步到服务器的本地草稿（可能因断网或页面意外关闭产生）。是否恢复该草稿？恢复会通过协同通道与他人的编辑合并。',
+    draftRecoverBody: '检测到 {0} 有一份未同步到服务器的本地草稿（可能因断网或页面意外关闭产生）。是否恢复该草稿？恢复会经协同通道替换当前内容并同步给其他编辑者。',
     draftRestore: '恢复草稿',
     draftDiscard: '丢弃并保留服务器版本',
     draftRecovered: '本地草稿已恢复',

@@ -1,21 +1,36 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DRAFT_MAX_AGE_MS,
   draftKey,
   isDraftRecoverable,
+  parseServerTime,
   readDraft,
   removeDraft,
   saveDraft,
   type DraftRecord,
 } from './draft'
 
+// Minimal process typing: @types/node is not a dependency of this package.
+declare const process: { env: Record<string, string | undefined> }
+
+// Pin the timezone: the API serves offset-less "YYYY-MM-DD HH:MM:SS" values
+// (MySQL parseTime=true&loc=Local) that must be read as local wall clock.
+// That distinction is only observable outside UTC, so force a zone where a
+// naive "+Z" parse would skew by 8 hours.
+const prevTZ = process.env.TZ
+process.env.TZ = 'Asia/Shanghai'
+afterAll(() => {
+  if (prevTZ === undefined) delete process.env.TZ
+  else process.env.TZ = prevTZ
+})
+
 function record(overrides: Partial<DraftRecord> = {}): DraftRecord {
   return {
     content: '<p>draft body</p>',
     baseVersion: 3,
     baseUpdatedAt: '2026-10-19 10:00:00',
-    savedAt: Date.parse('2026-10-19T10:05:00Z'),
+    savedAt: new Date(2026, 9, 19, 10, 5).getTime(),
     ...overrides,
   }
 }
@@ -112,12 +127,12 @@ describe('isDraftRecoverable', () => {
   })
 
   it('rejects a draft saved before the server write', () => {
-    const stale = record({ savedAt: Date.parse('2026-10-19T09:00:00Z') })
+    const stale = record({ savedAt: new Date(2026, 9, 19, 9, 0, 0).getTime() })
     expect(isDraftRecoverable(stale, server)).toBe(false)
   })
 
   it('accepts a draft written after the server write even when base moved on', () => {
-    const bothChanged = record({ baseUpdatedAt: '2026-10-19 09:00:00', savedAt: Date.parse('2026-10-19T10:30:00Z') })
+    const bothChanged = record({ baseUpdatedAt: '2026-10-19 09:00:00', savedAt: new Date(2026, 9, 19, 10, 30).getTime() })
     expect(isDraftRecoverable(bothChanged, server)).toBe(true)
   })
 
@@ -135,5 +150,41 @@ describe('isDraftRecoverable', () => {
 
   it('never offers an empty draft', () => {
     expect(isDraftRecoverable(record({ content: '' }), { content: '<p>x</p>' })).toBe(false)
+  })
+})
+
+describe('parseServerTime (timezone regression)', () => {
+  it('parses offset-less timestamps as local wall clock', () => {
+    // API values come from DSN parseTime=true&loc=Local: no offset, server
+    // local wall clock. Must not be reinterpreted as UTC.
+    const parsed = parseServerTime('2026-10-19 10:00:00')
+    expect(parsed).toBe(new Date(2026, 9, 19, 10, 0, 0).getTime())
+    // The old implementation appended "Z"; off UTC that shifts the instant.
+    if (new Date().getTimezoneOffset() !== 0) {
+      expect(parsed).not.toBe(Date.parse('2026-10-19 10:00:00Z'))
+    }
+  })
+
+  it('keeps explicit offsets untouched', () => {
+    expect(parseServerTime('2026-10-19T10:00:00Z')).toBe(Date.parse('2026-10-19T10:00:00Z'))
+    expect(parseServerTime('2026-10-19T10:00:00+08:00')).toBe(Date.parse('2026-10-19T10:00:00+08:00'))
+  })
+
+  it('returns NaN for blank input', () => {
+    expect(parseServerTime('')).toBeNaN()
+    expect(parseServerTime('   ')).toBeNaN()
+  })
+
+  it('offers recovery for a no-Z updated_at with a later savedAt', () => {
+    // Server wrote at 10:00 local; offline draft saved at 10:05 local.
+    // Parsing 10:00 as UTC would make the draft look 8h stale in
+    // Asia/Shanghai and silently drop the recovery prompt.
+    const server = { content: '<p>server</p>', version: 2, updated_at: '2026-10-19 10:00:00' }
+    const draft = record({
+      content: '<p>draft newer than server</p>',
+      baseUpdatedAt: '2026-10-19 10:00:00',
+      savedAt: new Date(2026, 9, 19, 10, 5).getTime(),
+    })
+    expect(isDraftRecoverable(draft, server)).toBe(true)
   })
 })

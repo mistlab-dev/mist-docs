@@ -90,6 +90,24 @@ export function removeDraft(docId: string): void {
   } catch {}
 }
 
+// parseServerTime converts the API's updated_at into epoch ms.
+//
+// The MySQL DSN runs with parseTime=true&loc=Local, so timestamps arrive as
+// "YYYY-MM-DD HH:MM:SS" with NO offset — the server's local wall clock.
+// Blindly appending "Z" reinterprets that wall clock as UTC and skews the
+// comparison by the deployment's UTC offset (8h in Asia/Shanghai), which made
+// fresh offline drafts look stale and never be offered for recovery.
+// Values that already carry an offset (Z or ±HH:MM) are parsed as given;
+// offset-less values are parsed as local time, matching how the server wrote them.
+export function parseServerTime(value: string): number {
+  const s = value.trim()
+  if (!s) return NaN
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/.test(s)) return Date.parse(s)
+  // Normalize the space separator to "T" so ES date-time forms apply
+  // (offset-less date-times are local time per spec).
+  return Date.parse(s.replace(' ', 'T'))
+}
+
 // isDraftRecoverable reports whether the draft should be offered for recovery
 // against the freshly loaded server document.
 //
@@ -111,7 +129,7 @@ export function isDraftRecoverable(
   if (server.updated_at && draft.savedAt) {
     // Compare against the server timestamp only when we can parse it; a draft
     // saved before the server's last write is stale.
-    const serverMs = Date.parse(server.updated_at.endsWith('Z') ? server.updated_at : server.updated_at + 'Z')
+    const serverMs = parseServerTime(server.updated_at)
     if (!Number.isNaN(serverMs) && draft.savedAt < serverMs) return false
   }
   return true
