@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS `md_documents` (
   KEY `idx_status` (`status`),
   KEY `idx_type` (`type`),
   KEY `idx_md_docs_team` (`team_id`),
-  FULLTEXT KEY `ft_content_text` (`content_text`)
+  FULLTEXT KEY `ft_content_ngram` (`content_text`) WITH PARSER `ngram`
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 ;
 

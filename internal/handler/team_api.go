@@ -5,16 +5,19 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
@@ -432,16 +435,52 @@ func TeamSearchDocuments(c *gin.Context) {
 	}
 	offset := (page - 1) * pageSize
 
+	// ngram parser 会把含英文停用词（默认词表含 a/i）的 token 丢弃，
+	// 导致纯英文或含字母关键词（如 api、data、config、mail 等）正文 MATCH 不到；
+	// 且 title LIKE 命中时 total > 0 不会进全 0 兜底，导致此类正文被静默吃掉。
+	// 因此仅在关键词包含 CJK 字符且长度 >= 2 时才走 MATCH，纯英文/数字关键词直接走 LIKE。
+	useNgram := database.HasNgram() && containsCJK(keyword) && len([]rune(strings.TrimSpace(keyword))) >= 2
+	var matchExpr, where string
+	var args []interface{}
 	pattern := "%" + keyword + "%"
-	where := `WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR d.content_text LIKE ?)`
-	args := []interface{}{teamID, pattern, pattern}
+	if useNgram {
+		// BOOLEAN MODE 中引号是短语定界符但并不支持转义，直接将 " 替换为空格避免语法破坏；
+		// 外层包一层引号强制按短语查询。
+		cleanKw := strings.ReplaceAll(keyword, `"`, " ")
+		phrase := `"` + strings.TrimSpace(cleanKw) + `"`
+		matchExpr = "MATCH(d.content_text) AGAINST(? IN BOOLEAN MODE)"
+		where = `WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR ` + matchExpr + `)`
+		args = []interface{}{teamID, pattern, phrase}
+	} else {
+		where = `WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR d.content_text LIKE ?)`
+		args = []interface{}{teamID, pattern, pattern}
+	}
 
 	var total int
-	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total)
+	if err := database.DB.QueryRow("SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total); err != nil {
+		log.Printf("search documents count: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
+	// ngram 布尔模式对短词（ngram_token_size=2 切不出）可能全无命中，此时
+	// 用 LIKE 兑底，避免“明明有匹配却搜不到”。
+	if useNgram && total == 0 {
+		where = `WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR d.content_text LIKE ?)`
+		args = []interface{}{teamID, pattern, pattern}
+		if err := database.DB.QueryRow("SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total); err != nil {
+			log.Printf("search documents count fallback: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	// 只取摘要窗口所需的前 1024 字节，避免每行都拉整段 LONGTEXT。
+	// 命中位置若在窗口外，snippetAround 会退回取开头。
 	query := `SELECT d.id, d.team_id, IFNULL(d.folder_id, ''), d.title, d.type, d.file_size, d.version,
 		IFNULL(d.locked_by, ''), d.status, IFNULL(d.created_by, ''), IFNULL(d.updated_by, ''), d.created_at, d.updated_at,
-		COALESCE(NULLIF(u1.display_name, ''), NULLIF(u1.username, ''), '') as creator_name
+		COALESCE(NULLIF(u1.display_name, ''), NULLIF(u1.username, ''), '') as creator_name,
+		SUBSTRING(IFNULL(d.content_text, ''), 1, 1024) as content_text
 		FROM md_documents d
 		LEFT JOIN users u1 ON d.created_by COLLATE utf8mb4_unicode_ci = u1.id ` + where +
 		" ORDER BY d.updated_at DESC LIMIT ? OFFSET ?"
@@ -475,10 +514,12 @@ func TeamSearchDocuments(c *gin.Context) {
 		var r SearchResult
 		var lockedBy sql.NullString
 		var status int
+		var contentText string
 		rows.Scan(&r.ID, &r.TeamID, &r.FolderID, &r.Title, &r.Type, &r.FileSize, &r.Version,
 			&lockedBy, &status, &r.CreatedBy, &r.UpdatedBy, &r.CreatedAt, &r.UpdatedAt,
-			&r.CreatorName)
+			&r.CreatorName, &contentText)
 		r.CreatedByName = r.CreatorName
+		r.Snippet = snippetAround(contentText, keyword, 160)
 		results = append(results, r)
 	}
 	if results == nil {
@@ -488,6 +529,113 @@ func TeamSearchDocuments(c *gin.Context) {
 }
 
 // TeamRecentDocuments GET /teams/:team_id/documents/recent
+// snippetAround returns a plain-text window of body centred on the first
+// keyword hit, for the search results card. Body is the stored HTML
+// (content_text), so tags are stripped first and the result is raw text —
+// never HTML; escaping/highlighting is the frontend's job.
+func snippetAround(body, keyword string, width int) string {
+	// 去掉 script/style 整块，再剥标签，最后解码实体（&amp; 等）——前端会对
+	// snippet 再做一次 HTML 转义，不解码会显示成 &amp;amp;。
+	body = strings.TrimSpace(htmlTagRe.ReplaceAllString(stripScriptStyle(body), " "))
+	body = html.UnescapeString(body)
+	if body == "" {
+		return ""
+	}
+	// 定位在小写 rune 序列上做，命中后把 rune 下标映射回原串字节下标——
+	// 直接在小写串上算字节下标再切原串，大小写改变字节长度时会错位。
+	hitRune := indexFoldRune(body, keyword)
+	if hitRune < 0 {
+		if len(body) > width {
+			// 截断后退到 rune 边界，避免切断 UTF-8 多字节字符。
+			end := startOfRuneBoundary(body, width)
+			return collapseSpace(body[:end]) + "…"
+		}
+		return collapseSpace(body)
+	}
+	// rune 下标映射回原串字节位置，再按字节开窗（width 单位为字节）。
+	idx := hitRune
+	// 半窗居中，字节边界不越界（中文 UTF-8）。
+	start := idx - width/2
+	for start > 0 && !utf8.RuneStart(body[start]) {
+		start--
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + width
+	if end > len(body) {
+		end = len(body)
+	}
+	for end < len(body) && !utf8.RuneStart(body[end]) {
+		end++
+	}
+	s := collapseSpace(strings.TrimSpace(body[start:end]))
+	if start > 0 {
+		s = "…" + s
+	}
+	if end < len(body) {
+		s += "…"
+	}
+	return s
+}
+
+// indexFoldRune returns the byte offset in body of the first case-insensitive
+// match of needle, or -1. It compares runes in the original body with needle
+// using unicode.ToLower without slicing lowercase strings, avoiding offset
+// drift or panics when ToLower changes UTF-8 byte length (e.g. Ⱥ -> ⱥ).
+func indexFoldRune(body, needle string) int {
+	if needle == "" {
+		return 0
+	}
+	needleRunes := []rune(strings.ToLower(needle))
+	if len(needleRunes) == 0 {
+		return -1
+	}
+
+	bodyRunes := []rune(body)
+	for i := 0; i+len(needleRunes) <= len(bodyRunes); i++ {
+		match := true
+		for j := range needleRunes {
+			if unicode.ToLower(bodyRunes[i+j]) != needleRunes[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return len(string(bodyRunes[:i]))
+		}
+	}
+	return -1
+}
+
+// startOfRuneBoundary returns the largest offset <= n that lands on a rune
+// start, so truncating at the returned offset never splits a multi-byte char.
+func startOfRuneBoundary(s string, n int) int {
+	for n > 0 && n < len(s) && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+func collapseSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// scriptRe/styleRe match whole blocks (with content) so script/style text
+// never reaches a search-result snippet. RE2 has no backreferences, so each
+// tag gets its own pattern.
+var (
+	scriptRe = regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script\s*>`)
+	styleRe  = regexp.MustCompile(`(?is)<style\b[^>]*>.*?</style\s*>`)
+)
+
+func stripScriptStyle(s string) string {
+	return styleRe.ReplaceAllString(scriptRe.ReplaceAllString(s, " "), " ")
+}
+
 func TeamRecentDocuments(c *gin.Context) {
 	teamID := getTeamID(c)
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
@@ -1458,6 +1606,24 @@ func findMention(runes []rune, needle string) bool {
 			runes[k] = ' '
 		}
 		return true
+	}
+	return false
+}
+
+// isCJK reports whether r is in a CJK / East Asian script block.
+func isCJK(r rune) bool {
+	return unicode.Is(unicode.Han, r) ||
+		unicode.Is(unicode.Hiragana, r) ||
+		unicode.Is(unicode.Katakana, r) ||
+		unicode.Is(unicode.Hangul, r)
+}
+
+// containsCJK reports whether s contains any CJK character.
+func containsCJK(s string) bool {
+	for _, r := range s {
+		if isCJK(r) {
+			return true
+		}
 	}
 	return false
 }

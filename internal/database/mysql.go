@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/config"
@@ -33,6 +34,76 @@ func Init(cfg config.DatabaseConfig) error {
 	return Migrate()
 }
 
+// migrateFulltextNgram makes Chinese full-text search actually work.
+//
+// The default FULLTEXT parser does not tokenise CJK, so MATCH AGAINST on
+// Chinese text returns 0 rows for every query — the ft_content_text index
+// built in Migrate is dead for zh content. MySQL 8 ships an ngram parser
+// (ngram_token_size=2, so queries must be >= 2 characters) that splits CJK
+// into fixed-length tokens.
+//
+// Why the old index is dropped rather than kept alongside:
+// MATCH() cannot name an index — the optimizer picks between ft_content_text
+// and ft_content_ngram on its own stats. With both present it may choose the
+// default-parser index for a Chinese query, get 0 hits, and search silently
+// degrades. The default parser has no value here (the column is CJK text and
+// the only MATCH user is the ngram path), so after ft_content_ngram exists we
+// drop ft_content_text. Dropping an index only removes its metadata (the
+// table data is untouched), so it is fast even on large tables.
+//
+// Operational notes:
+//   - Index existence is checked in information_schema first, so startup does
+//     not rely on catching a duplicate-key error.
+//   - Building the FULLTEXT index (fresh installs / servers without ngram)
+//     is an ALTER on content_text: on a large table that table-locks writes
+//     for its duration and slows first startup. If it ever needs to be
+//     undone: DROP INDEX ft_content_ngram ON md_documents.
+//   - Servers without the ngram parser keep the default index and search
+//     falls back to LIKE (see searchDocuments).
+func migrateFulltextNgram() {
+	var name, ngramSize string
+	if err := DB.QueryRow(`SHOW VARIABLES LIKE 'ngram_token_size'`).Scan(&name, &ngramSize); err != nil || ngramSize == "" {
+		// Server has no ngram parser; keep default FULLTEXT behaviour.
+		return
+	}
+
+	if !fulltextIndexExists("ft_content_ngram") {
+		if _, err := DB.Exec(`ALTER TABLE md_documents ADD FULLTEXT INDEX ft_content_ngram (content_text) WITH PARSER ngram`); err != nil {
+			fmt.Printf("migrate fulltext ngram: %v\n", err)
+			return
+		}
+	}
+	// ngram index present (freshly created or already there): MATCH is
+	// unambiguous only once the default-parser twin is gone.
+	ngramAvailable.Store(true)
+	if fulltextIndexExists("ft_content_text") {
+		// Failure is not fatal: search still works when the optimizer picks
+		// the ngram index, and a later start retries the drop.
+		if _, err := DB.Exec(`ALTER TABLE md_documents DROP INDEX ft_content_text`); err != nil {
+			fmt.Printf("migrate fulltext ngram: drop default-parser index: %v\n", err)
+		}
+	}
+}
+
+// fulltextIndexExists reports whether md_documents has the named index.
+func fulltextIndexExists(indexName string) bool {
+	var n int
+	err := DB.QueryRow(
+		`SELECT COUNT(*) FROM information_schema.statistics
+		 WHERE table_schema = DATABASE() AND table_name = 'md_documents' AND index_name = ?`,
+		indexName).Scan(&n)
+	return err == nil && n > 0
+}
+
+var ngramAvailable atomic.Bool
+
+// HasNgram reports whether the ngram FULLTEXT index exists (set by
+// migrateFulltextNgram). Queries bind MATCH() to ft_content_ngram only when
+// this is true, because that index does not exist on servers without the
+// parser — MATCH() then falls back to ft_content_text (default parser, dead
+// for CJK) or errors.
+func HasNgram() bool { return ngramAvailable.Load() }
+
 // Migrate applies additive schema updates. It only adds missing columns and
 // tables; existing rows are left in place, except soft-deleted documents whose
 // deleted_at is still NULL (those are backfilled from updated_at).
@@ -44,6 +115,7 @@ func Migrate() error {
 		DB.Exec(`ALTER TABLE md_documents ADD COLUMN content_text LONGTEXT DEFAULT NULL`)
 		DB.Exec(`ALTER TABLE md_documents ADD FULLTEXT INDEX ft_content_text (content_text)`)
 	}
+	migrateFulltextNgram()
 
 	// Auto-migrate: md_templates table
 	var tblExists int
