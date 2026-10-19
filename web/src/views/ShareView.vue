@@ -44,7 +44,7 @@
         </div>
         <el-divider />
         <!-- 文档类型 -->
-        <div v-if="doc.type !== 'sheet'" class="doc-body" v-html="doc.content"></div>
+        <div v-if="doc.type !== 'sheet'" ref="docBodyRef" class="doc-body" v-html="doc.content"></div>
         <!-- 表格类型 -->
         <div v-else class="sheet-preview">
           <div v-for="(sheet, si) in parsedSheets" :key="si" class="sheet-section">
@@ -67,15 +67,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
+import DOMPurify from 'dompurify'
+import { renderMermaidSvg } from '../utils/mermaid'
 
 const { t } = useI18n()
 
 const route = useRoute()
 const token = route.params.token as string
+
+const docBodyRef = ref<HTMLElement | null>(null)
 
 const loading = ref(true)
 const verifying = ref(false)
@@ -183,10 +187,67 @@ function getCellClass(sheet: any, ri: number, ci: number): string {
   return ''
 }
 
+// DOMPurify 配置：同 mermaid-preview.ts，保留 flowchart 的 <foreignObject>，防 XSS
+const MERMAID_SANITIZE_OPTS = {
+  ADD_TAGS: ['foreignObject'],
+  HTML_INTEGRATION_POINTS: { foreignobject: true },
+} as any
+
+function sanitizeMermaidSvg(svg: string): string {
+  return String(DOMPurify.sanitize(svg, MERMAID_SANITIZE_OPTS))
+}
+
+/**
+ * 遍历 docBodyRef 渲染所有 class="language-mermaid" 的代码块为 SVG 预览图表
+ */
+async function renderMermaidBlocks() {
+  await nextTick()
+  const root = docBodyRef.value
+  if (!root) return
+
+  // 匹配 pre > code.language-mermaid 或 code.language-mermaid
+  const mermaidCodes = root.querySelectorAll('pre code.language-mermaid, pre.language-mermaid code, pre[data-language="mermaid"] code')
+  for (const codeEl of Array.from(mermaidCodes)) {
+    const preEl = codeEl.closest('pre')
+    if (!preEl || preEl.getAttribute('data-mermaid-processed')) continue
+    preEl.setAttribute('data-mermaid-processed', 'true')
+
+    const rawCode = (codeEl.textContent || '').trim()
+    if (!rawCode) continue
+
+    const container = document.createElement('div')
+    container.className = 'mermaid-preview-widget'
+
+    const loadingDiv = document.createElement('div')
+    loadingDiv.className = 'mermaid-loading'
+    loadingDiv.textContent = '渲染图表中...'
+    container.appendChild(loadingDiv)
+
+    // 插入在 pre 之后展示预览
+    preEl.parentNode?.insertBefore(container, preEl.nextSibling)
+
+    try {
+      const rawSvg = await renderMermaidSvg(rawCode)
+      container.innerHTML = ''
+      const wrapper = document.createElement('div')
+      wrapper.className = 'mermaid-svg-wrapper'
+      wrapper.innerHTML = sanitizeMermaidSvg(rawSvg)
+      container.appendChild(wrapper)
+    } catch (err: any) {
+      container.innerHTML = ''
+      const errDiv = document.createElement('div')
+      errDiv.className = 'mermaid-error'
+      errDiv.textContent = '图表解析失败: ' + (err?.message || '语法错误')
+      container.appendChild(errDiv)
+    }
+  }
+}
+
 async function loadShare() {
   try {
     const { data } = await axios.get(`/api/s/${token}`)
     doc.value = data
+    renderMermaidBlocks()
   } catch (e: any) {
     const resp = e.response?.data
     if (resp?.need_password) {
@@ -213,6 +274,7 @@ async function accessWithPassword() {
     const { data } = await axios.get(`/api/s/${token}?password=${encodeURIComponent(password.value)}`)
     doc.value = data
     needPassword.value = false
+    renderMermaidBlocks()
   } catch (e: any) {
     error.value = e.response?.data?.error || t('share.passwordError')
   } finally {
@@ -326,6 +388,38 @@ onMounted(loadShare)
 .sheet-table td.merge-hidden { display: none; }
 .sheet-table tr:nth-child(even) td { background: var(--md-surface-2); }
 .empty-sheet { text-align: center; color: var(--md-text-faint); padding: 40px; }
+
+.doc-body :deep(.mermaid-preview-widget) {
+  margin: 12px 0 16px;
+  padding: 16px;
+  background: var(--md-bg-subtle, #f8f9fa);
+  border: 1px solid var(--md-border-light, #e4e7ed);
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+.doc-body :deep(.mermaid-svg-wrapper) {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.doc-body :deep(.mermaid-svg-wrapper svg) {
+  max-width: 100%;
+  height: auto;
+}
+.doc-body :deep(.mermaid-loading) {
+  font-size: 12px;
+  color: var(--md-text-dim, #909399);
+  padding: 8px 0;
+}
+.doc-body :deep(.mermaid-error) {
+  font-size: 12px;
+  color: var(--md-danger, #f56c6c);
+  padding: 6px 10px;
+  background: rgba(245, 108, 108, 0.08);
+  border-radius: 4px;
+}
 
 @media (max-width: 768px) {
   .content-inner { padding: 24px 16px; border-radius: 0; }
