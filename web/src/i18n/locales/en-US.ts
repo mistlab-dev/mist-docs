@@ -402,6 +402,8 @@ export default {
     noComments: 'No comments',
     outline: 'Outline',
     noOutline: 'No headings',
+    backlinks: 'Backlinks',
+    noBacklinks: 'No documents link here yet',
     placeholder: 'Start typing...',
     collabUsers: '{0} online',
     collabAnonymous: 'Anonymous',

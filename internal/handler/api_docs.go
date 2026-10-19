@@ -69,6 +69,7 @@ func buildPaths() map[string]interface{} {
 	add(team+"/documents/{id}/content", "get", "获取内容", "")
 	add(team+"/documents/{id}/content", "put", "保存内容", "保存记审计 edit_doc，并投递 Webhook document.updated。")
 	add(team+"/documents/{id}/stats", "get", "文档统计", "")
+	add(team+"/documents/{id}/backlinks", "get", "反向链接", "列出引用了本文档的团队文档，按调用者可读权限过滤，返回 id、title、type、updated_at、excerpt。")
 	add(team+"/documents/{id}/versions", "get", "版本列表", "")
 	add(team+"/documents/{id}/versions/{ver}/content", "get", "版本内容", "")
 	add(team+"/documents/{id}/restore", "post", "恢复版本", "")
