@@ -706,6 +706,15 @@
       </template>
     </el-dialog>
 
+    <!-- 本地草稿恢复提示 -->
+    <el-dialog v-model="showDraftRecover" :title="t('docEditor.draftRecoverTitle')" width="440px" :close-on-click-modal="false">
+      <p style="margin:0 0 8px;line-height:1.6">{{ t('docEditor.draftRecoverBody', [formatTime(new Date(pendingRecover!.savedAt).toISOString())]) }}</p>
+      <template #footer>
+        <el-button @click="discardRecoveredDraft(); showDraftRecover = false">{{ t('docEditor.draftDiscard') }}</el-button>
+        <el-button type="primary" @click="applyRecoveredDraft(); showDraftRecover = false">{{ t('docEditor.draftRestore') }}</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 评论面板 -->
     <el-drawer v-model="showComments" :title="t('docEditor.commentsTitle')" size="400px">
       <div v-if="canComment" class="comment-input">
@@ -831,6 +840,7 @@ import { common, createLowlight } from 'lowlight'
 import 'highlight.js/styles/github-dark.min.css'
 import * as Y from 'yjs'
 import { MistWSProvider, type CollabUser } from '@/utils/collab'
+import { isDraftRecoverable, readDraft, removeDraft, saveDraft } from '@/utils/draft'
 import http from '@/utils/http'
 import teamApi from '@/utils/team-api'
 const SheetEditor = defineAsyncComponent(() => import('@/components/SheetEditor.vue'))
@@ -858,6 +868,10 @@ let dataLoaded = false // 防止加载数据前自动保存空内容
 // 最近一次已保存（或刚加载）的内容。打开文档时编辑器会把同样的内容再触发一次
 // onUpdate，内容没变就不保存，避免每次打开都多出一个版本。
 let lastSavedContent: string | null = null
+// 本地草稿兜底：断网/崩溃时未同步的输入写 localStorage，下次打开提示恢复
+let draftTimer: any = null
+const pendingRecover = ref<{ content: string; savedAt: number } | null>(null)
+const showDraftRecover = ref(false)
 
 // 分享 & 协作
 const showShareDialog = ref(false)
@@ -1617,8 +1631,60 @@ async function loadDoc() {
     sheetData.value = doc.value?.content || '{}'
   }
   lastSavedContent = doc.value?.content ?? null
+  // 本地草稿比服务端新（断网期间的输入），提示用户恢复
+  if (doc.value?.type === 'doc' && canEdit.value) {
+    const draft = readDraft(docId)
+    if (draft && isDraftRecoverable(draft, {
+      content: doc.value?.content || '',
+      version: doc.value?.version,
+      updated_at: doc.value?.updated_at || '',
+    })) {
+      pendingRecover.value = { content: draft.content, savedAt: draft.savedAt }
+      showDraftRecover.value = true
+    } else if (draft) {
+      // 草稿已过时（早于服务端最后写入）或与服务端一致：不再提示，直接清理
+      removeDraft(docId)
+    }
+  }
   // 数据加载完成，允许自动保存
   nextTick(() => { dataLoaded = true })
+}
+
+// 编辑时防抖写本地草稿（覆盖协同断线期间内存 pending 丢失的场景）
+function scheduleDraftSave() {
+  if (!dataLoaded || !canEdit.value) return
+  clearTimeout(draftTimer)
+  draftTimer = setTimeout(writeDraftNow, 1000)
+}
+
+function writeDraftNow() {
+  if (!dataLoaded || !canEdit.value) return
+  const content = editor.value?.getHTML() || ''
+  if (!content || content === lastSavedContent) return
+  saveDraft(docId, {
+    content,
+    baseVersion: doc.value?.version || 0,
+    baseUpdatedAt: doc.value?.updated_at || '',
+    savedAt: Date.now(),
+    title: title.value,
+  })
+}
+
+// 恢复草稿：setContent 写入 Y.Doc，内容经协同通道同步给其他编辑者
+async function applyRecoveredDraft() {
+  const rec = pendingRecover.value
+  if (!rec || !editor.value) return
+  editor.value.commands.setContent(rec.content)
+  pendingRecover.value = null
+  // 不立即清草稿：等 autosave 成功（doSave 成功分支 removeDraft）。
+  // 保存前崩溃时草稿仍在，下次打开还能再提示恢复。
+  scheduleAutoSave()
+  ElMessage.success(t('docEditor.draftRecovered'))
+}
+
+function discardRecoveredDraft() {
+  pendingRecover.value = null
+  removeDraft(docId)
 }
 
 // === 文档移动 ===
@@ -1984,6 +2050,8 @@ function scheduleAutoSave() {
   if (!dataLoaded || !canEdit.value) return // 数据未加载完，或只有查看权限，不保存
   clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(doSave, 1500)
+  // 同步写本地草稿：自动保存失败/断网时，输入仍有兑底副本
+  scheduleDraftSave()
 }
 
 async function doSave(): Promise<boolean> {
@@ -2001,6 +2069,9 @@ async function doSave(): Promise<boolean> {
   try {
     await teamApi.put(`/documents/${docId}/content`, { content })
     lastSavedContent = content
+    // 服务端已持有该内容，本地草稿不再需要
+    clearTimeout(draftTimer)
+    removeDraft(docId)
     saveStatus.value = 'saved'
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => { saveStatus.value = '' }, 3000)
