@@ -271,6 +271,22 @@
             @click="scrollToHeading(item.id)"
           >{{ item.text }}</div>
         </div>
+        <!-- 反向链接：谁引用了我 -->
+        <template v-if="!outlineCollapsed && backlinksLoaded">
+          <div class="backlink-header">{{ t('docEditor.backlinks') }} <span class="backlink-count">{{ backlinks.length }}</span></div>
+          <div v-if="!backlinks.length" class="outline-empty">{{ t('docEditor.noBacklinks') }}</div>
+          <div v-else class="outline-list">
+            <div
+              v-for="b in backlinks" :key="b.id"
+              class="outline-item backlink-item"
+              :title="b.excerpt || b.title"
+              @click="openBacklink(b.id)"
+            >
+              <span class="backlink-title">{{ b.title }}</span>
+              <span v-if="b.excerpt" class="backlink-excerpt">{{ b.excerpt }}</span>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -908,6 +924,27 @@ const commentCount = ref(0)
 const outlineItems = ref<{text: string; level: number; id: string}[]>([])
 const outlineCollapsed = ref(false)
 const outlineActiveId = ref('')
+
+// === 反向链接（Backlinks）===
+// 谁引用了我：按文档加载 /documents/:id/backlinks，只显示可读结果。
+const backlinks = ref<{ id: string; title: string; type: string; excerpt: string; updated_at: string }[]>([])
+const backlinksLoaded = ref(false)
+
+async function loadBacklinks() {
+  backlinksLoaded.value = false
+  try {
+    const { data } = await teamApi.get(`/documents/${docId}/backlinks`)
+    backlinks.value = data.data || []
+  } catch {
+    backlinks.value = []
+  } finally {
+    backlinksLoaded.value = true
+  }
+}
+
+function openBacklink(id: string) {
+  router.push(`/docs/${id}`)
+}
 
 // 提取大纲
 function updateOutline() {
@@ -2277,6 +2314,8 @@ onMounted(async () => {
     const content = doc.value?.content || ''
     initEditor(content === '{}' ? '' : content)
   }
+  // 反向链接：文档加载后拉取引用列表（失败静默，不影响编辑）
+  loadBacklinks()
   // Attach scroll listener for outline tracking
 })
 
@@ -2434,6 +2473,24 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .outline-h2 { padding-left: 16px; }
 .outline-h3 { padding-left: 24px; }
 .outline-h4 { padding-left: 32px; }
+
+/* 反向链接 */
+.backlink-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 12px 12px 6px; font-size: 12px; font-weight: 600;
+  color: var(--md-text-dim); text-transform: uppercase;
+  border-top: 1px solid var(--md-border); margin-top: 4px;
+}
+.backlink-count {
+  padding: 0 6px; border-radius: 8px; font-size: 11px;
+  background: var(--md-hover); color: var(--md-text-dim);
+}
+.backlink-item { display: flex; flex-direction: column; gap: 2px; white-space: normal; }
+.backlink-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backlink-excerpt {
+  font-size: 11px; color: var(--md-text-faint); line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* 水印 */
 .watermark-layer {

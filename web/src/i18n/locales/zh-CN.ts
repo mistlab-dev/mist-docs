@@ -516,6 +516,8 @@ export default {
     noComments: '暂无评论',
     outline: '大纲',
     noOutline: '暂无标题',
+    backlinks: '反向链接',
+    noBacklinks: '暂无文档引用本文档',
     placeholder: '开始输入内容...',
     collabUsers: '{0} 人在线',
     collabAnonymous: '匿名',

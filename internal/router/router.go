@@ -58,6 +58,7 @@ func RegisterAPI(r gin.IRouter) {
 				teams.GET("/documents/:id/content", handler.TeamGetDocumentContent)
 				teams.PUT("/documents/:id/content", handler.TeamSaveDocumentContent)
 				teams.GET("/documents/:id/stats", handler.TeamDocStats)
+				teams.GET("/documents/:id/backlinks", handler.TeamListBacklinks)
 				teams.GET("/documents/:id/versions", handler.TeamListVersions)
 				teams.GET("/documents/:id/versions/:ver/content", handler.TeamGetVersionContent)
 				teams.POST("/documents/:id/restore", handler.TeamRestoreVersion)
