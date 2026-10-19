@@ -232,6 +232,7 @@
         <!-- WikiLink [[ 浮动联想下拉菜单 -->
         <div
           v-if="wikiLinkState.show"
+          ref="wikiLinkListEl"
           class="wikilink-dropdown"
           :style="{ left: wikiLinkState.x + 'px', top: wikiLinkState.y + 'px' }"
         >
@@ -1289,6 +1290,12 @@ const wikiLinkState = reactive({
 let wikiSearchTimer: ReturnType<typeof setTimeout> | null = null
 // 搜索序号：旧响应晚于新响应到达时直接丢弃，避免覆盖新结果。
 let wikiSearchSeq = 0
+// 上一次搜索的关键词：同词重触发（仅光标移动）不清结果，换词才清。
+let wikiLinkLastQuery = ''
+// Esc 抑制：Esc 后当前 `[[` 视作普通文本，直到这段 `[[` 上下文消失。
+let wikiLinkEscFrom = -1
+// 下拉框容器，用于把选中项滚进可视区（列表限高 240px）。
+const wikiLinkListEl = ref<HTMLElement | null>(null)
 
 function closeWikiLink() {
   clearTimeout(wikiSearchTimer!)
@@ -1316,11 +1323,23 @@ function updateWikiLinkPosition() {
   } catch { /* position left the document */ }
 }
 
+// 选中项滚进可视区（列表限高 240px，选到下面时选中项可能看不见）。
+function scrollWikiLinkSelection() {
+  const root = wikiLinkListEl.value
+  if (!root) return
+  const item = root.querySelector('.wikilink-item.selected') as HTMLElement | null
+  item?.scrollIntoView({ block: 'nearest' })
+}
+
 function handleWikiLinkTrigger(match: WikiLinkMatch | null) {
   if (!match) {
+    // `[[` 上下文消失（删掉/换行/光标移走），解除 Esc 抑制
+    wikiLinkEscFrom = -1
     closeWikiLink()
     return
   }
+  // Esc 关闭过的同一处 `[[` 视作普通文本，不再弹出（issue #20-4）
+  if (match.from === wikiLinkEscFrom) return
 
   wikiLinkState.from = match.from
   wikiLinkState.to = match.to
@@ -1331,24 +1350,30 @@ function handleWikiLinkTrigger(match: WikiLinkMatch | null) {
 }
 
 // 键盘选择：↑/↓ 移动高亮，Enter 插入，Esc 关闭并把 `[[` 当普通文本。
+// 没有可选项时（loading / 未找到 / 空关键词）放行 ↑/↓/Enter，编辑器照常换行
+// 和移动光标（issue #20-1）。
 function wikiLinkKeyDown(e: KeyboardEvent): boolean {
   if (!wikiLinkState.show) return false
   const n = wikiLinkState.results.length
   switch (e.key) {
     case 'ArrowDown':
-      if (!n) return true
+      if (!n) return false
       wikiLinkState.selectedIndex = (wikiLinkState.selectedIndex + 1) % n
+      nextTick(scrollWikiLinkSelection)
       return true
     case 'ArrowUp':
-      if (!n) return true
+      if (!n) return false
       wikiLinkState.selectedIndex = (wikiLinkState.selectedIndex - 1 + n) % n
+      nextTick(scrollWikiLinkSelection)
       return true
     case 'Enter':
-      if (!n) return true
+      if (!n) return false
       insertWikiDocLink(wikiLinkState.results[wikiLinkState.selectedIndex])
       return true
     case 'Escape':
       closeWikiLink()
+      // 记下这处 `[[`，后续输入不再把它弹出来（直到该上下文消失）
+      wikiLinkEscFrom = wikiLinkState.from
       return true
     default:
       return false
@@ -1357,6 +1382,13 @@ function wikiLinkKeyDown(e: KeyboardEvent): boolean {
 
 function searchDocsForWikiLink(q: string) {
   clearTimeout(wikiSearchTimer!)
+  // 关键词变了才清旧结果：换词时立刻清掉，loading 中按 Enter 不会插入
+  // 上一轮关键词的结果（issue #20-2）；同词重触发保留已有结果避免闪动。
+  if (q !== wikiLinkLastQuery) {
+    wikiLinkLastQuery = q
+    wikiLinkState.results = []
+    wikiLinkState.selectedIndex = 0
+  }
   wikiLinkState.loading = true
   // 一触发就弹浮层,让 loading 和空结果(未找到)都看得见
   wikiLinkState.show = true
