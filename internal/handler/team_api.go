@@ -3082,12 +3082,30 @@ func TeamResolveComment(c *gin.Context) {
 	if !commentEditable(c, id) {
 		return
 	}
-	// resolved_at 为空 → 解决；否则 → 取消解决（幂等的 toggle）。
-	res, err := database.DB.Exec(
-		`UPDATE md_comments
-		 SET resolved_at = CASE WHEN resolved_at IS NULL THEN NOW() ELSE NULL END,
-		     resolved_by = CASE WHEN resolved_at IS NULL THEN ? ELSE NULL END
-		 WHERE id=?`, c.GetString("user_id"), id)
+	// MySQL UPDATE 的 SET 从左到右求值，同一语句里后一个 CASE 读到的
+	// resolved_at 已经是左值更新后的结果（两条分支同时成立），所以不能
+	// 用一条 UPDATE 里的两个 CASE 推导。先读当前状态，再按目标状态显式更新。
+	var currently sql.NullString
+	if err := database.DB.QueryRow(
+		`SELECT resolved_at FROM md_comments WHERE id=?`, id).Scan(&currently); err != nil {
+		if err == sql.ErrNoRows {
+			denyNotFound(c, "评论不存在")
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	var res sql.Result
+	var err error
+	if !currently.Valid {
+		res, err = database.DB.Exec(
+			`UPDATE md_comments SET resolved_at=NOW(), resolved_by=? WHERE id=?`, userID, id)
+	} else {
+		res, err = database.DB.Exec(
+			`UPDATE md_comments SET resolved_at=NULL, resolved_by=NULL WHERE id=?`, id)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

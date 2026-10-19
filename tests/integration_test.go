@@ -878,6 +878,41 @@ func TestComments(t *testing.T) {
 	}
 }
 
+func TestResolveComment(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "评论解决测试")
+
+	// 建评论
+	w := request("POST", teamPath("/documents/"+docID+"/comments"), map[string]string{
+		"content": "待解决评论",
+	}, adminToken)
+	resp := parseJSON(t, w)
+	commentID := getString(resp["data"].(map[string]interface{})["id"])
+
+	// 解决：必须写入 resolved_by（MySQL 左到右赋值的旧写法会把它置成 NULL）
+	w = request("POST", teamPath("/comments/"+commentID+"/resolve"), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("resolve comment: %d %s", w.Code, w.Body.String())
+	}
+	data := parseJSON(t, w)["data"].(map[string]interface{})
+	if getString(data["resolved_at"]) == "" {
+		t.Error("resolved_at should be set after resolve")
+	}
+	if getString(data["resolved_by"]) != adminID {
+		t.Errorf("resolved_by = %q, want %q", getString(data["resolved_by"]), adminID)
+	}
+
+	// 取消解决：两个字段都要清空
+	w = request("POST", teamPath("/comments/"+commentID+"/resolve"), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("unresolve comment: %d %s", w.Code, w.Body.String())
+	}
+	data = parseJSON(t, w)["data"].(map[string]interface{})
+	if getString(data["resolved_at"]) != "" || getString(data["resolved_by"]) != "" {
+		t.Errorf("expected cleared resolve fields, got resolved_at=%q resolved_by=%q",
+			getString(data["resolved_at"]), getString(data["resolved_by"]))
+	}
+}
+
 // ==================== 10. 标签测试 ====================
 
 func TestTags(t *testing.T) {

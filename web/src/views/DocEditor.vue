@@ -2304,6 +2304,8 @@ async function toggleResolve(c: any) {
     const { data } = await teamApi.post(`/comments/${c.id}/resolve`)
     c.resolved_at = data.data?.resolved_at || ''
     c.resolved_by = data.data?.resolved_by || ''
+    // commentCount 口径是「未解决主评论数」，切换后同步
+    commentCount.value = comments.value.filter((x: any) => !x.parent_id && !x.resolved_at).length
     ElMessage.success(c.resolved_at ? t('docEditor.resolvedTag') : t('common.updateSuccess'))
   } catch (e: any) {
     ElMessage.error(e.response?.data?.error || t('common.networkError'))
