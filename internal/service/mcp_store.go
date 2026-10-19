@@ -207,13 +207,20 @@ func (MCPStore) UpdateDocument(teamID, docID, title, content string, hasTitle, h
 		if n, _ := res.RowsAffected(); n == 0 {
 			continue
 		}
-		if _, _, err := store.WriteVersion(teamID, docID, next, []byte(content)); err != nil {
+		path, size, err := store.WriteVersion(teamID, docID, next, []byte(content))
+		if err != nil {
 			return next, fmt.Errorf("write version file: %w", err)
 		}
-		database.DB.Exec(
-			`INSERT INTO md_versions (id, document_id, version, file_size, created_by)
-			 VALUES (?, ?, ?, ?, ?)`,
-			uuid.New().String(), docID, next, int64(len(content)), userID)
+		// md_versions.file_path is NOT NULL (strict mode): mirror REST
+		// writeVersionFile — write the real path from WriteVersion and surface
+		// the INSERT error instead of swallowing it, otherwise a failed history
+		// row leaves content_text/version ahead of history while MCP reports OK.
+		if _, err := database.DB.Exec(
+			`INSERT INTO md_versions (id, document_id, version, file_path, file_size, created_by)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			uuid.New().String(), docID, next, path, size, userID); err != nil {
+			return next, fmt.Errorf("insert version history row: %w", err)
+		}
 		PruneDocumentVersions(docID)
 		return next, nil
 	}
@@ -569,13 +576,18 @@ func mcpCreate(teamID, title, folderID, content, userID string) (string, error) 
 		return "", err
 	}
 	if strings.TrimSpace(content) != "" {
-		// Same initial-version path the REST create handler uses.
+		// Same initial-version path the REST create handler uses: content_text,
+		// then version file + history row with file_path (NOT NULL in schema).
 		database.DB.Exec(`UPDATE md_documents SET content_text=?, file_size=? WHERE id=?`,
 			content, len(content), docID)
-		if _, _, err := store.WriteVersion(teamID, docID, 1, []byte(content)); err == nil {
-			database.DB.Exec(
-				`INSERT INTO md_versions (id, document_id, version, file_size, created_by) VALUES (?, ?, 1, ?, ?)`,
-				uuid.New().String(), docID, len(content), userID)
+		path, size, err := store.WriteVersion(teamID, docID, 1, []byte(content))
+		if err == nil {
+			if _, err := database.DB.Exec(
+				`INSERT INTO md_versions (id, document_id, version, file_path, file_size, created_by)
+				 VALUES (?, ?, 1, ?, ?, ?)`,
+				uuid.New().String(), docID, path, size, userID); err != nil {
+				return "", fmt.Errorf("insert version history row: %w", err)
+			}
 		}
 	}
 	return docID, nil
