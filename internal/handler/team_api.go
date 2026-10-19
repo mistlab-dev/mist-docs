@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
@@ -1372,6 +1374,200 @@ func TeamListComments(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": comments})
 }
 
+// mentionMember is a team member candidate for @-mention matching.
+type mentionMember struct {
+	id        string
+	dispName  string
+	username  string
+}
+
+// matchMentions returns the ids of members @-mentioned in content.
+//
+// Matching is member-driven rather than token-driven: the composer inserts
+// `@显示名 ` verbatim, so a display name may contain spaces ("John Smith")
+// and a token-based regex would stop at the first space — those members never
+// got notified. For each member we search for "@display_name" or "@username"
+// (longest name first, so "John Smith" claims its mention before "John" can
+// take the leading "@John"), requiring token boundaries on both sides:
+//   - left: preceded by start or a non-ASCII-word char, so `a@b.com` never
+//     matches a member named "Bob" or "b.com";
+//   - right: followed by end or a non-ASCII-word char, so "@Johnny" does not
+//     notify "John".
+//
+// Matched spans are blanked in place so two overlapping candidates cannot
+// claim the same mention.
+func matchMentions(content string, members []mentionMember) map[string]bool {
+	runes := []rune(strings.ToLower(content))
+	sorted := make([]mentionMember, len(members))
+	copy(sorted, members)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return mentionNameLen(sorted[i]) > mentionNameLen(sorted[j])
+	})
+	matched := map[string]bool{}
+	for _, m := range sorted {
+		if m.id == "" {
+			continue
+		}
+		for _, cand := range []string{m.dispName, m.username} {
+			if cand == "" {
+				continue
+			}
+			if findMention(runes, "@"+strings.ToLower(cand)) {
+				matched[m.id] = true
+				break
+			}
+		}
+	}
+	return matched
+}
+
+func mentionNameLen(m mentionMember) int {
+	n := len([]rune(strings.ToLower(m.dispName)))
+	if u := len([]rune(strings.ToLower(m.username))); u > n {
+		n = u
+	}
+	return n
+}
+
+// findMention scans runes for needle ("@" + lowercased name), enforcing token
+// boundaries on both sides. On a hit it blanks the span in place and returns
+// true.
+func findMention(runes []rune, needle string) bool {
+	n := []rune(needle)
+	if len(n) == 0 || len(runes) < len(n) {
+		return false
+	}
+	for i := 0; i+len(n) <= len(runes); i++ {
+		match := true
+		for j := range n {
+			if runes[i+j] != n[j] {
+				match = false
+				break
+			}
+		}
+		if !match {
+			continue
+		}
+		if i > 0 && isASCIIRune(runes[i-1]) {
+			continue
+		}
+		if i+len(n) < len(runes) && isASCIIRune(runes[i+len(n)]) {
+			continue
+		}
+		for k := i; k < i+len(n); k++ {
+			runes[k] = ' '
+		}
+		return true
+	}
+	return false
+}
+
+func isASCIIRune(r rune) bool {
+	return r < unicode.MaxASCII && (r == '_' ||
+		(r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z'))
+}
+
+// commentNotifyKind decides notification type and which title applies.
+// A member can be both mentioned and the parent-comment author; the mention
+// wins (the @ is the more specific signal).
+func commentNotifyKind(mentioned, replyTo bool) (nType string, mention bool) {
+	switch {
+	case mentioned:
+		return "comment", true
+	case replyTo:
+		return "reply", false
+	default:
+		return "", false
+	}
+}
+
+// notifyMentions writes an in-app notification for each team member who is
+// @-mentioned in content (matched against the team roster, see matchMentions),
+// skipping the author. Replies to a comment also notify the parent comment's
+// author (type reply, its own title).
+//
+// Failures are logged, never returned: a notification must not fail the
+// comment the user actually posted.
+func notifyMentions(c *gin.Context, teamID, docID, commentID, content, parentID, authorID string) {
+	// 回复楼中楼时同时提醒楼主（除非楼主就是作者或已被 @ 到）。
+	var parentAuthor string
+	if parentID != "" {
+		database.DB.QueryRow(`SELECT user_id FROM md_comments WHERE id=? AND team_id=? AND document_id=?`,
+			parentID, teamID, docID).Scan(&parentAuthor)
+	}
+
+	rows, err := database.DB.Query(
+		`SELECT u.id, IFNULL(u.display_name,''), IFNULL(u.username,'')
+		 FROM team_members tm
+		 JOIN users u ON tm.user_id COLLATE utf8mb4_unicode_ci = u.id
+		 WHERE tm.team_id=?`, teamID)
+	if err != nil {
+		log.Printf("notifyMentions: list members: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var members []mentionMember
+	for rows.Next() {
+		var m mentionMember
+		if err := rows.Scan(&m.id, &m.dispName, &m.username); err != nil {
+			log.Printf("notifyMentions: scan member: %v", err)
+			continue
+		}
+		members = append(members, m)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("notifyMentions: iterate members: %v", err)
+		return
+	}
+
+	mentioned := matchMentions(content, members)
+	hasWork := parentAuthor != ""
+	if !hasWork {
+		for _, m := range members {
+			if mentioned[m.id] {
+				hasWork = true
+				break
+			}
+		}
+	}
+	if !hasWork {
+		return
+	}
+
+	var docTitle string
+	database.DB.QueryRow(`SELECT title FROM md_documents WHERE id=? AND team_id=?`, docID, teamID).Scan(&docTitle)
+	if docTitle == "" {
+		docTitle = "文档"
+	}
+	mentionTitle := fmt.Sprintf("《%s》有新评论提到了你", docTitle)
+	replyTitle := fmt.Sprintf("《%s》有人回复了你的评论", docTitle)
+
+	notified := map[string]bool{authorID: true}
+	for _, m := range members {
+		if notified[m.id] {
+			continue
+		}
+		nType, isMention := commentNotifyKind(mentioned[m.id], m.id == parentAuthor)
+		if nType == "" {
+			continue
+		}
+		title := replyTitle
+		if isMention {
+			title = mentionTitle
+		}
+		_, err := database.DB.Exec(
+			`INSERT INTO md_notifications (id, user_id, team_id, type, title, document_id, related_id, is_read, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
+			uuid.New().String(), m.id, teamID, nType, title, docID, commentID)
+		if err != nil {
+			log.Printf("notifyMentions: insert notification: %v", err)
+			continue
+		}
+		notified[m.id] = true
+	}
+}
+
 func TeamCreateComment(c *gin.Context) {
 	docID := c.Param("id")
 	// comment 及以上可以留言；只读成员不能。
@@ -1401,6 +1597,8 @@ func TeamCreateComment(c *gin.Context) {
 	audit(c, "create_comment", "document", docID, "", auditDetail(gin.H{
 		"comment_id": id, "parent_id": req.ParentID, "excerpt": excerpt(req.Content, 80),
 	}))
+	// @提及与楼中楼回复 → 站内通知（铃铛）
+	notifyMentions(c, teamID, docID, id, req.Content, req.ParentID, userID)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"id": id, "content": req.Content, "user_id": userID, "user_name": userName,
 	}})
@@ -2510,8 +2708,10 @@ func TeamListNotifications(c *gin.Context) {
 	var total, unread int
 	database.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(is_read=0),0) FROM md_notifications WHERE user_id=? AND team_id=?", userID, teamID).Scan(&total, &unread)
 
+	// document_id 必须返回：铃铛的「查看文档」按钮靠它跳转，之前漏了导致
+	// 按钮永远不显示。
 	rows, err := database.DB.Query(
-		`SELECT id, type, title, is_read, created_at
+		`SELECT id, type, title, is_read, created_at, IFNULL(document_id,''), IFNULL(related_id,'')
 		 FROM md_notifications WHERE user_id=? AND team_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
 		userID, teamID, pageSize, offset)
 	if err != nil {
@@ -2521,12 +2721,13 @@ func TeamListNotifications(c *gin.Context) {
 	defer rows.Close()
 	var notifications []map[string]interface{}
 	for rows.Next() {
-		var id, nType, title, createdAt string
+		var id, nType, title, createdAt, docID, relatedID string
 		var isRead bool
-		rows.Scan(&id, &nType, &title, &isRead, &createdAt)
+		rows.Scan(&id, &nType, &title, &isRead, &createdAt, &docID, &relatedID)
 		notifications = append(notifications, map[string]interface{}{
 			"id": id, "type": nType, "title": title,
 			"is_read": isRead, "created_at": createdAt,
+			"document_id": docID, "related_id": relatedID,
 		})
 	}
 	if notifications == nil {
