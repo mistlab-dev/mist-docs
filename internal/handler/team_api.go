@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/c-wind/mist-docs/internal/database"
 	"github.com/c-wind/mist-docs/internal/model"
@@ -432,16 +433,36 @@ func TeamSearchDocuments(c *gin.Context) {
 	}
 	offset := (page - 1) * pageSize
 
+	// ngram 可用时用 MATCH 走 FULLTEXT 索引（中文分词），否则退回 LIKE 全表扫。
+	// MATCH 命中数为 0 时（ngram_token_size=2 单字/短词搜不到）再用 LIKE 兑底。
+	useNgram := database.HasNgram() && len([]rune(strings.TrimSpace(keyword))) >= 2
+	var matchExpr, where string
+	var args []interface{}
 	pattern := "%" + keyword + "%"
-	where := `WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR d.content_text LIKE ?)`
-	args := []interface{}{teamID, pattern, pattern}
+	if useNgram {
+		matchExpr = "MATCH(d.content_text) AGAINST(? IN BOOLEAN MODE)"
+		where = `WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR ` + matchExpr + `)`
+		args = []interface{}{teamID, pattern, keyword}
+	} else {
+		where = `WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR d.content_text LIKE ?)`
+		args = []interface{}{teamID, pattern, pattern}
+	}
 
 	var total int
 	database.DB.QueryRow("SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total)
 
+	// ngram 布尔模式对短词（ngram_token_size=2 切不出）可能全无命中，此时
+	// 用 LIKE 兑底，避免“明明有匹配却搜不到”。
+	if useNgram && total == 0 {
+		where = `WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR d.content_text LIKE ?)`
+		args = []interface{}{teamID, pattern, pattern}
+		database.DB.QueryRow("SELECT COUNT(*) FROM md_documents d "+where, args...).Scan(&total)
+	}
+
 	query := `SELECT d.id, d.team_id, IFNULL(d.folder_id, ''), d.title, d.type, d.file_size, d.version,
 		IFNULL(d.locked_by, ''), d.status, IFNULL(d.created_by, ''), IFNULL(d.updated_by, ''), d.created_at, d.updated_at,
-		COALESCE(NULLIF(u1.display_name, ''), NULLIF(u1.username, ''), '') as creator_name
+		COALESCE(NULLIF(u1.display_name, ''), NULLIF(u1.username, ''), '') as creator_name,
+		IFNULL(d.content_text, '') as content_text
 		FROM md_documents d
 		LEFT JOIN users u1 ON d.created_by COLLATE utf8mb4_unicode_ci = u1.id ` + where +
 		" ORDER BY d.updated_at DESC LIMIT ? OFFSET ?"
@@ -475,10 +496,12 @@ func TeamSearchDocuments(c *gin.Context) {
 		var r SearchResult
 		var lockedBy sql.NullString
 		var status int
+		var contentText string
 		rows.Scan(&r.ID, &r.TeamID, &r.FolderID, &r.Title, &r.Type, &r.FileSize, &r.Version,
 			&lockedBy, &status, &r.CreatedBy, &r.UpdatedBy, &r.CreatedAt, &r.UpdatedAt,
-			&r.CreatorName)
+			&r.CreatorName, &contentText)
 		r.CreatedByName = r.CreatorName
+		r.Snippet = snippetAround(contentText, keyword, 160)
 		results = append(results, r)
 	}
 	if results == nil {
@@ -488,6 +511,67 @@ func TeamSearchDocuments(c *gin.Context) {
 }
 
 // TeamRecentDocuments GET /teams/:team_id/documents/recent
+// snippetAround returns a plain-text window of body centred on the first
+// keyword hit, for the search results card. Body is the stored HTML
+// (content_text), so tags are stripped first and the result is raw text —
+// never HTML; escaping/highlighting is the frontend's job.
+func snippetAround(body, keyword string, width int) string {
+	body = strings.TrimSpace(htmlTagRe.ReplaceAllString(body, " "))
+	if body == "" {
+		return ""
+	}
+	lowerBody := strings.ToLower(body)
+	lowerKw := strings.ToLower(keyword)
+	idx := strings.Index(lowerBody, lowerKw)
+	if idx < 0 {
+		if len(body) > width {
+			// 截断后退到 rune 边界，避免切断 UTF-8 多字节字符。
+			end := startOfRuneBoundary(body, width)
+			return collapseSpace(body[:end]) + "…"
+		}
+		return collapseSpace(body)
+	}
+	// 半窗居中，字节边界不越界（中文 UTF-8）。
+	start := idx - width/2
+	for start > 0 && !utf8.RuneStart(body[start]) {
+		start--
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + width
+	if end > len(body) {
+		end = len(body)
+	}
+	for end < len(body) && !utf8.RuneStart(body[end]) {
+		end++
+	}
+	s := collapseSpace(strings.TrimSpace(body[start:end]))
+	if start > 0 {
+		s = "…" + s
+	}
+	if end < len(body) {
+		s += "…"
+	}
+	return s
+}
+
+// startOfRuneBoundary returns the largest offset <= n that lands on a rune
+// start, so truncating at the returned offset never splits a multi-byte char.
+func startOfRuneBoundary(s string, n int) int {
+	for n > 0 && n < len(s) && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+func collapseSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
 func TeamRecentDocuments(c *gin.Context) {
 	teamID := getTeamID(c)
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))

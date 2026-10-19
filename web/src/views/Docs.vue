@@ -570,8 +570,11 @@ function avatarColor(name: string) {
 
 function highlightText(text: string, keyword: string): string {
   if (!keyword || !text) return text
-  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="search-hl">$1</mark>')
+  // 先转义：snippet 是服务端剥离 HTML 后的纯文本，但不可信任任何输入
+  // 直接拼进 v-html。
+  const safe = escapeHtml(text)
+  const escaped = escapeHtml(keyword).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return safe.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="search-hl">$1</mark>')
 }
 
 function setDocs(list: any[]) {

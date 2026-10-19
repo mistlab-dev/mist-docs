@@ -3,6 +3,8 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/c-wind/mist-docs/internal/config"
@@ -33,6 +35,52 @@ func Init(cfg config.DatabaseConfig) error {
 	return Migrate()
 }
 
+// migrateFulltextNgram makes Chinese full-text search actually work.
+//
+// The default FULLTEXT parser does not tokenise CJK, so MATCH AGAINST on
+// Chinese text returns 0 rows for every query — the ft_content_text index
+// built in Migrate is effectively dead for zh content. MySQL 8 ships an
+// ngram parser (ngram_token_size=2, so queries must be >= 2 characters) that
+// splits CJK into fixed-length tokens.
+//
+// Two migration hazards handled here:
+//   - The ngram index is created only when the server reports the
+//     ngram_token_size variable (MySQL with the parser compiled in); on
+//     servers without it search keeps the default index and falls back to
+//     LIKE (see searchDocuments).
+//   - The pre-existing default-parser ft_content_text index stays in place:
+//     dropping it on a large table is a blocking ALTER. When ngram is
+//     available we add ft_content_ngram alongside it; queries bind MATCH()
+//     explicitly to the ngram index name when available.
+//
+// Creating an index is a no-op once ft_content_ngram exists, so this is
+// safe to run on every start.
+func migrateFulltextNgram() {
+	var name, ngramSize string
+	if err := DB.QueryRow(`SHOW VARIABLES LIKE 'ngram_token_size'`).Scan(&name, &ngramSize); err != nil || ngramSize == "" {
+		// Server has no ngram parser; keep default FULLTEXT behaviour.
+		return
+	}
+	if _, err := DB.Exec(`ALTER TABLE md_documents ADD FULLTEXT INDEX ft_content_ngram (content_text) WITH PARSER ngram`); err != nil {
+		// Duplicate key name (already migrated) is the common, expected case.
+		if !strings.Contains(err.Error(), "Duplicate key name") {
+			fmt.Printf("migrate fulltext ngram: %v\n", err)
+			return
+		}
+	}
+	// Index present (freshly created or already there): MATCH can bind to it.
+	ngramAvailable.Store(true)
+}
+
+var ngramAvailable atomic.Bool
+
+// HasNgram reports whether the ngram FULLTEXT index exists (set by
+// migrateFulltextNgram). Queries bind MATCH() to ft_content_ngram only when
+// this is true, because that index does not exist on servers without the
+// parser — MATCH() then falls back to ft_content_text (default parser, dead
+// for CJK) or errors.
+func HasNgram() bool { return ngramAvailable.Load() }
+
 // Migrate applies additive schema updates. It only adds missing columns and
 // tables; existing rows are left in place, except soft-deleted documents whose
 // deleted_at is still NULL (those are backfilled from updated_at).
@@ -44,6 +92,7 @@ func Migrate() error {
 		DB.Exec(`ALTER TABLE md_documents ADD COLUMN content_text LONGTEXT DEFAULT NULL`)
 		DB.Exec(`ALTER TABLE md_documents ADD FULLTEXT INDEX ft_content_text (content_text)`)
 	}
+	migrateFulltextNgram()
 
 	// Auto-migrate: md_templates table
 	var tblExists int
