@@ -168,7 +168,7 @@
         </div>
       </el-header>
       <el-main>
-        <router-view :key="auth.currentTeamId" />
+        <router-view :key="auth.currentTeamId + ':' + (route.params.id || '')" />
       </el-main>
     </el-container>
 
