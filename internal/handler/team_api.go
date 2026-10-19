@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -1372,6 +1373,84 @@ func TeamListComments(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": comments})
 }
 
+// mentionTokenRe matches @-mention tokens.
+//
+// The `@` must start a token (preceded by start-of-string or a non-ASCII-word
+// char) so `a@b.com` is not read as a mention of `b.com`; the token stops at
+// whitespace or common punctuation so `@王五，同意` mentions `王五` — matching
+// how the composer writes mentions (`@name ` with a trailing space).
+var mentionTokenRe = regexp.MustCompile(`(?:^|[^A-Za-z0-9_])@([^\s@，。！？、；：,.!?;:（）()【】\[\]「」《》…]+)`)
+
+// parseMentionTokens returns the lowercased @-mention tokens in content.
+func parseMentionTokens(content string) map[string]bool {
+	tokens := map[string]bool{}
+	for _, m := range mentionTokenRe.FindAllStringSubmatch(content, -1) {
+		tokens[strings.ToLower(m[1])] = true
+	}
+	return tokens
+}
+
+// notifyMentions writes an in-app notification for each team member whose
+// display_name or username is @-mentioned in content, skipping the author.
+// Replies to a comment also notify the parent comment's author (type reply).
+//
+// Failures are logged, never returned: a notification must not fail the
+// comment the user actually posted.
+func notifyMentions(c *gin.Context, teamID, docID, commentID, content, parentID, authorID string) {
+	tokens := parseMentionTokens(content)
+	// 回复楼中楼时同时提醒楼主（除非楼主就是作者或已被 @ 到）。
+	var parentAuthor string
+	if parentID != "" {
+		database.DB.QueryRow(`SELECT user_id FROM md_comments WHERE id=? AND team_id=? AND document_id=?`,
+			parentID, teamID, docID).Scan(&parentAuthor)
+	}
+	if len(tokens) == 0 && parentAuthor == "" {
+		return
+	}
+
+	var docTitle string
+	database.DB.QueryRow(`SELECT title FROM md_documents WHERE id=? AND team_id=?`, docID, teamID).Scan(&docTitle)
+
+	rows, err := database.DB.Query(
+		`SELECT u.id, IFNULL(u.display_name,''), IFNULL(u.username,'')
+		 FROM team_members tm
+		 JOIN users u ON tm.user_id COLLATE utf8mb4_unicode_ci = u.id
+		 WHERE tm.team_id=?`, teamID)
+	if err != nil {
+		log.Printf("notifyMentions: list members: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	title := fmt.Sprintf("《%s》有新评论提到了你", docTitle)
+	notified := map[string]bool{authorID: true}
+	for rows.Next() {
+		var uid, dispName, username string
+		rows.Scan(&uid, &dispName, &username)
+		if notified[uid] {
+			continue
+		}
+		mentioned := tokens[strings.ToLower(dispName)] || (username != "" && tokens[strings.ToLower(username)])
+		replyTo := uid == parentAuthor
+		if !mentioned && !replyTo {
+			continue
+		}
+		nType := "comment"
+		if replyTo && !mentioned {
+			nType = "reply"
+		}
+		_, err := database.DB.Exec(
+			`INSERT INTO md_notifications (id, user_id, team_id, type, title, document_id, related_id, is_read, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
+			uuid.New().String(), uid, teamID, nType, title, docID, commentID)
+		if err != nil {
+			log.Printf("notifyMentions: insert notification: %v", err)
+			continue
+		}
+		notified[uid] = true
+	}
+}
+
 func TeamCreateComment(c *gin.Context) {
 	docID := c.Param("id")
 	// comment 及以上可以留言；只读成员不能。
@@ -1401,6 +1480,8 @@ func TeamCreateComment(c *gin.Context) {
 	audit(c, "create_comment", "document", docID, "", auditDetail(gin.H{
 		"comment_id": id, "parent_id": req.ParentID, "excerpt": excerpt(req.Content, 80),
 	}))
+	// @提及与楼中楼回复 → 站内通知（铃铛）
+	notifyMentions(c, teamID, docID, id, req.Content, req.ParentID, userID)
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"id": id, "content": req.Content, "user_id": userID, "user_name": userName,
 	}})
@@ -2510,8 +2591,10 @@ func TeamListNotifications(c *gin.Context) {
 	var total, unread int
 	database.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(is_read=0),0) FROM md_notifications WHERE user_id=? AND team_id=?", userID, teamID).Scan(&total, &unread)
 
+	// document_id 必须返回：铃铛的「查看文档」按钮靠它跳转，之前漏了导致
+	// 按钮永远不显示。
 	rows, err := database.DB.Query(
-		`SELECT id, type, title, is_read, created_at
+		`SELECT id, type, title, is_read, created_at, IFNULL(document_id,''), IFNULL(related_id,'')
 		 FROM md_notifications WHERE user_id=? AND team_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
 		userID, teamID, pageSize, offset)
 	if err != nil {
@@ -2521,12 +2604,13 @@ func TeamListNotifications(c *gin.Context) {
 	defer rows.Close()
 	var notifications []map[string]interface{}
 	for rows.Next() {
-		var id, nType, title, createdAt string
+		var id, nType, title, createdAt, docID, relatedID string
 		var isRead bool
-		rows.Scan(&id, &nType, &title, &isRead, &createdAt)
+		rows.Scan(&id, &nType, &title, &isRead, &createdAt, &docID, &relatedID)
 		notifications = append(notifications, map[string]interface{}{
 			"id": id, "type": nType, "title": title,
 			"is_read": isRead, "created_at": createdAt,
+			"document_id": docID, "related_id": relatedID,
 		})
 	}
 	if notifications == nil {
