@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/c-wind/mist-docs/internal/database"
@@ -19,14 +20,6 @@ import (
 // 双链插入的是 `<a target="_blank" rel="noopener" class="editor-link" href="https://.../docs/{id}">标题</a>`，
 // 历史导入中也可能有纯 Markdown 的 `[标题](/docs/{id})`。无论哪种，在 content_text
 // 中都包含 `/docs/{id}` 字符串。
-//
-// 性能与准确性设计：
-// 1. 查询阶段：在主查询中直接用 SUBSTRING 取目标链接前后的局部正文切片（~1000 字符），
-//    避免对每篇候选文档单独发起二次查询去拉取整段 LONGTEXT。
-// 2. 权限过滤：主查询仅作为粗筛候选，逐篇过 HasTeamPermission(read) 校验，
-//    确保用户无权阅读的文档绝不泄漏标题和摘要。
-// 3. Excerpt 处理：先定位指向 targetID 的 <a> 标签并用锚文本替换，再去标签、反转义 HTML 实体，
-//    最后复用 rune 安全的边界截取，防止将 HTML 标签截半或切碎 UTF-8 字符。
 
 // targetAnchorRe 匹配指向特定文档 id 的 <a> 标签及其锚文本：<a ... href=".../docs/{id}...">锚文本</a>
 func makeTargetAnchorRe(targetID string) *regexp.Regexp {
@@ -34,17 +27,49 @@ func makeTargetAnchorRe(targetID string) *regexp.Regexp {
 	return regexp.MustCompile(pattern)
 }
 
+// markdownLinkRe 匹配 Markdown 格式的链接：[标题](.../docs/{id}...)
+func makeMarkdownLinkRe(targetID string) *regexp.Regexp {
+	pattern := fmt.Sprintf(`(?is)\[([^\]]+)\]\([^)]*/docs/%s(?:\?[^)]*)?\)`, regexp.QuoteMeta(targetID))
+	return regexp.MustCompile(pattern)
+}
+
+// sanitizeSubstringBoundary 清理从正文中 SUBSTRING 截取时可能截出的残缺 HTML 标签：
+// 1. 开头若有残损的属性片段（即在第一个 '<' 之前出现了 '>'），丢弃该前缀；
+// 2. 结尾若有未闭合的标签（即在最后一个 '>' 之后出现了 '<'），丢弃该后缀。
+func sanitizeSubstringBoundary(s string) string {
+	firstOpen := strings.Index(s, "<")
+	firstClose := strings.Index(s, ">")
+	if firstClose >= 0 && (firstOpen < 0 || firstClose < firstOpen) {
+		s = s[firstClose+1:]
+	}
+
+	lastOpen := strings.LastIndex(s, "<")
+	lastClose := strings.LastIndex(s, ">")
+	if lastOpen >= 0 && (lastClose < 0 || lastOpen > lastClose) {
+		s = s[:lastOpen]
+	}
+	return s
+}
+
+const focusMarker = "\x00"
+
 // formatBacklinkExcerpt 将包含指向 targetID 链接的 HTML 片段提炼为适合侧边栏展示的纯文本摘要。
 func formatBacklinkExcerpt(rawHTML, targetID string) string {
 	if rawHTML == "" {
 		return ""
 	}
 
-	// 1. 先用指向目标的 <a> 标签的锚文本直接替换掉整段 <a ...>...</a>
-	// 这样可以避免切片边界恰好切在 <a href="..."> 标签中间而留下残缺的属性文本
+	// 0. 清理从长文本切片边界切出来的残损 HTML 标签片段
+	rawHTML = sanitizeSubstringBoundary(rawHTML)
+
+	// 1. 先用标记字符包裹锚文本替换掉整段链接标签：
+	//    - HTML <a> 标签：用 \x00$1\x00 替换
+	//    - Markdown 链接 [标题](/docs/{id})：用 \x00$1\x00 替换
 	anchorRe := makeTargetAnchorRe(targetID)
-	anchorHit := anchorRe.FindStringIndex(rawHTML)
-	replaced := anchorRe.ReplaceAllString(rawHTML, " $1 ")
+	replaced := anchorRe.ReplaceAllString(rawHTML, " "+focusMarker+"$1"+focusMarker+" ")
+
+	mdRe := makeMarkdownLinkRe(targetID)
+	replaced = mdRe.ReplaceAllString(replaced, " "+focusMarker+"$1"+focusMarker+" ")
 
 	// 2. 清理 script / style 块、剥离其他 HTML 标签、反转义 HTML 实体、归一化连续空白
 	cleaned := stripScriptStyle(replaced)
@@ -55,44 +80,54 @@ func formatBacklinkExcerpt(rawHTML, targetID string) string {
 		return ""
 	}
 
-	// 3. 定位焦点中心：如果替换前找到了 <a> 的位置，在清洗后的文本中尽量居中展现
-	const targetWindow = 100
+	// 3. 依据标记字符 \x00 精确寻找链接锚文本在纯文本中的 rune 偏移量
 	runes := []rune(cleaned)
-	if len(runes) <= targetWindow {
-		return cleaned
-	}
+	const targetWindow = 100
 
-	// 找到原锚文本在清洗后文本里的位置以居中窗口
-	focusIndex := 0
-	if anchorHit != nil {
-		// 估算焦点位置在清洗文本中的大致比例
-		ratio := float64(anchorHit[0]) / float64(len(rawHTML))
-		focusIndex = int(float64(len(runes)) * ratio)
-		if focusIndex >= len(runes) {
-			focusIndex = len(runes) / 2
+	focusIndex := -1
+	for i, r := range runes {
+		if r == '\x00' {
+			focusIndex = i
+			break
 		}
-	} else {
-		focusIndex = len(runes) / 2
 	}
 
-	start := focusIndex - targetWindow/2
+	// 去除所有 \x00 标记字符，并在去掉标记后的 runes 上做最终居中窗口截取
+	var finalRunes []rune
+	adjustedFocus := focusIndex
+	for _, r := range runes {
+		if r == '\x00' {
+			continue
+		}
+		finalRunes = append(finalRunes, r)
+	}
+
+	if len(finalRunes) <= targetWindow {
+		return string(finalRunes)
+	}
+
+	if adjustedFocus < 0 || adjustedFocus >= len(finalRunes) {
+		adjustedFocus = len(finalRunes) / 2
+	}
+
+	start := adjustedFocus - targetWindow/2
 	if start < 0 {
 		start = 0
 	}
 	end := start + targetWindow
-	if end > len(runes) {
-		end = len(runes)
+	if end > len(finalRunes) {
+		end = len(finalRunes)
 		start = end - targetWindow
 		if start < 0 {
 			start = 0
 		}
 	}
 
-	snippet := string(runes[start:end])
+	snippet := string(finalRunes[start:end])
 	if start > 0 {
 		snippet = "…" + snippet
 	}
-	if end < len(runes) {
+	if end < len(finalRunes) {
 		snippet = snippet + "…"
 	}
 	return snippet
