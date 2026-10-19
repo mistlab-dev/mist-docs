@@ -141,6 +141,7 @@ func RegisterAPI(r gin.IRouter) {
 				// Comments
 				teams.PUT("/comments/:id", handler.TeamUpdateComment)
 				teams.DELETE("/comments/:id", handler.TeamDeleteComment)
+				teams.POST("/comments/:id/resolve", handler.TeamResolveComment)
 
 				// Search targets and members
 				teams.GET("/search-targets", handler.TeamSearchTargets)

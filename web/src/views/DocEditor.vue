@@ -720,15 +720,29 @@
         <el-button type="primary" size="small" @click="submitComment" :disabled="!newComment.trim()" style="margin-top:8px">{{ t('docEditor.sendBtn') }}</el-button>
       </div>
       <div v-else class="no-data">{{ t('docEditor.readOnly') }}</div>
+
+      <!-- 评论筛选与状态统计 -->
+      <div v-if="comments.length" class="comment-filter-bar">
+        <el-radio-group v-model="commentFilter" size="small">
+          <el-radio-button label="active">{{ t('docEditor.commentFilterActive') }} ({{ activeCommentsCount }})</el-radio-button>
+          <el-radio-button label="resolved">{{ t('docEditor.commentFilterResolved') }} ({{ resolvedCommentsCount }})</el-radio-button>
+          <el-radio-button label="all">{{ t('docEditor.commentFilterAll') }} ({{ rootComments.length }})</el-radio-button>
+        </el-radio-group>
+      </div>
+
       <div class="comment-list">
-        <div v-for="c in comments" :key="c.id" class="comment-item">
+        <div v-for="c in filteredComments" :key="c.id" class="comment-item" :class="{ 'is-resolved': !!c.resolved_at }">
           <div class="comment-header">
             <strong>{{ c.user_name }}</strong>
             <span class="comment-time">{{ formatTime(c.created_at) }}</span>
+            <el-tag v-if="c.resolved_at" size="small" type="success" effect="plain" class="resolved-tag">{{ t('docEditor.resolvedTag') }}</el-tag>
           </div>
           <div class="comment-content">{{ c.content }}</div>
           <div class="comment-actions">
-            <el-button v-if="canComment" link size="small" @click="replyTo(c)">{{ t('docEditor.replyBtn') }}</el-button>
+            <el-button v-if="canComment && !c.resolved_at" link size="small" @click="replyTo(c)">{{ t('docEditor.replyBtn') }}</el-button>
+            <el-button v-if="canResolveComment(c)" link size="small" type="primary" @click="toggleResolve(c)">
+              {{ c.resolved_at ? t('docEditor.unresolveBtn') : t('docEditor.resolveBtn') }}
+            </el-button>
             <el-button v-if="c.user_id === currentUserId" link type="danger" size="small" @click="deleteComment(c.id)">{{ t('common.delete') }}</el-button>
           </div>
           <!-- 回复 -->
@@ -743,7 +757,7 @@
             </div>
           </div>
         </div>
-        <div v-if="!comments.length" class="no-data">{{ t('docEditor.noComments') }}</div>
+        <div v-if="!filteredComments.length" class="no-data">{{ t('docEditor.noComments') }}</div>
       </div>
     </el-drawer>
 
@@ -2267,10 +2281,39 @@ async function handleExport(format: string) {
 }
 
 // === 评论 ===
+const commentFilter = ref<'active' | 'resolved' | 'all'>('active')
+
+const rootComments = computed(() => comments.value.filter(c => !c.parent_id))
+const activeCommentsCount = computed(() => rootComments.value.filter(c => !c.resolved_at).length)
+const resolvedCommentsCount = computed(() => rootComments.value.filter(c => !!c.resolved_at).length)
+
+const filteredComments = computed(() => {
+  return rootComments.value.filter(c => {
+    if (commentFilter.value === 'active') return !c.resolved_at
+    if (commentFilter.value === 'resolved') return !!c.resolved_at
+    return true
+  })
+})
+
+function canResolveComment(c: any) {
+  return c.user_id === currentUserId.value || isTeamAdmin.value
+}
+
+async function toggleResolve(c: any) {
+  try {
+    const { data } = await teamApi.post(`/comments/${c.id}/resolve`)
+    c.resolved_at = data.data?.resolved_at || ''
+    c.resolved_by = data.data?.resolved_by || ''
+    ElMessage.success(c.resolved_at ? t('docEditor.resolvedTag') : t('common.updateSuccess'))
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.error || t('common.networkError'))
+  }
+}
+
 async function loadComments() {
   const { data } = await teamApi.get(`/documents/${docId}/comments`)
   comments.value = data.data || []
-  commentCount.value = comments.value.length
+  commentCount.value = comments.value.filter((c: any) => !c.parent_id && !c.resolved_at).length
 }
 
 async function submitComment() {
@@ -2575,6 +2618,9 @@ document.addEventListener('keydown', handleGlobalKeydown)
 .comment-list { display: flex; flex-direction: column; gap: 12px; }
 .comment-item { padding: 12px 0; border-bottom: 1px solid var(--md-border-light); }
 .comment-item:last-child { border-bottom: none; }
+.comment-item.is-resolved { opacity: 0.65; background: var(--md-bg-subtle, rgba(0, 0, 0, 0.02)); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.comment-filter-bar { margin-bottom: 12px; display: flex; justify-content: center; }
+.resolved-tag { margin-left: 6px; }
 .comment-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .comment-header strong { font-size: 14px; }
 .comment-time { font-size: 12px; color: var(--md-text-quiet); }

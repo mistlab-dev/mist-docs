@@ -1498,7 +1498,8 @@ func TeamListComments(c *gin.Context) {
 	}
 	rows, err := database.DB.Query(
 		`SELECT c.id, c.content, c.user_id, IFNULL(c.parent_id,''), c.created_at, c.updated_at,
-		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), NULLIF(c.user_name,''), '') as user_name
+		 COALESCE(NULLIF(u.display_name,''), NULLIF(u.username,''), NULLIF(c.user_name,''), '') as user_name,
+		 IFNULL(c.resolved_at,''), IFNULL(c.resolved_by,'')
 		 FROM md_comments c LEFT JOIN users u ON c.user_id COLLATE utf8mb4_unicode_ci = u.id
 		 WHERE c.document_id=? ORDER BY c.created_at`, docID)
 	if err != nil {
@@ -1509,11 +1510,13 @@ func TeamListComments(c *gin.Context) {
 	var comments []map[string]interface{}
 	for rows.Next() {
 		var id, content, userID, parentID, createdAt, updatedAt, userName string
-		rows.Scan(&id, &content, &userID, &parentID, &createdAt, &updatedAt, &userName)
+		var resolvedAt, resolvedBy string
+		rows.Scan(&id, &content, &userID, &parentID, &createdAt, &updatedAt, &userName, &resolvedAt, &resolvedBy)
 		comments = append(comments, map[string]interface{}{
 			"id": id, "content": content, "user_id": userID,
 			"parent_id": parentID, "created_at": createdAt,
 			"updated_at": updatedAt, "user_name": userName,
+			"resolved_at": resolvedAt, "resolved_by": resolvedBy,
 		})
 	}
 	if comments == nil {
@@ -3069,6 +3072,38 @@ func TeamDeleteComment(c *gin.Context) {
 	}
 	audit(c, "delete_comment", "document", docID, "", auditDetail(gin.H{"comment_id": id, "author_id": author}))
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+}
+
+// TeamResolveComment POST /teams/:team_id/comments/:id/resolve
+// 切换评论的“已解决”状态（toggle）。权限与编辑评论一致：评论作者或团队
+// 管理员。楼主/文档编辑者不能解决别人的评论，避免路人把讨论关掉。
+func TeamResolveComment(c *gin.Context) {
+	id := c.Param("id")
+	if !commentEditable(c, id) {
+		return
+	}
+	// resolved_at 为空 → 解决；否则 → 取消解决（幂等的 toggle）。
+	res, err := database.DB.Exec(
+		`UPDATE md_comments
+		 SET resolved_at = CASE WHEN resolved_at IS NULL THEN NOW() ELSE NULL END,
+		     resolved_by = CASE WHEN resolved_at IS NULL THEN ? ELSE NULL END
+		 WHERE id=?`, c.GetString("user_id"), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		denyNotFound(c, "评论不存在")
+		return
+	}
+	var docID string
+	database.DB.QueryRow(`SELECT document_id FROM md_comments WHERE id=?`, id).Scan(&docID)
+	audit(c, "resolve_comment", "document", docID, "", auditDetail(gin.H{"comment_id": id}))
+
+	var resolvedAt, resolvedBy string
+	database.DB.QueryRow(`SELECT IFNULL(resolved_at,''), IFNULL(resolved_by,'') FROM md_comments WHERE id=?`, id).
+		Scan(&resolvedAt, &resolvedBy)
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"resolved_at": resolvedAt, "resolved_by": resolvedBy}})
 }
 
 // ==================== Team members ====================

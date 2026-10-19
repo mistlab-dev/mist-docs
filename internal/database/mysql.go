@@ -193,6 +193,9 @@ func Migrate() error {
 	// Share links store a permission, but neither init-db nor the team migration added the column.
 	ensureColumn("md_shares", "permission", "permission VARCHAR(20) NULL DEFAULT NULL")
 	ensureColumn("md_documents", "deleted_at", "deleted_at DATETIME NULL DEFAULT NULL")
+	// 评论“已解决”：讨论完的旧评论不再永久挂在列表里。
+	ensureColumn("md_comments", "resolved_at", "resolved_at DATETIME NULL DEFAULT NULL")
+	ensureColumn("md_comments", "resolved_by", "resolved_by VARCHAR(64) NULL DEFAULT NULL")
 	// Rows already in the trash (status=0) predate the column. Stamp them from updated_at
 	// so the list has a delete time. Active documents stay NULL.
 	if _, err := DB.Exec(`UPDATE md_documents SET deleted_at = updated_at WHERE status = 0 AND deleted_at IS NULL`); err != nil {
