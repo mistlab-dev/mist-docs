@@ -252,7 +252,7 @@
               <span class="wikilink-item-type">{{ item.type === 'sheet' ? t('common.sheet') : t('common.doc') }}</span>
             </div>
           </template>
-          <div v-else class="wikilink-empty">未找到相关文档</div>
+          <div v-else class="wikilink-empty">{{ wikiLinkState.query ? '未找到相关文档' : '输入关键词搜索文档' }}</div>
         </div>
       </div>
       <!-- 大纲导航 -->
@@ -925,6 +925,7 @@ function updateOutline() {
 // 滚动时高亮当前标题
 function onEditorScroll() {
   refreshCursors()
+  updateWikiLinkPosition()
   if (!outlineItems.value.length) return
   const container = editorScrollEl.value || document.querySelector('.editor-scroll')
   if (!container) return
@@ -1271,11 +1272,13 @@ const linkDialog = reactive({ show: false, text: '', url: '', results: [] as {id
 let linkSearchTimer: ReturnType<typeof setTimeout> | null = null
 
 // === 双向链接（[[ WikiLink ）联想输入 ===
+// pos 保存触发时的文档位置：视口坐标会被滚动/布局顶掉，用位置重算。
 const wikiLinkState = reactive({
   show: false,
   query: '',
   from: 0,
   to: 0,
+  pos: 0,
   loading: false,
   x: 0,
   y: 0,
@@ -1284,24 +1287,72 @@ const wikiLinkState = reactive({
 })
 
 let wikiSearchTimer: ReturnType<typeof setTimeout> | null = null
+// 搜索序号：旧响应晚于新响应到达时直接丢弃，避免覆盖新结果。
+let wikiSearchSeq = 0
 
-function handleWikiLinkTrigger(match: WikiLinkMatch | null, coords?: { left: number; top: number; bottom: number }) {
+function closeWikiLink() {
+  clearTimeout(wikiSearchTimer!)
+  wikiSearchTimer = null
+  wikiSearchSeq++
+  wikiLinkState.show = false
+  wikiLinkState.loading = false
+  wikiLinkState.results = []
+  wikiLinkState.selectedIndex = 0
+}
+
+// 下拉框放在可滚动的 editor-scroll 内（和远程光标一样），用文档坐标而非
+// 视口坐标，滚动后依然对齐；跟随滚动刷新位置。
+function updateWikiLinkPosition() {
+  const ed = editor.value
+  const root = editorScrollEl.value
+  if (!ed || !root || !wikiLinkState.show) return
+  const box = root.getBoundingClientRect()
+  const size = ed.state.doc.content.size
+  const pos = Math.min(Math.max(wikiLinkState.pos, 0), size)
+  try {
+    const coords = ed.view.coordsAtPos(pos)
+    wikiLinkState.x = coords.left - box.left + root.scrollLeft
+    wikiLinkState.y = coords.bottom - box.top + root.scrollTop + 4
+  } catch { /* position left the document */ }
+}
+
+function handleWikiLinkTrigger(match: WikiLinkMatch | null) {
   if (!match) {
-    wikiLinkState.show = false
-    wikiLinkState.results = []
+    closeWikiLink()
     return
   }
 
   wikiLinkState.from = match.from
   wikiLinkState.to = match.to
+  wikiLinkState.pos = match.to
   wikiLinkState.query = match.query
 
-  if (coords) {
-    wikiLinkState.x = coords.left
-    wikiLinkState.y = coords.bottom + 6
-  }
-
   searchDocsForWikiLink(match.query)
+}
+
+// 键盘选择：↑/↓ 移动高亮，Enter 插入，Esc 关闭并把 `[[` 当普通文本。
+function wikiLinkKeyDown(e: KeyboardEvent): boolean {
+  if (!wikiLinkState.show) return false
+  const n = wikiLinkState.results.length
+  switch (e.key) {
+    case 'ArrowDown':
+      if (!n) return true
+      wikiLinkState.selectedIndex = (wikiLinkState.selectedIndex + 1) % n
+      return true
+    case 'ArrowUp':
+      if (!n) return true
+      wikiLinkState.selectedIndex = (wikiLinkState.selectedIndex - 1 + n) % n
+      return true
+    case 'Enter':
+      if (!n) return true
+      insertWikiDocLink(wikiLinkState.results[wikiLinkState.selectedIndex])
+      return true
+    case 'Escape':
+      closeWikiLink()
+      return true
+    default:
+      return false
+  }
 }
 
 function searchDocsForWikiLink(q: string) {
@@ -1309,11 +1360,20 @@ function searchDocsForWikiLink(q: string) {
   wikiLinkState.loading = true
   // 一触发就弹浮层,让 loading 和空结果(未找到)都看得见
   wikiLinkState.show = true
+  // 每次触发都按文档坐标重算位置（视口坐标会随滚动失效）
+  updateWikiLinkPosition()
+  // 只打 [[（q 为空）不发请求：后端要求关键词，空 q 会 400。
+  if (!q) {
+    wikiLinkState.loading = false
+    wikiLinkState.results = []
+    return
+  }
+  const seq = ++wikiSearchSeq
   wikiSearchTimer = setTimeout(async () => {
     try {
-      const params: any = {}
-      if (q) params.q = q
-      const { data } = await teamApi.get('/documents/search', { params })
+      const { data } = await teamApi.get('/documents/search', { params: { q } })
+      // 过期响应丢弃：已有更新的搜索在跑。
+      if (seq !== wikiSearchSeq) return
       const list = (data.data || []).map((d: any) => ({
         id: d.id,
         title: d.title,
@@ -1323,11 +1383,12 @@ function searchDocsForWikiLink(q: string) {
       wikiLinkState.selectedIndex = 0
       wikiLinkState.show = true
     } catch {
+      if (seq !== wikiSearchSeq) return
       wikiLinkState.results = []
       // 网络错误也保留浮层,提示暂无结果而非直接消失
       wikiLinkState.show = true
     } finally {
-      wikiLinkState.loading = false
+      if (seq === wikiSearchSeq) wikiLinkState.loading = false
     }
   }, 200)
 }
@@ -1355,8 +1416,7 @@ function insertWikiDocLink(item: { id: string; title: string }) {
     ])
     .run()
 
-  wikiLinkState.show = false
-  wikiLinkState.results = []
+  closeWikiLink()
 }
 
 function searchDocsForLink() {
@@ -1589,6 +1649,8 @@ function initEditor(initialContent: string) {
         ],
         editorProps: {
           attributes: { class: 'prose prose-lg focus:outline-none max-w-none' },
+          // [[ 联想框键盘操作：↑/↓/Enter/Esc
+          handleKeyDown: (_view: any, event: KeyboardEvent) => wikiLinkKeyDown(event),
           handlePaste: (_view: any, event: ClipboardEvent) => {
             const items = event.clipboardData?.items
             if (items) {
@@ -1724,6 +1786,8 @@ function createLocalEditor(content: string) {
     ],
     editorProps: {
       attributes: { class: 'prose prose-lg focus:outline-none max-w-none' },
+      // [[ 联想框键盘操作：↑/↓/Enter/Esc
+      handleKeyDown: (_view: any, event: KeyboardEvent) => wikiLinkKeyDown(event),
       handlePaste: (_view: any, event: ClipboardEvent) => {
         const items = event.clipboardData?.items
         if (items) {

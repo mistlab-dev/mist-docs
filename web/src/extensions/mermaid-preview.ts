@@ -6,8 +6,35 @@ import { renderMermaidSvg } from '../utils/mermaid'
 
 const mermaidPluginKey = new PluginKey('mermaid-preview')
 
-// Cache rendered SVG per source text to avoid re-rendering untouched diagrams
+// Sanitize SVG but keep Mermaid flowchart labels: they live inside
+// <foreignObject>, which DOMPurify strips by default. onerror / javascript:
+// payloads are still removed.
+const MERMAID_SANITIZE_OPTS = {
+  ADD_TAGS: ['foreignObject'],
+  HTML_INTEGRATION_POINTS: { foreignobject: true },
+} as any
+
+function sanitizeMermaidSvg(svg: string): string {
+  // 配置了 HTML_INTEGRATION_POINTS 时 DOMPurify 返回 TrustedHTML，转回 string
+  return String(DOMPurify.sanitize(svg, MERMAID_SANITIZE_OPTS))
+}
+
+// Cache rendered SVG per source text to avoid re-rendering untouched diagrams.
+// Bounded so long editing sessions cannot grow it without limit.
+const MAX_SVG_CACHE = 50
 const svgCache = new Map<string, string>()
+
+function cacheSvg(source: string, svg: string) {
+  if (svgCache.has(source)) {
+    svgCache.delete(source)
+  }
+  svgCache.set(source, svg)
+  while (svgCache.size > MAX_SVG_CACHE) {
+    const oldest = svgCache.keys().next()
+    if (oldest.done) break
+    svgCache.delete(oldest.value)
+  }
+}
 
 function createMermaidWidget(source: string): HTMLElement {
   const container = document.createElement('div')
@@ -26,7 +53,7 @@ function createMermaidWidget(source: string): HTMLElement {
   if (cached) {
     const wrapper = document.createElement('div')
     wrapper.className = 'mermaid-svg-wrapper'
-    wrapper.innerHTML = DOMPurify.sanitize(cached)
+    wrapper.innerHTML = sanitizeMermaidSvg(cached)
     container.appendChild(wrapper)
     return container
   }
@@ -38,11 +65,11 @@ function createMermaidWidget(source: string): HTMLElement {
 
   renderMermaidSvg(source)
     .then((svg) => {
-      svgCache.set(source, svg)
+      cacheSvg(source, svg)
       container.innerHTML = ''
       const wrapper = document.createElement('div')
       wrapper.className = 'mermaid-svg-wrapper'
-      wrapper.innerHTML = DOMPurify.sanitize(svg)
+      wrapper.innerHTML = sanitizeMermaidSvg(svg)
       container.appendChild(wrapper)
     })
     .catch((err) => {
@@ -84,6 +111,17 @@ export const MermaidPreview = Extension.create({
   },
 })
 
+function contentHash(s: string): string {
+  // FNV-1a 32-bit: cheap and good enough to distinguish same-length edits
+  // in a decoration key. Collisions only cost one extra re-render.
+  let h = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(36)
+}
+
 function buildDecorations(doc: any): DecorationSet {
   const decos: Decoration[] = []
 
@@ -96,7 +134,7 @@ function buildDecorations(doc: any): DecorationSet {
         decos.push(
           Decoration.widget(widgetPos, () => createMermaidWidget(textContent), {
             side: 1,
-            key: `mermaid-${pos}-${textContent.length}`,
+            key: `mermaid-${pos}-${contentHash(textContent)}`,
           })
         )
       }

@@ -34,10 +34,16 @@ export const WikiLink = Extension.create<WikiLinkOptions>({
         key: WikiLinkPluginKey,
         view() {
           return {
-            update(view) {
+            update(view, prevState) {
               if (!onTrigger) return
 
-              const { state } = view
+              // 只在文档或光标真的变了才重算，否则每次协同更新（远程编辑、
+              // awareness 光标移动）都会重触发联想。
+              const state = view.state
+              const selectionMoved = !state.selection.eq(prevState.selection)
+              const docChanged = !state.doc.eq(prevState.doc)
+              if (!selectionMoved && !docChanged) return
+
               const { selection } = state
               if (!selection.empty) {
                 onTrigger(null)
