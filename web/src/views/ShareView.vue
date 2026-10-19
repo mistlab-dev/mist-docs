@@ -43,8 +43,8 @@
           </div>
         </div>
         <el-divider />
-        <!-- 文档类型 -->
-        <div v-if="doc.type !== 'sheet'" ref="docBodyRef" class="doc-body" v-html="doc.content"></div>
+        <!-- 文档类型：v-html 的内容来自协作文档，先过 DOMPurify（阻塞项 #31） -->
+        <div v-if="doc.type !== 'sheet'" ref="docBodyRef" class="doc-body" v-html="safeDocContent"></div>
         <!-- 表格类型 -->
         <div v-else class="sheet-preview">
           <div v-for="(sheet, si) in parsedSheets" :key="si" class="sheet-section">
@@ -67,12 +67,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, watch } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import DOMPurify from 'dompurify'
-import { renderMermaidSvg } from '../utils/mermaid'
+import { renderMermaidSafe } from '../utils/mermaid'
 
 const { t } = useI18n()
 
@@ -187,15 +187,20 @@ function getCellClass(sheet: any, ri: number, ci: number): string {
   return ''
 }
 
-// DOMPurify 配置：同 mermaid-preview.ts，保留 flowchart 的 <foreignObject>，防 XSS
-const MERMAID_SANITIZE_OPTS = {
-  ADD_TAGS: ['foreignObject'],
-  HTML_INTEGRATION_POINTS: { foreignobject: true },
+// DOMPurify 正文消毒配置：分享页与应用同源，登录 token 存在 localStorage，
+// 任何有编辑权的成员写入的 HTML 都必须过滤后才能 v-html。保留富文本所需的
+// class（如 language-mermaid 供图表渲染）、签名图片 URL、表格/任务列表结构；
+// iframe 一律不放行（分享页不需要嵌入第三方内容）。
+const SHARE_SANITIZE_OPTS = {
+  ADD_ATTR: ['target', 'data-type', 'data-checked', 'data-language'],
+  ALLOW_DATA_ATTR: true,
 } as any
 
-function sanitizeMermaidSvg(svg: string): string {
-  return String(DOMPurify.sanitize(svg, MERMAID_SANITIZE_OPTS))
-}
+// safeDocContent 给 v-html 用：后端返回的正文先过 DOMPurify 再渲染。
+// onerror / javascript: / srcdoc 等载荷会被剥离，富文本结构保留。
+const safeDocContent = computed(() =>
+  String(DOMPurify.sanitize(doc.value?.content || '', SHARE_SANITIZE_OPTS))
+)
 
 /**
  * 遍历 docBodyRef 渲染所有 class="language-mermaid" 的代码块为 SVG 预览图表
@@ -220,24 +225,26 @@ async function renderMermaidBlocks() {
 
     const loadingDiv = document.createElement('div')
     loadingDiv.className = 'mermaid-loading'
-    loadingDiv.textContent = '渲染图表中...'
+    loadingDiv.textContent = t('share.mermaidRendering')
     container.appendChild(loadingDiv)
 
     // 插入在 pre 之后展示预览
     preEl.parentNode?.insertBefore(container, preEl.nextSibling)
 
     try {
-      const rawSvg = await renderMermaidSvg(rawCode)
+      const svg = await renderMermaidSafe(rawCode)
       container.innerHTML = ''
       const wrapper = document.createElement('div')
       wrapper.className = 'mermaid-svg-wrapper'
-      wrapper.innerHTML = sanitizeMermaidSvg(rawSvg)
+      wrapper.innerHTML = svg
       container.appendChild(wrapper)
+      // 图表渲染成功后隐藏原始代码块：公开页读者一般只想看图（小问题 3）。
+      preEl.style.display = 'none'
     } catch (err: any) {
       container.innerHTML = ''
       const errDiv = document.createElement('div')
       errDiv.className = 'mermaid-error'
-      errDiv.textContent = '图表解析失败: ' + (err?.message || '语法错误')
+      errDiv.textContent = t('share.mermaidFailed', [err?.message || t('share.mermaidSyntaxError')])
       container.appendChild(errDiv)
     }
   }

@@ -1,3 +1,5 @@
+import DOMPurify from 'dompurify'
+
 let mermaidModule: any = null
 let initialized = false
 
@@ -23,6 +25,25 @@ async function getMermaid(): Promise<any> {
 }
 
 let renderIdCounter = 0
+
+// SVG sanitize 选项：保留 flowchart 的 <foreignObject> 节点文字，
+// 同时 DOMPurify 默认仍会剥掉 onerror / javascript: 等载荷。
+const SVG_SANITIZE_OPTS = {
+  ADD_TAGS: ['foreignObject'],
+  HTML_INTEGRATION_POINTS: { foreignobject: true },
+} as any
+
+// sanitizeMermaidSvg 把 mermaid 生成的 SVG 过一遍 DOMPurify。
+// 导出供编辑器与分享页共用，改配置只改这一处。
+export function sanitizeMermaidSvg(svg: string): string {
+  // 配置了 HTML_INTEGRATION_POINTS 时 DOMPurify 返回 TrustedHTML，转回 string
+  return String(DOMPurify.sanitize(svg, SVG_SANITIZE_OPTS))
+}
+
+// renderMermaidSafe 渲染 + 消毒一步到位，调用方拿到的是可安全 innerHTML 的 SVG。
+export async function renderMermaidSafe(source: string): Promise<string> {
+  return sanitizeMermaidSvg(await renderMermaidSvg(source))
+}
 
 export async function renderMermaidSvg(source: string): Promise<string> {
   const mermaid = await getMermaid()

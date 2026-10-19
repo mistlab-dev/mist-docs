@@ -1,23 +1,12 @@
 import { Extension } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
-import DOMPurify from 'dompurify'
-import { renderMermaidSvg } from '../utils/mermaid'
+import { renderMermaidSvg, sanitizeMermaidSvg } from '../utils/mermaid'
 
 const mermaidPluginKey = new PluginKey('mermaid-preview')
 
-// Sanitize SVG but keep Mermaid flowchart labels: they live inside
-// <foreignObject>, which DOMPurify strips by default. onerror / javascript:
-// payloads are still removed.
-const MERMAID_SANITIZE_OPTS = {
-  ADD_TAGS: ['foreignObject'],
-  HTML_INTEGRATION_POINTS: { foreignobject: true },
-} as any
-
-function sanitizeMermaidSvg(svg: string): string {
-  // 配置了 HTML_INTEGRATION_POINTS 时 DOMPurify 返回 TrustedHTML，转回 string
-  return String(DOMPurify.sanitize(svg, MERMAID_SANITIZE_OPTS))
-}
+// SVG 消毒配置统一在 utils/mermaid.ts（sanitizeMermaidSvg），编辑器与分享页
+// 共用同一份，改配置不会漏一处（PR31 review 建议 3）。
 
 // Cache rendered SVG per source text to avoid re-rendering untouched diagrams.
 // Bounded so long editing sessions cannot grow it without limit.

@@ -606,6 +606,9 @@ export default {
     viaShareLink: '通过分享链接访问',
     workSheetPrefix: '工作表',
     emptySheet: '空表格',
+    mermaidRendering: '渲染图表中...',
+    mermaidFailed: '图表解析失败: {0}',
+    mermaidSyntaxError: '语法错误',
   },
   help: {
     title: '帮助中心',
