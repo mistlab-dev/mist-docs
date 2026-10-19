@@ -15,6 +15,7 @@ import (
 type fakeStore struct {
 	docs   map[string][]DocContent // teamID -> docs
 	member map[string]bool         // "team:user"
+	locked map[string]string       // docID -> locker user id
 }
 
 func newFake() *fakeStore {
@@ -26,6 +27,7 @@ func newFake() *fakeStore {
 			},
 		},
 		member: map[string]bool{"t1:u1": true},
+		locked: map[string]string{},
 	}
 }
 
@@ -104,6 +106,85 @@ func (f *fakeStore) CanRead(teamID, docID, userID string) (bool, error) {
 	return found, nil
 }
 
+func (f *fakeStore) CanWrite(teamID, docID, userID string) (bool, string, error) {
+	if userID == "viewer_user" {
+		return false, "write permission required (owner/admin/editor role, or an explicit write grant)", nil
+	}
+	ok, err := f.CanRead(teamID, docID, userID)
+	if err != nil {
+		return false, "", err
+	}
+	if !ok {
+		return false, "document not found or not writable", nil
+	}
+	return true, "", nil
+}
+
+func (f *fakeStore) UpdateDocument(teamID, docID, title, content string, hasTitle, hasContent bool, userID string) (int, error) {
+	if by, ok := f.locked[docID]; ok && by != userID {
+		return 0, errors.New("document is locked by another user")
+	}
+	for i := range f.docs[teamID] {
+		d := &f.docs[teamID][i]
+		if d.ID != docID {
+			continue
+		}
+		if hasTitle {
+			d.Title = title
+		}
+		if hasContent {
+			d.Content = content
+			d.Version++
+		}
+		return d.Version, nil
+	}
+	return 0, errors.New("document not found")
+}
+
+func (f *fakeStore) IsLockConflict(err error) bool {
+	return err != nil && err.Error() == "document is locked by another user"
+}
+
+func (f *fakeStore) ListDocuments(teamID, userID, folderID, docType, tag string, limit, offset int) ([]DocMeta, int, error) {
+	var out []DocMeta
+	total := 0
+	for _, d := range f.docs[teamID] {
+		can, _ := f.CanRead(teamID, d.ID, userID)
+		if !can {
+			continue
+		}
+		total++
+		if folderID != "" || docType != "" || tag != "" {
+			continue // filters are exercised in service-level tests
+		}
+		if offset > 0 {
+			offset--
+			continue
+		}
+		if len(out) < limit {
+			out = append(out, DocMeta{ID: d.ID, Title: d.Title, Type: d.Type, UpdatedAt: d.UpdatedAt})
+		}
+	}
+	return out, total, nil
+}
+
+func (f *fakeStore) SearchDocContent(teamID, userID, keyword string, limit int) ([]DocHit, error) {
+	var out []DocHit
+	for _, d := range f.docs[teamID] {
+		can, _ := f.CanRead(teamID, d.ID, userID)
+		if !can {
+			continue
+		}
+		if strings.Contains(d.Title, keyword) || strings.Contains(d.Content, keyword) {
+			out = append(out, DocHit{ID: d.ID, Title: d.Title, Excerpt: d.Content})
+			if len(out) >= limit {
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 // errStore fails membership checks to exercise the error path.
 type errStore struct{ fakeStore }
 
@@ -152,8 +233,8 @@ func TestToolsList(t *testing.T) {
 	_, resp := post(t, r, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
 	result, _ := resp["result"].(map[string]any)
 	toolsList, _ := result["tools"].([]any)
-	if len(toolsList) != 3 {
-		t.Fatalf("tools = %d, want 3", len(toolsList))
+	if len(toolsList) != 6 {
+		t.Fatalf("tools = %d, want 6", len(toolsList))
 	}
 	names := map[string]bool{}
 	for _, raw := range toolsList {
@@ -172,7 +253,7 @@ func TestToolsList(t *testing.T) {
 			t.Errorf("tool %v does not require team_id", tool["name"])
 		}
 	}
-	for _, want := range []string{"search_docs", "read_doc", "create_doc"} {
+	for _, want := range []string{"search_docs", "read_doc", "create_doc", "update_doc", "list_docs", "search_doc_content"} {
 		if !names[want] {
 			t.Errorf("missing tool %s", want)
 		}
@@ -379,5 +460,198 @@ func TestSearchDocsFiltersUnreadable(t *testing.T) {
 	}
 	if !strings.Contains(text, "No documents matched") {
 		t.Fatalf("expected no matched documents, got %q", text)
+	}
+}
+
+// --- update_doc ---
+
+func TestToolUpdateContent(t *testing.T) {
+	f := newFake()
+	r := newServer(f)
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":201,"method":"tools/call","params":{"name":"update_doc","arguments":{"team_id":"t1","doc_id":"d1","content":"# 新正文"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	if result["isError"] == true {
+		t.Fatalf("unexpected error: %v", result)
+	}
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "content") || !strings.Contains(text, "d1") {
+		t.Fatalf("update text = %q", text)
+	}
+	doc, _, _ := f.ReadDocument("t1", "d1")
+	if doc.Content != "# 新正文" {
+		t.Fatalf("content = %q, want %q", doc.Content, "# 新正文")
+	}
+	if doc.Version != 4 {
+		t.Fatalf("version = %d, want 4", doc.Version)
+	}
+}
+
+func TestToolUpdateTitleOnly(t *testing.T) {
+	f := newFake()
+	r := newServer(f)
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":202,"method":"tools/call","params":{"name":"update_doc","arguments":{"team_id":"t1","doc_id":"d1","title":"新标题"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	if result["isError"] == true {
+		t.Fatalf("unexpected error: %v", result)
+	}
+	doc, _, _ := f.ReadDocument("t1", "d1")
+	if doc.Title != "新标题" {
+		t.Fatalf("title = %q", doc.Title)
+	}
+	if doc.Content == "# 新正文" {
+		t.Fatal("title-only update must not touch content")
+	}
+	if doc.Version != 3 {
+		t.Fatalf("version = %d, want unchanged 3", doc.Version)
+	}
+}
+
+func TestToolUpdateRequiresSomething(t *testing.T) {
+	r := newServer(newFake())
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":203,"method":"tools/call","params":{"name":"update_doc","arguments":{"team_id":"t1","doc_id":"d1"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	if result["isError"] != true {
+		t.Fatalf("expected isError without title/content, got %v", result)
+	}
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "at least one of title or content") {
+		t.Fatalf("text = %q", text)
+	}
+}
+
+func TestToolUpdateRejectsViewer(t *testing.T) {
+	f := newFake()
+	f.member["t1:viewer_user"] = true
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("user_id", "viewer_user") })
+	r.POST("/api/mcp", New(f).Serve)
+
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":204,"method":"tools/call","params":{"name":"update_doc","arguments":{"team_id":"t1","doc_id":"d1","content":"越权"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	if result["isError"] != true {
+		t.Fatalf("expected isError for viewer updating doc, got %v", result)
+	}
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "write permission required") {
+		t.Fatalf("expected write permission error, got text = %q", text)
+	}
+	// Viewer must not have changed anything.
+	doc, _, _ := f.ReadDocument("t1", "d1")
+	if doc.Content == "越权" {
+		t.Fatal("viewer mutated document content")
+	}
+}
+
+func TestToolUpdateMissingDoc(t *testing.T) {
+	r := newServer(newFake())
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":205,"method":"tools/call","params":{"name":"update_doc","arguments":{"team_id":"t1","doc_id":"nope","content":"x"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	if result["isError"] != true {
+		t.Fatalf("expected isError for missing doc, got %v", result)
+	}
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "not found") {
+		t.Fatalf("text = %q", text)
+	}
+}
+
+func TestToolUpdateLockedDoc(t *testing.T) {
+	f := newFake()
+	// Simulate the store reporting a lock held by someone else.
+	f.locked = map[string]string{"d1": "someone_else"}
+	r := newServer(f)
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":206,"method":"tools/call","params":{"name":"update_doc","arguments":{"team_id":"t1","doc_id":"d1","content":"x"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	if result["isError"] != true {
+		t.Fatalf("expected isError for locked doc, got %v", result)
+	}
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "locked by another user") {
+		t.Fatalf("text = %q", text)
+	}
+}
+
+// --- list_docs ---
+
+func TestToolList(t *testing.T) {
+	r := newServer(newFake())
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":211,"method":"tools/call","params":{"name":"list_docs","arguments":{"team_id":"t1"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	if result["isError"] == true {
+		t.Fatalf("unexpected error: %v", result)
+	}
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "Redis 故障应急") || !strings.Contains(text, "d1") {
+		t.Fatalf("list text = %q", text)
+	}
+	if !strings.Contains(text, "2 of 2") {
+		t.Fatalf("expected total count, got %q", text)
+	}
+}
+
+func TestToolListFiltersUnreadable(t *testing.T) {
+	f := newFake()
+	f.docs["t1"] = append(f.docs["t1"], DocContent{
+		ID: "secret_doc", Title: "机密运维指南", Content: "超级密码",
+	})
+	r := newServer(f) // u1 cannot read secret_doc
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":212,"method":"tools/call","params":{"name":"list_docs","arguments":{"team_id":"t1"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if strings.Contains(text, "secret_doc") || strings.Contains(text, "机密运维指南") {
+		t.Fatalf("list_docs leaked secret_doc: %q", text)
+	}
+}
+
+func TestToolListPaging(t *testing.T) {
+	r := newServer(newFake())
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":213,"method":"tools/call","params":{"name":"list_docs","arguments":{"team_id":"t1","limit":1,"page":2}}}`)
+	result, _ := resp["result"].(map[string]any)
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "page 2") {
+		t.Fatalf("list text = %q", text)
+	}
+	if !strings.Contains(text, "发布回滚流程") {
+		t.Fatalf("expected second doc on page 2, got %q", text)
+	}
+}
+
+// --- search_doc_content ---
+
+func TestToolSearchContent(t *testing.T) {
+	r := newServer(newFake())
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":221,"method":"tools/call","params":{"name":"search_doc_content","arguments":{"team_id":"t1","query":"rollback"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	if result["isError"] == true {
+		t.Fatalf("unexpected error: %v", result)
+	}
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "发布回滚流程") || !strings.Contains(text, "d2") {
+		t.Fatalf("search_doc_content text = %q", text)
+	}
+}
+
+func TestToolSearchContentNoMatch(t *testing.T) {
+	r := newServer(newFake())
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":222,"method":"tools/call","params":{"name":"search_doc_content","arguments":{"team_id":"t1","query":"不存在的关键词"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(text, "No paragraphs matched") {
+		t.Fatalf("text = %q", text)
+	}
+}
+
+func TestToolSearchContentFiltersUnreadable(t *testing.T) {
+	f := newFake()
+	f.docs["t1"] = append(f.docs["t1"], DocContent{
+		ID: "secret_doc", Title: "机密运维指南", Content: "超级密码",
+	})
+	r := newServer(f)
+	_, resp := post(t, r, `{"jsonrpc":"2.0","id":223,"method":"tools/call","params":{"name":"search_doc_content","arguments":{"team_id":"t1","query":"机密"}}}`)
+	result, _ := resp["result"].(map[string]any)
+	text := result["content"].([]any)[0].(map[string]any)["text"].(string)
+	if strings.Contains(text, "secret_doc") || strings.Contains(text, "机密运维指南") {
+		t.Fatalf("search_doc_content leaked secret_doc: %q", text)
 	}
 }
