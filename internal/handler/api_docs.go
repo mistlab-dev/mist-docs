@@ -137,6 +137,7 @@ func buildPaths() map[string]interface{} {
 	add(team+"/collaborators/{id}", "delete", "移除协作者", "")
 	add(team+"/comments/{id}", "put", "更新评论", "")
 	add(team+"/comments/{id}", "delete", "删除评论", "")
+	add(team+"/comments/{id}/resolve", "post", "解决/取消解决评论", "toggle；权限为评论作者或团队管理员。返回 data.resolved_at、data.resolved_by。")
 	add(team+"/search-targets", "get", "搜索分享对象", "")
 	add(team+"/import", "post", "导入", "multipart 字段 files（可多个，最多 20 个、每个 ≤10MB）或 file。支持 txt、md、html、docx、xlsx；md/txt/docx 转成 HTML 文档，xlsx 转成表格。返回 results 逐个列出结果。")
 	add(team+"/import/folder", "post", "导入文件夹", "仅管理员。multipart：files（可多个）配合同样数量的 paths（每个文件在文件夹里的相对路径，比如 手册/部署/上线.md），或者一个 archive（.zip）。folder_id 可选，放到已有文件夹下。按原来的目录建文件夹，只放图片的目录不建；.md 里引用的图片存进团队媒体库，文档之间的相对链接改成指向导入后的文档。一次最多 100MB、500 篇文档。返回 data（新文件夹 id、名称、文档数、图片数）、results、warnings（跳过的文件、找不到的图片）。")
