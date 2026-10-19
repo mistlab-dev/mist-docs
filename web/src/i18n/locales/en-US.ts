@@ -492,6 +492,9 @@ export default {
     viaShareLink: 'Accessed via share link',
     workSheetPrefix: 'Sheet',
     emptySheet: 'Empty sheet',
+    mermaidRendering: 'Rendering diagram...',
+    mermaidFailed: 'Diagram failed to render: {0}',
+    mermaidSyntaxError: 'syntax error',
   },
   help: {
     title: 'Help Center',
