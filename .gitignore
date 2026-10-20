@@ -1,21 +1,20 @@
-node_modules/
+
+build/
+# Build artifacts (root only: a bare "server" also ignored cmd/server/)
+/configs/config.local.yaml
+configs/config.yaml
 dist/
-*.exe
-*.log
 .env
 .env.local
-/configs/config.local.yaml
-secrets/master.key
+*.exe
+# Local config with real credentials (use config.example.yaml as template)
+# Local deploy target (contains production host address)
+*.log
 /mist-docs
 /mist-docs-linux
-
-# Build artifacts (root only: a bare "server" also ignored cmd/server/)
-/server
 /mist-docs-test
-build/
-
-# Local deploy target (contains production host address)
+node_modules/
 scripts/deploy.env
-
-# Local config with real credentials (use config.example.yaml as template)
-configs/config.yaml
+secrets/master.key
+/server
+.tmp/

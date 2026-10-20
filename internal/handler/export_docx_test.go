@@ -52,6 +52,80 @@ func inspectDocx(t *testing.T, data []byte) (documentXML string, relsXML string)
 	return documentXML, relsXML
 }
 
+func TestHtmlToDocx_NoDoubleUnescape(t *testing.T) {
+	// B1: &amp;lt;div&amp;gt; in HTML is literally "&lt;div&gt;"
+	input := `<p>use &amp;lt;div&amp;gt;</p>`
+	data, err := htmlToDocx(input)
+	if err != nil {
+		t.Fatalf("htmlToDocx double unescape: %v", err)
+	}
+	docXML, _ := inspectDocx(t, data)
+	// Should contain &amp;lt;div&amp;gt; in the XML (which represents literal &lt;div&gt;)
+	// NOT <w:t>&lt;div&gt;</w:t> (which would be literal <div>)
+	if strings.Contains(docXML, `<w:t xml:space="preserve">&lt;div&gt;</w:t>`) {
+		t.Errorf("entity was double-unescaped into literal <div>: %s", docXML)
+	}
+	if !strings.Contains(docXML, `&amp;lt;div&amp;gt;`) {
+		t.Errorf("expected &amp;lt;div&amp;gt; in XML text: %s", docXML)
+	}
+}
+
+func TestHtmlToDocx_UnknownBlocksAndPre(t *testing.T) {
+	// B2: <pre><code> and text inside <div> must not be dropped
+	input := `
+<div>裸露在div里的文本</div>
+<pre><code class="language-bash">echo "hello world"
+line 2</code></pre>`
+	data, err := htmlToDocx(input)
+	if err != nil {
+		t.Fatalf("htmlToDocx unknown blocks: %v", err)
+	}
+	docXML, _ := inspectDocx(t, data)
+	if !strings.Contains(docXML, "裸露在div里的文本") {
+		t.Errorf("text inside div was dropped: %s", docXML)
+	}
+	if !strings.Contains(docXML, "echo") || !strings.Contains(docXML, "hello world") || !strings.Contains(docXML, "line 2") {
+		t.Errorf("code block content was dropped: %s", docXML)
+	}
+	if !strings.Contains(docXML, "<w:br/>") {
+		t.Errorf("newline in pre was not converted to w:br")
+	}
+}
+
+func TestHtmlToDocx_DeterministicZipOrder(t *testing.T) {
+	// B3: [Content_Types].xml MUST be the first zip entry
+	data, err := htmlToDocx("<p>test</p>")
+	if err != nil {
+		t.Fatalf("htmlToDocx deterministic order: %v", err)
+	}
+	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("zip.NewReader: %v", err)
+	}
+	if len(r.File) == 0 || r.File[0].Name != "[Content_Types].xml" {
+		t.Errorf("first zip entry must be [Content_Types].xml, got: %v", r.File[0].Name)
+	}
+}
+
+func TestHtmlToDocx_DangerousLinkScheme(t *testing.T) {
+	// S1: javascript: should not be made into a relationship
+	input := `<p><a href="javascript:alert(1)">危险链接</a></p>`
+	data, err := htmlToDocx(input)
+	if err != nil {
+		t.Fatalf("htmlToDocx dangerous link: %v", err)
+	}
+	docXML, relsXML := inspectDocx(t, data)
+	if strings.Contains(docXML, "<w:hyperlink") {
+		t.Errorf("javascript: link should not produce w:hyperlink")
+	}
+	if strings.Contains(relsXML, "javascript:") {
+		t.Errorf("javascript: should not be in rels XML")
+	}
+	if !strings.Contains(docXML, "危险链接") {
+		t.Errorf("text of dangerous link should still be preserved")
+	}
+}
+
 func TestHtmlToDocx_Empty(t *testing.T) {
 	data, err := htmlToDocx("")
 	if err != nil {

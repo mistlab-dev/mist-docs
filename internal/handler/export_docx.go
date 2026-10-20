@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
-	"html"
 	"strings"
 
 	golanghtml "golang.org/x/net/html"
@@ -149,11 +148,6 @@ func (dc *docxConverter) writeRun(text string, st docxInlineState) {
 	if text == "" {
 		return
 	}
-	// Decode html entities like &nbsp;, &amp; into text first, then xmlEscape
-	unescaped := html.UnescapeString(text)
-	if unescaped == "" {
-		return
-	}
 
 	runXML := func() string {
 		var r strings.Builder
@@ -183,7 +177,7 @@ func (dc *docxConverter) writeRun(text string, st docxInlineState) {
 			r.WriteString(`</w:rPr>`)
 		}
 		r.WriteString(`<w:t xml:space="preserve">`)
-		r.WriteString(docxXMLEscape(unescaped))
+		r.WriteString(docxXMLEscape(text))
 		r.WriteString(`</w:t></w:r>`)
 		return r.String()
 	}
@@ -226,7 +220,8 @@ func (dc *docxConverter) processInline(n *golanghtml.Node, st docxInlineState) {
 						break
 					}
 				}
-				if href != "" {
+				lowerHref := strings.ToLower(href)
+				if href != "" && (strings.HasPrefix(lowerHref, "http://") || strings.HasPrefix(lowerHref, "https://") || strings.HasPrefix(lowerHref, "mailto:")) {
 					next.href = href
 					next.relID = dc.nextRelID()
 					dc.rels = append(dc.rels, docxRel{id: next.relID, target: href})
@@ -283,8 +278,10 @@ func (dc *docxConverter) processList(n *golanghtml.Node, isOrdered bool, level i
 				case "a":
 					for _, attr := range child.Attr {
 						if attr.Key == "href" {
-							next.href = strings.TrimSpace(attr.Val)
-							if next.href != "" {
+							h := strings.TrimSpace(attr.Val)
+							lh := strings.ToLower(h)
+							if h != "" && (strings.HasPrefix(lh, "http://") || strings.HasPrefix(lh, "https://") || strings.HasPrefix(lh, "mailto:")) {
+								next.href = h
 								next.relID = dc.nextRelID()
 								dc.rels = append(dc.rels, docxRel{id: next.relID, target: next.href})
 							}
@@ -390,6 +387,11 @@ func (dc *docxConverter) processBlocks(n *golanghtml.Node) {
 			dc.openParagraph("", 0, "")
 			dc.processInline(c, docxInlineState{})
 			dc.closeParagraph()
+		case "pre":
+			// Handle code blocks: preserve newlines as w:br, format as monospaced
+			dc.openParagraph("", 0, "")
+			dc.processPre(c)
+			dc.closeParagraph()
 		case "ul":
 			dc.processList(c, false, 1)
 		case "ol":
@@ -397,9 +399,66 @@ func (dc *docxConverter) processBlocks(n *golanghtml.Node) {
 		case "table":
 			dc.processTable(c)
 		default:
-			// For wrappers like <div>, <section>, <body>, continue traversing
-			dc.processBlocks(c)
+			// For wrappers like <div>, <section>, <body>, or unknown block elements:
+			// check if it has block children. If not, treat as inline paragraph so content isn't dropped!
+			if hasBlockChildren(c) {
+				dc.processBlocks(c)
+			} else if hasTextOrInline(c) {
+				dc.openParagraph("", 0, "")
+				dc.processInline(c, docxInlineState{})
+				dc.closeParagraph()
+			} else {
+				dc.processBlocks(c)
+			}
 		}
+	}
+}
+
+func hasBlockChildren(n *golanghtml.Node) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == golanghtml.ElementNode {
+			switch c.Data {
+			case "p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table", "pre", "div", "section", "blockquote":
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasTextOrInline(n *golanghtml.Node) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == golanghtml.TextNode && strings.TrimSpace(c.Data) != "" {
+			return true
+		}
+		if c.Type == golanghtml.ElementNode {
+			return true
+		}
+	}
+	return false
+}
+
+func (dc *docxConverter) processPre(n *golanghtml.Node) {
+	var extractText func(*golanghtml.Node) string
+	extractText = func(node *golanghtml.Node) string {
+		var b strings.Builder
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == golanghtml.TextNode {
+				b.WriteString(c.Data)
+			} else {
+				b.WriteString(extractText(c))
+			}
+		}
+		return b.String()
+	}
+
+	raw := extractText(n)
+	lines := strings.Split(raw, "\n")
+	for i, line := range lines {
+		if i > 0 {
+			dc.body.WriteString(`<w:r><w:br/></w:r>`)
+		}
+		dc.writeRun(line, docxInlineState{code: true})
 	}
 }
 
@@ -465,20 +524,25 @@ func htmlToDocx(htmlContent string) ([]byte, error) {
 	var zipBuf bytes.Buffer
 	zw := zip.NewWriter(&zipBuf)
 
-	parts := map[string]string{
-		"[Content_Types].xml":          docxContentTypeXML,
-		"_rels/.rels":                  docxRootRelsXML,
-		"word/styles.xml":              docxStylesXML,
-		"word/document.xml":            documentXML,
-		"word/_rels/document.xml.rels": docRels.String(),
+	// Deterministic order: [Content_Types].xml MUST be first
+	type partEntry struct {
+		name    string
+		content string
+	}
+	parts := []partEntry{
+		{"[Content_Types].xml", docxContentTypeXML},
+		{"_rels/.rels", docxRootRelsXML},
+		{"word/styles.xml", docxStylesXML},
+		{"word/document.xml", documentXML},
+		{"word/_rels/document.xml.rels", docRels.String()},
 	}
 
-	for name, content := range parts {
-		w, err := zw.Create(name)
+	for _, p := range parts {
+		w, err := zw.Create(p.name)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := w.Write([]byte(content)); err != nil {
+		if _, err := w.Write([]byte(p.content)); err != nil {
 			return nil, err
 		}
 	}
