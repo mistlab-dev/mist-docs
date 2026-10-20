@@ -472,6 +472,7 @@ export default {
     moveSuccess: '文档已移动',
     moveFailed: '移动失败',
     exportTitle: '导出文档',
+    exportDocxDesc: '适合对外交付、再编辑',
     exportMarkdownName: 'Markdown',
     exportMarkdownDesc: 'Markdown/纯文本格式适合再编辑',
     exportHtmlName: 'HTML',

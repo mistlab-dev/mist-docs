@@ -568,6 +568,13 @@
             <div class="export-desc">{{ t("docEditor.exportPdfDesc") }}</div>
           </div>
         </div>
+        <div class="export-option" @click="handleExport('docx'); showExportDialog = false">
+          <div class="export-icon">📝</div>
+          <div class="export-info">
+            <div class="export-name">Word (.docx)</div>
+            <div class="export-desc">{{ t("docEditor.exportDocxDesc") }}</div>
+          </div>
+        </div>
         <div class="export-option" @click="handleExport('html'); showExportDialog = false">
           <div class="export-icon">🌐</div>
           <div class="export-info">
