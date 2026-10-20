@@ -1787,6 +1787,13 @@ func TeamExportDocument(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "文档不存在"})
 		return
 	}
+	// Sheets are out of scope for the docx epic: their JSON grid is not HTML,
+	// and silently feeding it into the converter would open a hidden sheet→docx
+	// path. Refuse explicitly instead.
+	if docType == "sheet" && strings.EqualFold(strings.TrimSpace(format), "docx") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sheet 暂不支持导出 docx，可选: markdown, html, txt, pdf"})
+		return
+	}
 	content := readDocContent(docID)
 	if !serveDocumentExport(c, title, signMediaURLs(getTeamID(c), string(content)), format) {
 		return
