@@ -9,6 +9,12 @@ import (
 	golanghtml "golang.org/x/net/html"
 )
 
+// Theme fills for paragraph-level shading (OOXML hex, no leading '#').
+const (
+	codeBlockShade  = "F4F4F4" // light grey, approximates <pre> background
+	blockquoteShade = "F0F4F8" // light blue-grey, approximates <blockquote> background
+)
+
 // OOXML constants and namespaces
 const (
 	docxContentTypeXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -111,6 +117,19 @@ func docxXMLEscape(s string) string {
 	return b.String()
 }
 
+// safeHref reports whether href uses an allow-listed scheme. Only http(s)
+// and mailto: links become clickable w:hyperlink relationships; everything
+// else (javascript:, data:, file:, …) renders as plain text.
+func safeHref(href string) bool {
+	if href == "" {
+		return false
+	}
+	lowerHref := strings.ToLower(href)
+	return strings.HasPrefix(lowerHref, "http://") ||
+		strings.HasPrefix(lowerHref, "https://") ||
+		strings.HasPrefix(lowerHref, "mailto:")
+}
+
 type docxInlineState struct {
 	bold      bool
 	italic    bool
@@ -122,16 +141,26 @@ type docxInlineState struct {
 }
 
 func (dc *docxConverter) openParagraph(style string, indentLevel int, prefix string) {
+	dc.openParagraphEx(style, indentLevel*420, "", prefix)
+}
+
+// openParagraphEx opens a paragraph with an absolute left indent (twips) and
+// an optional paragraph-level shading fill ("" disables). Shading
+// approximates code-block / quote backgrounds; Word renders it as a
+// full-width backdrop behind the paragraph.
+func (dc *docxConverter) openParagraphEx(style string, indentTwips int, shadeFill string, prefix string) {
 	dc.body.WriteString(`<w:p>`)
-	hasPPr := style != "" || indentLevel > 0
+	hasPPr := style != "" || indentTwips > 0 || shadeFill != ""
 	if hasPPr {
 		dc.body.WriteString(`<w:pPr>`)
 		if style != "" {
 			dc.body.WriteString(`<w:pStyle w:val="` + docxXMLEscape(style) + `"/>`)
 		}
-		if indentLevel > 0 {
-			left := indentLevel * 420 // twips
-			dc.body.WriteString(fmt.Sprintf(`<w:ind w:left="%d"/>`, left))
+		if indentTwips > 0 {
+			dc.body.WriteString(fmt.Sprintf(`<w:ind w:left="%d"/>`, indentTwips))
+		}
+		if shadeFill != "" {
+			dc.body.WriteString(`<w:shd w:val="clear" w:color="auto" w:fill="` + docxXMLEscape(shadeFill) + `"/>`)
 		}
 		dc.body.WriteString(`</w:pPr>`)
 	}
@@ -220,8 +249,7 @@ func (dc *docxConverter) processInline(n *golanghtml.Node, st docxInlineState) {
 						break
 					}
 				}
-				lowerHref := strings.ToLower(href)
-				if href != "" && (strings.HasPrefix(lowerHref, "http://") || strings.HasPrefix(lowerHref, "https://") || strings.HasPrefix(lowerHref, "mailto:")) {
+				if safeHref(href) {
 					next.href = href
 					next.relID = dc.nextRelID()
 					dc.rels = append(dc.rels, docxRel{id: next.relID, target: href})
@@ -279,8 +307,7 @@ func (dc *docxConverter) processList(n *golanghtml.Node, isOrdered bool, level i
 					for _, attr := range child.Attr {
 						if attr.Key == "href" {
 							h := strings.TrimSpace(attr.Val)
-							lh := strings.ToLower(h)
-							if h != "" && (strings.HasPrefix(lh, "http://") || strings.HasPrefix(lh, "https://") || strings.HasPrefix(lh, "mailto:")) {
+							if safeHref(h) {
 								next.href = h
 								next.relID = dc.nextRelID()
 								dc.rels = append(dc.rels, docxRel{id: next.relID, target: next.href})
@@ -354,88 +381,196 @@ func (dc *docxConverter) processTable(n *golanghtml.Node) {
 }
 
 func (dc *docxConverter) processBlocks(n *golanghtml.Node) {
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type != golanghtml.ElementNode {
-			continue
+	var inlineBuf []*golanghtml.Node
+
+	flushInline := func() {
+		if len(inlineBuf) == 0 {
+			return
 		}
-		switch c.Data {
-		case "h1":
-			dc.openParagraph("Heading1", 0, "")
-			dc.processInline(c, docxInlineState{})
-			dc.closeParagraph()
-		case "h2":
-			dc.openParagraph("Heading2", 0, "")
-			dc.processInline(c, docxInlineState{})
-			dc.closeParagraph()
-		case "h3":
-			dc.openParagraph("Heading3", 0, "")
-			dc.processInline(c, docxInlineState{})
-			dc.closeParagraph()
-		case "h4":
-			dc.openParagraph("Heading4", 0, "")
-			dc.processInline(c, docxInlineState{})
-			dc.closeParagraph()
-		case "h5":
-			dc.openParagraph("Heading5", 0, "")
-			dc.processInline(c, docxInlineState{})
-			dc.closeParagraph()
-		case "h6":
-			dc.openParagraph("Heading6", 0, "")
-			dc.processInline(c, docxInlineState{})
-			dc.closeParagraph()
-		case "p":
+		hasContent := false
+		for _, node := range inlineBuf {
+			if node.Type == golanghtml.TextNode && strings.TrimSpace(node.Data) != "" {
+				hasContent = true
+				break
+			}
+			if node.Type == golanghtml.ElementNode {
+				hasContent = true
+				break
+			}
+		}
+		if hasContent {
 			dc.openParagraph("", 0, "")
-			dc.processInline(c, docxInlineState{})
+			for _, node := range inlineBuf {
+				if node.Type == golanghtml.TextNode {
+					dc.writeRun(node.Data, docxInlineState{})
+				} else if node.Type == golanghtml.ElementNode {
+					dc.processInline(node, docxInlineState{})
+				}
+			}
 			dc.closeParagraph()
-		case "pre":
-			// Handle code blocks: preserve newlines as w:br, format as monospaced
-			dc.openParagraph("", 0, "")
-			dc.processPre(c)
+		}
+		inlineBuf = nil
+	}
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if isBlockNode(c) {
+			flushInline()
+			dc.processOneBlock(c)
+		} else {
+			inlineBuf = append(inlineBuf, c)
+		}
+	}
+	flushInline()
+}
+
+func (dc *docxConverter) processOneBlock(c *golanghtml.Node) {
+	switch c.Data {
+	case "h1":
+		dc.openParagraph("Heading1", 0, "")
+		dc.processInline(c, docxInlineState{})
+		dc.closeParagraph()
+	case "h2":
+		dc.openParagraph("Heading2", 0, "")
+		dc.processInline(c, docxInlineState{})
+		dc.closeParagraph()
+	case "h3":
+		dc.openParagraph("Heading3", 0, "")
+		dc.processInline(c, docxInlineState{})
+		dc.closeParagraph()
+	case "h4":
+		dc.openParagraph("Heading4", 0, "")
+		dc.processInline(c, docxInlineState{})
+		dc.closeParagraph()
+	case "h5":
+		dc.openParagraph("Heading5", 0, "")
+		dc.processInline(c, docxInlineState{})
+		dc.closeParagraph()
+	case "h6":
+		dc.openParagraph("Heading6", 0, "")
+		dc.processInline(c, docxInlineState{})
+		dc.closeParagraph()
+	case "p":
+		dc.openParagraph("", 0, "")
+		dc.processInline(c, docxInlineState{})
+		dc.closeParagraph()
+	case "pre":
+		// Code block: monospace Courier New, newlines as w:br, paragraph-level
+		// light shading approximates the code-block background.
+		dc.openParagraphEx("", 0, codeBlockShade, "")
+		dc.processPre(c)
+		dc.closeParagraph()
+	case "blockquote":
+		// Quote: indent approximates the blockquote bar, light shading
+		// approximates the quote background. Nested blocks are re-processed
+		// with an extra indent level.
+		dc.processBlockquote(c, 1)
+	case "ul":
+		dc.processList(c, false, 1)
+	case "ol":
+		dc.processList(c, true, 1)
+	case "table":
+		dc.processTable(c)
+	default:
+		// Wrapper / unknown block element (<div>, <section>, <body>, …):
+		// recursively process child blocks, flushing intermediate inline runs.
+		dc.processBlocks(c)
+	}
+}
+
+// isBlockNode reports whether n is an HTML block-level element.
+func isBlockNode(n *golanghtml.Node) bool {
+	if n.Type != golanghtml.ElementNode {
+		return false
+	}
+	return isBlockElement(n.Data)
+}
+
+// isBlockElement reports whether tag is a block-level HTML element. These are
+// exclusively owned by the block loop (processBlocks / processBlockquote /
+// processList / processTable) and must never be consumed as inline content.
+func isBlockElement(tag string) bool {
+	switch tag {
+	case "p", "h1", "h2", "h3", "h4", "h5", "h6",
+		"ul", "ol", "table", "pre", "div", "section", "blockquote",
+		"article", "header", "footer", "aside", "nav", "main", "form",
+		"dl", "figure", "hr":
+		return true
+	}
+	return false
+}
+
+// processBlockquote renders a <blockquote> at the given indent level (each
+// level = 720 twips ≈ 1.27 cm / 0.5 in). A light blue-grey shading approximates
+// the quote background. Direct inline content becomes an indented quote
+// paragraph; nested blocks (p, ul, nested blockquote, pre …) recurse with an
+// extra indent level.
+func (dc *docxConverter) processBlockquote(n *golanghtml.Node, level int) {
+	indent := level * 720
+	var inlineBuf []*golanghtml.Node
+
+	flushInline := func() {
+		if len(inlineBuf) == 0 {
+			return
+		}
+		hasContent := false
+		for _, node := range inlineBuf {
+			if node.Type == golanghtml.TextNode && strings.TrimSpace(node.Data) != "" {
+				hasContent = true
+				break
+			}
+			if node.Type == golanghtml.ElementNode {
+				hasContent = true
+				break
+			}
+		}
+		if hasContent {
+			dc.openParagraphEx("", indent, blockquoteShade, "")
+			for _, node := range inlineBuf {
+				if node.Type == golanghtml.TextNode {
+					dc.writeRun(node.Data, docxInlineState{})
+				} else if node.Type == golanghtml.ElementNode {
+					dc.processInline(node, docxInlineState{})
+				}
+			}
 			dc.closeParagraph()
-		case "ul":
-			dc.processList(c, false, 1)
-		case "ol":
-			dc.processList(c, true, 1)
-		case "table":
-			dc.processTable(c)
-		default:
-			// For wrappers like <div>, <section>, <body>, or unknown block elements:
-			// check if it has block children. If not, treat as inline paragraph so content isn't dropped!
-			if hasBlockChildren(c) {
-				dc.processBlocks(c)
-			} else if hasTextOrInline(c) {
-				dc.openParagraph("", 0, "")
+		}
+		inlineBuf = nil
+	}
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if isBlockNode(c) {
+			flushInline()
+			switch c.Data {
+			case "p":
+				dc.openParagraphEx("", indent, blockquoteShade, "")
 				dc.processInline(c, docxInlineState{})
 				dc.closeParagraph()
-			} else {
+			case "blockquote":
+				dc.processBlockquote(c, level+1)
+			case "pre":
+				// Code inside a quote: monospace + code shading, quoted indent.
+				dc.openParagraphEx("", indent, codeBlockShade, "")
+				dc.processPre(c)
+				dc.closeParagraph()
+			case "h1", "h2", "h3", "h4", "h5", "h6":
+				style := "Heading" + strings.ToUpper(c.Data[1:2]) + c.Data[2:]
+				dc.openParagraphEx(style, indent, blockquoteShade, "")
+				dc.processInline(c, docxInlineState{})
+				dc.closeParagraph()
+			case "ul":
+				dc.processList(c, false, level+1)
+			case "ol":
+				dc.processList(c, true, level+1)
+			case "table":
+				dc.processTable(c)
+			default:
 				dc.processBlocks(c)
 			}
+		} else {
+			inlineBuf = append(inlineBuf, c)
 		}
 	}
-}
-
-func hasBlockChildren(n *golanghtml.Node) bool {
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type == golanghtml.ElementNode {
-			switch c.Data {
-			case "p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table", "pre", "div", "section", "blockquote":
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func hasTextOrInline(n *golanghtml.Node) bool {
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type == golanghtml.TextNode && strings.TrimSpace(c.Data) != "" {
-			return true
-		}
-		if c.Type == golanghtml.ElementNode {
-			return true
-		}
-	}
-	return false
+	flushInline()
 }
 
 func (dc *docxConverter) processPre(n *golanghtml.Node) {
