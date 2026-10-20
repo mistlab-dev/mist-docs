@@ -358,6 +358,7 @@ export default {
     moveSuccess: 'Document moved',
     moveFailed: 'Move failed',
     exportTitle: 'Export Document',
+    exportDocxDesc: 'Great for external delivery and re-editing',
     exportMarkdownName: 'Markdown',
     exportMarkdownDesc: 'Markdown/plain text format, suitable for re-editing',
     exportHtmlName: 'HTML',
