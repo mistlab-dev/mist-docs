@@ -337,6 +337,41 @@ func (dc *docxConverter) processList(n *golanghtml.Node, isOrdered bool, level i
 	}
 }
 
+// docxTableWidthTwips is the text width of an A4 page with default margins,
+// split evenly across tblGrid columns (tblW stays 100% so Word reflows).
+const docxTableWidthTwips = 9000
+
+// docxTableColumnCount returns the widest row's cell count. The converter
+// emits one w:tc per td/th (colspan is not mapped), so this matches the
+// number of cells Word will see.
+func docxTableColumnCount(n *golanghtml.Node) int {
+	max := 0
+	var walk func(*golanghtml.Node)
+	walk = func(node *golanghtml.Node) {
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type != golanghtml.ElementNode {
+				continue
+			}
+			switch c.Data {
+			case "thead", "tbody", "tfoot":
+				walk(c)
+			case "tr":
+				cnt := 0
+				for cell := c.FirstChild; cell != nil; cell = cell.NextSibling {
+					if cell.Type == golanghtml.ElementNode && (cell.Data == "td" || cell.Data == "th") {
+						cnt++
+					}
+				}
+				if cnt > max {
+					max = cnt
+				}
+			}
+		}
+	}
+	walk(n)
+	return max
+}
+
 func (dc *docxConverter) processTable(n *golanghtml.Node) {
 	dc.body.WriteString(`<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="5000" w:type="pct"/>`)
 	dc.body.WriteString(`<w:tblBorders>`)
@@ -347,6 +382,18 @@ func (dc *docxConverter) processTable(n *golanghtml.Node) {
 	dc.body.WriteString(`<w:insideH w:val="single" w:sz="4" w:space="0" w:color="E0E0E0"/>`)
 	dc.body.WriteString(`<w:insideV w:val="single" w:sz="4" w:space="0" w:color="E0E0E0"/>`)
 	dc.body.WriteString(`</w:tblBorders></w:tblPr>`)
+	// CT_Tbl requires <w:tblGrid> between tblPr and the first row; Word and
+	// strict readers (python-docx) reject or "repair" tables without it.
+	cols := docxTableColumnCount(n)
+	if cols < 1 {
+		cols = 1
+	}
+	colW := docxTableWidthTwips / cols
+	dc.body.WriteString(`<w:tblGrid>`)
+	for i := 0; i < cols; i++ {
+		fmt.Fprintf(&dc.body, `<w:gridCol w:w="%d"/>`, colW)
+	}
+	dc.body.WriteString(`</w:tblGrid>`)
 
 	var walkRows func(*golanghtml.Node, bool)
 	walkRows = func(node *golanghtml.Node, inHeader bool) {
