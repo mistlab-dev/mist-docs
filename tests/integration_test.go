@@ -1176,6 +1176,68 @@ func TestExportDocument(t *testing.T) {
 	}
 }
 
+// TestExportDocumentDocx covers the docx epic path end to end: a viewer (read
+// only) gets a real Word file, and the export is audited with the docx format.
+func TestExportDocumentDocx(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "导出 Word 测试")
+
+	w := request("GET", teamPath("/documents/"+docID+"/export?format=docx"), nil, viewerToken)
+	if w.Code != 200 {
+		t.Fatalf("docx export failed: %d %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
+		t.Errorf("content-type %s", ct)
+	}
+	if cd := w.Header().Get("Content-Disposition"); !strings.Contains(cd, ".docx") {
+		t.Errorf("disposition %s", cd)
+	}
+	if body := w.Body.Bytes(); len(body) < 4 || string(body[:2]) != "PK" {
+		t.Errorf("docx body is not a zip, len=%d", len(body))
+	}
+
+	// The audit row must record the docx format.
+	var count int
+	err := database.DB.QueryRow(
+		`SELECT COUNT(*) FROM md_audits WHERE action='export' AND resource_id=? AND detail LIKE '%docx%'`,
+		docID).Scan(&count)
+	if err != nil {
+		t.Fatalf("audit query: %v", err)
+	}
+	if count == 0 {
+		t.Error("docx export must be audited with the docx format")
+	}
+}
+
+// TestExportDocumentDocxRejectsSheet: sheets stay out of the docx path (no
+// hidden sheet->docx); exporting one as docx is an explicit 400.
+func TestExportDocumentDocxRejectsSheet(t *testing.T) {
+	body := map[string]interface{}{
+		"title": "sheet 拒绝 docx",
+		"type":  "sheet",
+		"cells": map[string]interface{}{"A1": "hello"},
+	}
+	w := request("POST", teamPath("/documents"), body, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("create sheet failed: %d %s", w.Code, w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	docID := getString(resp["data"].(map[string]interface{})["id"])
+
+	w = request("GET", teamPath("/documents/"+docID+"/export?format=docx"), nil, adminToken)
+	if w.Code != 400 {
+		t.Fatalf("sheet docx export must be 400, got %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "docx") {
+		t.Errorf("error should mention docx: %s", w.Body.String())
+	}
+
+	// Other formats still behave as before.
+	w = request("GET", teamPath("/documents/"+docID+"/export?format=html"), nil, adminToken)
+	if w.Code != 200 {
+		t.Errorf("sheet html export should still work: %d %s", w.Code, w.Body.String())
+	}
+}
+
 // ==================== 16. 协作者测试 ====================
 
 func TestAddCollaborator(t *testing.T) {

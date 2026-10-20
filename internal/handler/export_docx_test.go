@@ -270,3 +270,134 @@ func TestHtmlToDocx_Hyperlinks(t *testing.T) {
 		t.Errorf("missing TargetMode=External in document.xml.rels")
 	}
 }
+
+func TestHtmlToDocx_CodeBlocks(t *testing.T) {
+	// Issue #38 requirement 1: <pre> / code blocks:
+	// - Monospaced Courier New font
+	// - Newlines preserved as w:br
+	// - Light shading (w:shd w:fill="F4F4F4")
+	// - Multi-line + Chinese code comments not corrupted
+	input := `<pre><code class="language-go">// 计算总和：包含中文注释
+func Sum(a, b int) int {
+	// 返回两数之和
+	return a + b
+}</code></pre>`
+
+	data, err := htmlToDocx(input)
+	if err != nil {
+		t.Fatalf("htmlToDocx code blocks: %v", err)
+	}
+	docXML, _ := inspectDocx(t, data)
+
+	// Font Courier New
+	if !strings.Contains(docXML, `w:ascii="Courier New"`) || !strings.Contains(docXML, `w:hAnsi="Courier New"`) {
+		t.Errorf("code block missing Courier New font: %s", docXML)
+	}
+
+	// Shading fill F4F4F4
+	if !strings.Contains(docXML, `w:fill="F4F4F4"`) {
+		t.Errorf("code block missing F4F4F4 shading: %s", docXML)
+	}
+
+	// Line breaks preserved
+	if !strings.Contains(docXML, `<w:br/>`) {
+		t.Errorf("multi-line code block missing <w:br/>: %s", docXML)
+	}
+
+	// Chinese comments intact
+	if !strings.Contains(docXML, "计算总和：包含中文注释") || !strings.Contains(docXML, "返回两数之和") {
+		t.Errorf("chinese comment in code block was corrupted: %s", docXML)
+	}
+
+	// Code tokens intact
+	if !strings.Contains(docXML, "func Sum(a, b int) int {") || !strings.Contains(docXML, "return a + b") {
+		t.Errorf("code body missing or truncated: %s", docXML)
+	}
+}
+
+func TestHtmlToDocx_Blockquote(t *testing.T) {
+	// Issue #38 requirement 2: <blockquote>:
+	// - Indentation (w:ind w:left="720")
+	// - Light shading (w:shd w:fill="F0F4F8")
+	// - Single paragraph & nested <p> variants
+	// - Valid OOXML
+	input := `
+<blockquote>
+  单纯一行引述文本，没有外层 p
+</blockquote>
+<blockquote>
+  <p>第一段引言，有内层 p 标签。</p>
+  <p>第二段引言，含 <strong>粗体</strong> 和 <code>代码</code>。</p>
+</blockquote>`
+
+	data, err := htmlToDocx(input)
+	if err != nil {
+		t.Fatalf("htmlToDocx blockquote: %v", err)
+	}
+	docXML, _ := inspectDocx(t, data)
+
+	// Indentation 720 twips
+	if !strings.Contains(docXML, `<w:ind w:left="720"/>`) {
+		t.Errorf("blockquote missing w:ind w:left=\"720\": %s", docXML)
+	}
+
+	// Shading F0F4F8
+	if !strings.Contains(docXML, `w:fill="F0F4F8"`) {
+		t.Errorf("blockquote missing F0F4F8 shading: %s", docXML)
+	}
+
+	// Content preservation
+	if !strings.Contains(docXML, "单纯一行引述文本") {
+		t.Errorf("bare text inside blockquote was dropped: %s", docXML)
+	}
+	if !strings.Contains(docXML, "第一段引言") || !strings.Contains(docXML, "第二段引言") {
+		t.Errorf("nested paragraphs inside blockquote missing: %s", docXML)
+	}
+	if !strings.Contains(docXML, "<w:b/>") {
+		t.Errorf("inline formatting inside blockquote missing bold tag")
+	}
+}
+
+func TestHtmlToDocx_DivMixedInlineAndBlocks(t *testing.T) {
+	// Review item a): <div>text<p>p</p></div> mixed content must not drop the leading text
+	input := `<div>前置文本内容<p>段落文本</p>后置文本内容</div>`
+	data, err := htmlToDocx(input)
+	if err != nil {
+		t.Fatalf("htmlToDocx mixed div: %v", err)
+	}
+	docXML, _ := inspectDocx(t, data)
+
+	if !strings.Contains(docXML, "前置文本内容") {
+		t.Errorf("leading text in mixed div was dropped: %s", docXML)
+	}
+	if !strings.Contains(docXML, "段落文本") {
+		t.Errorf("paragraph in mixed div was dropped: %s", docXML)
+	}
+	if !strings.Contains(docXML, "后置文本内容") {
+		t.Errorf("trailing text in mixed div was dropped: %s", docXML)
+	}
+}
+
+func TestHtmlToDocx_SafeHrefWhitelist(t *testing.T) {
+	// Review item b): safeHref deduplication & scheme whitelist
+	cases := []struct {
+		href  string
+		allow bool
+	}{
+		{"http://example.com", true},
+		{"https://example.com/path?q=1", true},
+		{"mailto:user@example.com", true},
+		{"HTTP://EXAMPLE.COM", true},
+		{"javascript:alert(1)", false},
+		{"data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==", false},
+		{"file:///etc/passwd", false},
+		{"ftp://ftp.example.com", false},
+		{"", false},
+	}
+
+	for _, tc := range cases {
+		if got := safeHref(tc.href); got != tc.allow {
+			t.Errorf("safeHref(%q) = %v; want %v", tc.href, got, tc.allow)
+		}
+	}
+}
