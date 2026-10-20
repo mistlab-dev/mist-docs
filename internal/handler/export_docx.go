@@ -81,14 +81,17 @@ const (
 )
 
 type docxRel struct {
-	id     string
-	target string
+	id       string
+	target   string
+	external bool // true -> TargetMode="External" (hyperlinks); false -> in-package target
 }
 
 type docxConverter struct {
-	body   strings.Builder
-	rels   []docxRel
-	relIdx int
+	body       strings.Builder
+	rels       []docxRel
+	images     []docxImage
+	drawingIdx int
+	relIdx     int
 }
 
 func (dc *docxConverter) nextRelID() string {
@@ -241,6 +244,9 @@ func (dc *docxConverter) processInline(n *golanghtml.Node, st docxInlineState) {
 			case "br":
 				dc.body.WriteString(`<w:r><w:br/></w:r>`)
 				continue
+			case "img":
+				dc.processImage(c, next)
+				continue
 			case "a":
 				href := ""
 				for _, attr := range c.Attr {
@@ -252,7 +258,7 @@ func (dc *docxConverter) processInline(n *golanghtml.Node, st docxInlineState) {
 				if safeHref(href) {
 					next.href = href
 					next.relID = dc.nextRelID()
-					dc.rels = append(dc.rels, docxRel{id: next.relID, target: href})
+					dc.rels = append(dc.rels, docxRel{id: next.relID, target: href, external: true})
 				}
 			}
 			dc.processInline(c, next)
@@ -303,6 +309,9 @@ func (dc *docxConverter) processList(n *golanghtml.Node, isOrdered bool, level i
 					next.strike = true
 				case "code":
 					next.code = true
+				case "img":
+					dc.processImage(child, next)
+					continue
 				case "a":
 					for _, attr := range child.Attr {
 						if attr.Key == "href" {
@@ -310,7 +319,7 @@ func (dc *docxConverter) processList(n *golanghtml.Node, isOrdered bool, level i
 							if safeHref(h) {
 								next.href = h
 								next.relID = dc.nextRelID()
-								dc.rels = append(dc.rels, docxRel{id: next.relID, target: next.href})
+								dc.rels = append(dc.rels, docxRel{id: next.relID, target: next.href, external: true})
 							}
 							break
 						}
@@ -633,7 +642,8 @@ func htmlToDocx(htmlContent string) ([]byte, error) {
 	// Build document.xml
 	documentXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+            xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
   <w:body>
     %s
     <w:sectPr>
@@ -649,9 +659,15 @@ func htmlToDocx(htmlContent string) ([]byte, error) {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`)
 	for _, rel := range dc.rels {
-		docRels.WriteString(fmt.Sprintf(`
+		if rel.external {
+			docRels.WriteString(fmt.Sprintf(`
   <Relationship Id="%s" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="%s" TargetMode="External"/>`,
-			docxXMLEscape(rel.id), docxXMLEscape(rel.target)))
+				docxXMLEscape(rel.id), docxXMLEscape(rel.target)))
+		} else {
+			docRels.WriteString(fmt.Sprintf(`
+  <Relationship Id="%s" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="%s"/>`,
+				docxXMLEscape(rel.id), docxXMLEscape(rel.target)))
+		}
 	}
 	docRels.WriteString(`
 </Relationships>`)
@@ -664,8 +680,21 @@ func htmlToDocx(htmlContent string) ([]byte, error) {
 		name    string
 		content string
 	}
+	contentTypes := docxContentTypeXML
+	if len(dc.images) > 0 {
+		// Insert image <Default> entries before </Types>.
+		insert := ""
+		seen := map[string]bool{}
+		for _, img := range dc.images {
+			if !seen[img.mediaType] {
+				seen[img.mediaType] = true
+				insert += fmt.Sprintf("\n  <Default Extension=\"%s\" ContentType=\"%s\"/>", docxImageExtension(img.mediaType), img.mediaType)
+			}
+		}
+		contentTypes = strings.Replace(docxContentTypeXML, "</Types>", insert+"\n</Types>", 1)
+	}
 	parts := []partEntry{
-		{"[Content_Types].xml", docxContentTypeXML},
+		{"[Content_Types].xml", contentTypes},
 		{"_rels/.rels", docxRootRelsXML},
 		{"word/styles.xml", docxStylesXML},
 		{"word/document.xml", documentXML},
@@ -678,6 +707,16 @@ func htmlToDocx(htmlContent string) ([]byte, error) {
 			return nil, err
 		}
 		if _, err := w.Write([]byte(p.content)); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, img := range dc.images {
+		w, err := zw.Create("word/media/" + img.name)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := w.Write(img.data); err != nil {
 			return nil, err
 		}
 	}
