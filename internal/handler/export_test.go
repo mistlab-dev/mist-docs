@@ -1,10 +1,15 @@
 package handler
 
 import (
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/c-wind/mist-docs/internal/config"
 	"github.com/gin-gonic/gin"
 )
 
@@ -255,27 +260,66 @@ func TestServeDocumentExportFormats(t *testing.T) {
 	}
 }
 
-// TestServeDocumentExportDocxFree guards the epic promise: docx export is free
-// for every plan, unlike server-side pdf which requires pdf_export. A plain
-// gin context has no plan, so pdf would be blocked while docx must succeed.
+// TestServeDocumentExportDocxFree guards the epic promise: with billing on and
+// the user on the Free plan, pdf is blocked with 402/plan_limit while docx
+// must still succeed. An empty gin context proves nothing here — without
+// user_id, pdf fails with 401, not 402.
 func TestServeDocumentExportDocxFree(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest("GET", "/export?format=docx", nil)
-	if !serveDocumentExport(c, "周报", "<h1>发布复盘</h1><p>中文正文</p>", "docx") {
-		t.Fatalf("docx export must not be gated, body=%s", w.Body.String())
+
+	// Free plan from Portal: pdf_export off.
+	portal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"limits": map[string]any{"pdf_export": false}})
+	}))
+	defer portal.Close()
+
+	oldEnabled := config.C.Billing.Enabled
+	oldPortal := config.C.Billing.PortalURL
+	config.C.Billing.Enabled = true
+	config.C.Billing.PortalURL = portal.URL
+	defer func() {
+		config.C.Billing.Enabled = oldEnabled
+		config.C.Billing.PortalURL = oldPortal
+	}()
+
+	// GetPlanLimits caches per user id, so use a throwaway id every run.
+	freeUserID := "free-user-docx-test-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+	newCtx := func(format string) (*gin.Context, *httptest.ResponseRecorder) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/export?format="+format, nil)
+		c.Set("user_id", freeUserID)
+		return c, w
 	}
-	if w.Code != 200 {
-		t.Fatalf("status %d body %s", w.Code, w.Body.String())
+
+	// pdf: Free plan + billing on -> 402 plan_limit.
+	cPDF, wPDF := newCtx("pdf")
+	if serveDocumentExport(cPDF, "周报", "<p>Hi</p>", "pdf") {
+		t.Fatal("pdf export must be blocked on the Free plan with billing on")
 	}
-	if w.Header().Get("Content-Type") != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
-		t.Fatalf("content-type %s", w.Header().Get("Content-Type"))
+	if wPDF.Code != http.StatusPaymentRequired {
+		t.Fatalf("pdf status %d, body %s", wPDF.Code, wPDF.Body.String())
 	}
-	if !strings.Contains(w.Header().Get("Content-Disposition"), ".docx") {
-		t.Fatalf("disposition %s", w.Header().Get("Content-Disposition"))
+	if !strings.Contains(wPDF.Body.String(), "plan_limit") {
+		t.Fatalf("pdf error must carry plan_limit, body %s", wPDF.Body.String())
 	}
-	if got := w.Body.Bytes(); len(got) < 4 || string(got[:2]) != "PK" {
+
+	// docx: same user, same billing state -> 200, free.
+	cDocx, wDocx := newCtx("docx")
+	if !serveDocumentExport(cDocx, "周报", "<h1>发布复盘</h1><p>中文正文</p>", "docx") {
+		t.Fatalf("docx export must not be gated, body=%s", wDocx.Body.String())
+	}
+	if wDocx.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", wDocx.Code, wDocx.Body.String())
+	}
+	if wDocx.Header().Get("Content-Type") != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
+		t.Fatalf("content-type %s", wDocx.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(wDocx.Header().Get("Content-Disposition"), ".docx") {
+		t.Fatalf("disposition %s", wDocx.Header().Get("Content-Disposition"))
+	}
+	if got := wDocx.Body.Bytes(); len(got) < 4 || string(got[:2]) != "PK" {
 		t.Fatalf("docx body is not a zip, len=%d", len(got))
 	}
 }
