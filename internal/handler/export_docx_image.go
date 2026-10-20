@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"crypto/hmac"
 	"encoding/base64"
 	"fmt"
 	"image"
@@ -114,6 +115,14 @@ func fetchDocxLocalMedia(src string) ([]byte, string, bool) {
 	if !ok1 || !ok2 {
 		return nil, "", false
 	}
+
+	// B3: Require valid signature matching team & filename, exactly like PublicGetMedia.
+	// Prevents cross-team media leakage when one team references another team's media URL.
+	sig := u.Query().Get("sig")
+	if sig == "" || !hmac.Equal([]byte(sig), []byte(mediaSig(team, file))) {
+		return nil, "", false
+	}
+
 	path := filepath.Join(store.RootPath(), team, "media", file)
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() || info.Size() == 0 || info.Size() > docxMaxImageBytes {
@@ -228,9 +237,14 @@ func (dc *docxConverter) processImage(n *golanghtml.Node, st docxInlineState) {
 	dc.images = append(dc.images, docxImage{data: data, mediaType: mediaType, name: name, rID: relID})
 	dc.rels = append(dc.rels, docxRel{id: relID, target: "media/" + name})
 
-	dc.body.WriteString(fmt.Sprintf(
-		`<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="%d" name="%s"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`,
-		cx, cy, dc.drawingIdx, name, dc.drawingIdx, name, relID, cx, cy))
+	drawingXML := fmt.Sprintf(
+		`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="%d" name="%s"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+		cx, cy, dc.drawingIdx, name, dc.drawingIdx, name, relID, cx, cy)
+	if st.href != "" && st.relID != "" {
+		dc.body.WriteString(`<w:hyperlink r:id="` + st.relID + `">` + drawingXML + `</w:hyperlink>`)
+	} else {
+		dc.body.WriteString(drawingXML)
+	}
 }
 
 // writeImageFallback renders an image we could not embed: the alt text, linked

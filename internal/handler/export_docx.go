@@ -413,7 +413,11 @@ func (dc *docxConverter) processBlocks(n *golanghtml.Node) {
 				if node.Type == golanghtml.TextNode {
 					dc.writeRun(node.Data, docxInlineState{})
 				} else if node.Type == golanghtml.ElementNode {
-					dc.processInline(node, docxInlineState{})
+					if node.Data == "img" {
+						dc.processImage(node, docxInlineState{})
+					} else {
+						dc.processInline(node, docxInlineState{})
+					}
 				}
 			}
 			dc.closeParagraph()
@@ -462,6 +466,12 @@ func (dc *docxConverter) processOneBlock(c *golanghtml.Node) {
 		dc.openParagraph("", 0, "")
 		dc.processInline(c, docxInlineState{})
 		dc.closeParagraph()
+	case "img":
+		// TipTap saves images as block-level <img> siblings of <p> (inline: false).
+		// Render in its own paragraph.
+		dc.openParagraph("", 0, "")
+		dc.processImage(c, docxInlineState{})
+		dc.closeParagraph()
 	case "pre":
 		// Code block: monospace Courier New, newlines as w:br, paragraph-level
 		// light shading approximates the code-block background.
@@ -500,7 +510,7 @@ func isBlockNode(n *golanghtml.Node) bool {
 func isBlockElement(tag string) bool {
 	switch tag {
 	case "p", "h1", "h2", "h3", "h4", "h5", "h6",
-		"ul", "ol", "table", "pre", "div", "section", "blockquote",
+		"ul", "ol", "table", "pre", "div", "section", "blockquote", "img",
 		"article", "header", "footer", "aside", "nav", "main", "form",
 		"dl", "figure", "hr":
 		return true

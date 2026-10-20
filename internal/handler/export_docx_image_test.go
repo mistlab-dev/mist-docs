@@ -43,8 +43,8 @@ func TestHtmlToDocx_EmbedImage(t *testing.T) {
 	}
 	docXML, relsXML := inspectDocx(t, data)
 
-	if !strings.Contains(docXML, "<w:drawing>") {
-		t.Errorf("expected w:drawing in document.xml: %s", docXML)
+	if !strings.Contains(docXML, "<w:r><w:drawing>") {
+		t.Errorf("B2: expected <w:r><w:drawing> in document.xml: %s", docXML)
 	}
 	if !strings.Contains(relsXML, "relationships/image") {
 		t.Errorf("expected image relationship: %s", relsXML)
@@ -127,7 +127,8 @@ func TestDefaultDocxImageFetcher_SameOriginMedia(t *testing.T) {
 	}
 
 	// Same-origin signed path -> embedded.
-	data, mt, ok := defaultDocxImageFetcher("/api/media/team1/a.png?sig=abc")
+	validSig := mediaSig("team1", "a.png")
+	data, mt, ok := defaultDocxImageFetcher("/api/media/team1/a.png?sig=" + validSig)
 	if !ok || len(data) == 0 || mt != "image/png" {
 		t.Fatalf("expected same-origin media to load, ok=%v mt=%q", ok, mt)
 	}
@@ -187,4 +188,70 @@ func zipHasPartWithPrefix(data []byte, prefix string) bool {
 		}
 	}
 	return false
+}
+
+// TestHtmlToDocx_TopLevelBlockImage verifies that an <img> element that is a direct
+// block sibling of <p> (TipTap output with inline: false) is rendered in its own paragraph
+// and not silently dropped (fixes PR #50 review B1).
+func TestHtmlToDocx_TopLevelBlockImage(t *testing.T) {
+	pngBytes := makePNG(t, 20, 20)
+	dataURI := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes)
+
+	// Block-level <img> before and between <p>
+	input := `<img src="` + dataURI + `" alt="顶层图片"><p>段落内容</p>`
+	data, err := htmlToDocx(input)
+	if err != nil {
+		t.Fatalf("htmlToDocx block image: %v", err)
+	}
+	docXML, relsXML := inspectDocx(t, data)
+
+	if !strings.Contains(docXML, "<w:r><w:drawing>") {
+		t.Errorf("B1: top-level img must produce a drawing in its own paragraph: %s", docXML)
+	}
+	if !strings.Contains(docXML, "段落内容") {
+		t.Errorf("sibling paragraph content missing: %s", docXML)
+	}
+	if !strings.Contains(relsXML, "relationships/image") {
+		t.Errorf("missing image relationship: %s", relsXML)
+	}
+}
+
+// TestDefaultDocxImageFetcher_CrossTeamOrInvalidSig verifies that foreign-team or
+// unsigned media references degrade and are refused by the fetcher (fixes PR #50 review B3).
+func TestDefaultDocxImageFetcher_CrossTeamOrInvalidSig(t *testing.T) {
+	root := t.TempDir()
+	oldRoot := config.C.Storage.Root
+	oldSecret := config.C.JWT.Secret
+	config.C.Storage.Root = root
+	config.C.JWT.Secret = "test-secret-media-sig"
+	defer func() {
+		config.C.Storage.Root = oldRoot
+		config.C.JWT.Secret = oldSecret
+	}()
+
+	pngBytes := makePNG(t, 8, 8)
+	mediaDir := root + "/teamB/media"
+	if err := mkdirAll(mediaDir); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := writeFile(mediaDir+"/secret.png", pngBytes); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// 1. Missing signature -> refused
+	if _, _, ok := defaultDocxImageFetcher("/api/media/teamB/secret.png"); ok {
+		t.Error("B3: unsigned media path must be refused")
+	}
+
+	// 2. Forged / invalid signature -> refused
+	if _, _, ok := defaultDocxImageFetcher("/api/media/teamB/secret.png?sig=invalidhexsig1234"); ok {
+		t.Error("B3: invalid signature must be refused")
+	}
+
+	// 3. Genuine signature -> accepted
+	validSig := mediaSig("teamB", "secret.png")
+	data, mt, ok := defaultDocxImageFetcher("/api/media/teamB/secret.png?sig=" + validSig)
+	if !ok || len(data) == 0 || mt != "image/png" {
+		t.Errorf("B3: genuine signature should be accepted, ok=%v mt=%q", ok, mt)
+	}
 }
