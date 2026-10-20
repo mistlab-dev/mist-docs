@@ -255,3 +255,32 @@ func TestDefaultDocxImageFetcher_CrossTeamOrInvalidSig(t *testing.T) {
 		t.Errorf("B3: genuine signature should be accepted, ok=%v mt=%q", ok, mt)
 	}
 }
+
+// TestHtmlToDocx_BlockquoteImage verifies an <img> inside a <blockquote> is
+// rendered as a quoted drawing instead of being silently dropped
+// (PR #50 review B1 prime; TipTap blockquote content is block+).
+func TestHtmlToDocx_BlockquoteImage(t *testing.T) {
+	pngBytes := makePNG(t, 24, 16)
+	dataURI := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes)
+
+	input := `<blockquote><img src="` + dataURI + `" alt="引用图"><p>引用正文</p></blockquote>`
+	data, err := htmlToDocx(input)
+	if err != nil {
+		t.Fatalf("htmlToDocx blockquote image: %v", err)
+	}
+	docXML, relsXML := inspectDocx(t, data)
+
+	if !strings.Contains(docXML, "<w:r><w:drawing>") {
+		t.Errorf("blockquote img must produce a drawing: %s", docXML)
+	}
+	if !strings.Contains(docXML, "引用正文") {
+		t.Errorf("blockquote paragraph content missing: %s", docXML)
+	}
+	if !strings.Contains(relsXML, "relationships/image") {
+		t.Errorf("missing image relationship: %s", relsXML)
+	}
+	// The quoted drawing paragraph must carry the quote indent + shading.
+	if !strings.Contains(docXML, "w:ind") || !strings.Contains(docXML, "F0F4F8") {
+		t.Errorf("quoted image paragraph should keep indent/shading: %s", docXML)
+	}
+}

@@ -582,6 +582,13 @@ func (dc *docxConverter) processBlockquote(n *golanghtml.Node, level int) {
 				dc.processList(c, true, level+1)
 			case "table":
 				dc.processTable(c)
+			case "img":
+				// TipTap blockquote content is block+: an inline:false Image is
+				// a block child here. Render it as a quoted paragraph so it is
+				// never silently dropped (PR #50 review B1 prime).
+				dc.openParagraphEx("", indent, blockquoteShade, "")
+				dc.processImage(c, docxInlineState{})
+				dc.closeParagraph()
 			default:
 				dc.processBlocks(c)
 			}
