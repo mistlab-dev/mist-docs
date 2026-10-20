@@ -30,8 +30,10 @@ docker compose up -d
 - 一次最多 20 个文件、每个 ≤10MB；Markdown 转成 HTML 后入库，与编辑器一致
 
 ### 📤 导出
-- HTML / Markdown / 纯文本 / PDF（扩展名与内容一致）
-- 不提供 Word（.docx / .doc）下载。`.docx` 只用于导入
+- HTML / Markdown / 纯文本 / PDF / Word（.docx，全员免费，扩展名与内容一致）
+- Word 导出为纯 Go OOXML 生成：标题/段落/列表/表格/链接/中文保真；代码块与引用有近似样式；同源图片与 data: 图嵌入，外部图片降级为链接或 alt 文本
+- Mermaid 等图表代码块在 docx 里导出为等宽代码块（保留 Mermaid 源码，不渲染 SVG）
+- **批量导出仍仅 Markdown**；单篇导出才支持 Word
 - 编辑器里的 PDF 由浏览器生成，不走服务端导出
 
 ### 📊 表格
