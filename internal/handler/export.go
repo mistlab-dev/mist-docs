@@ -12,9 +12,9 @@ import (
 	"github.com/jung-kurt/gofpdf"
 )
 
-// serveDocumentExport writes one of markdown, html, txt, or pdf.
-// The download extension matches the body. docx is rejected: this server
-// does not build a Word file.
+// serveDocumentExport writes one of markdown, html, txt, pdf, or docx.
+// The download extension matches the body. docx is free for every plan:
+// unlike server-side pdf it is not gated by RequirePlanFeature.
 func serveDocumentExport(c *gin.Context, title, htmlContent, format string) bool {
 	format = strings.ToLower(strings.TrimSpace(format))
 	if format == "" {
@@ -50,8 +50,18 @@ func serveDocumentExport(c *gin.Context, title, htmlContent, format string) bool
 		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.pdf"`, fileBase))
 		c.Data(http.StatusOK, "application/pdf", pdf)
 
+	case "docx":
+		// Free for every plan, unlike server-side pdf (pdf_export).
+		data, err := htmlToDocx(htmlContent)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "docx 生成失败: " + err.Error()})
+			return false
+		}
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.docx"`, fileBase))
+		c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", data)
+
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的格式，可选: markdown, html, txt, pdf"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的格式，可选: markdown, html, txt, pdf, docx"})
 		return false
 	}
 	return true

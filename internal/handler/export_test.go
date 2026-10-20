@@ -230,6 +230,7 @@ func TestServeDocumentExportFormats(t *testing.T) {
 		{"markdown", ".md", "text/markdown"},
 		{"html", ".html", "text/html"},
 		{"txt", ".txt", "text/plain"},
+		{"docx", ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
 	}
 	for _, tc := range cases {
 		w := httptest.NewRecorder()
@@ -245,7 +246,7 @@ func TestServeDocumentExportFormats(t *testing.T) {
 		if !strings.Contains(cd, tc.ext) {
 			t.Fatalf("%s: disposition %s", tc.format, cd)
 		}
-		if strings.Contains(cd, ".docx") || strings.Contains(cd, ".doc\"") {
+		if tc.format != "docx" && (strings.Contains(cd, ".docx") || strings.Contains(cd, ".doc\"")) {
 			t.Fatalf("%s: advertised word extension %s", tc.format, cd)
 		}
 		if !strings.Contains(w.Header().Get("Content-Type"), tc.ctype) {
@@ -254,18 +255,27 @@ func TestServeDocumentExportFormats(t *testing.T) {
 	}
 }
 
-func TestServeDocumentExportRejectsDocx(t *testing.T) {
+// TestServeDocumentExportDocxFree guards the epic promise: docx export is free
+// for every plan, unlike server-side pdf which requires pdf_export. A plain
+// gin context has no plan, so pdf would be blocked while docx must succeed.
+func TestServeDocumentExportDocxFree(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("GET", "/export?format=docx", nil)
-	if serveDocumentExport(c, "周报", "<p>Hi</p>", "docx") {
-		t.Fatal("docx should be rejected")
+	if !serveDocumentExport(c, "周报", "<h1>发布复盘</h1><p>中文正文</p>", "docx") {
+		t.Fatalf("docx export must not be gated, body=%s", w.Body.String())
 	}
-	if w.Code != 400 {
+	if w.Code != 200 {
 		t.Fatalf("status %d body %s", w.Code, w.Body.String())
 	}
-	if strings.Contains(w.Header().Get("Content-Disposition"), "doc") {
-		t.Fatal("docx rejection must not set a download name")
+	if w.Header().Get("Content-Type") != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
+		t.Fatalf("content-type %s", w.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(w.Header().Get("Content-Disposition"), ".docx") {
+		t.Fatalf("disposition %s", w.Header().Get("Content-Disposition"))
+	}
+	if got := w.Body.Bytes(); len(got) < 4 || string(got[:2]) != "PK" {
+		t.Fatalf("docx body is not a zip, len=%d", len(got))
 	}
 }
