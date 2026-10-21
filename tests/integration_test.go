@@ -1383,6 +1383,95 @@ func TestBatchExportDocumentsRejectsBadInput(t *testing.T) {
 	}
 }
 
+// TestBatchExportDocumentsReportsCount: the response carries the number of
+// documents that actually made it into the zip, so the frontend does not
+// have to count the requested ones (which include skipped and failed).
+func TestBatchExportDocumentsReportsCount(t *testing.T) {
+	docA := createTestDoc(t, adminToken, "计数 A")
+	docB := createTestDoc(t, adminToken, "计数 B")
+
+	body := batchExportBody("docx", []map[string]interface{}{
+		{"id": docA, "title": "计数 A"},
+		{"id": docB, "title": "计数 B"},
+		{"id": "no-such-doc", "title": "不存在的"},
+	})
+	w := request("POST", teamPath("/documents/batch-export"), body, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("batch export failed: %d %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("X-Export-Count"); got != "2" {
+		t.Errorf("X-Export-Count = %q, want \"2\" (only the readable documents shipped)", got)
+	}
+}
+
+// TestBatchExportDocumentsSheetOnlySkippedForDocx: sheets are out of scope
+// for docx, but the old per-document GET export produced Markdown for them —
+// so a Markdown batch must still include a sheet.
+func TestBatchExportDocumentsSheetOnlySkippedForDocx(t *testing.T) {
+	w := request("POST", teamPath("/documents"), map[string]interface{}{
+		"title": "批量 sheet",
+		"type":  "sheet",
+		"cells": map[string]interface{}{"A1": "hello"},
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("create sheet failed: %d %s", w.Code, w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	sheetID := getString(resp["data"].(map[string]interface{})["id"])
+
+	// docx: the sheet is skipped.
+	body := batchExportBody("docx", []map[string]interface{}{{"id": sheetID, "title": "批量 sheet"}})
+	w = request("POST", teamPath("/documents/batch-export"), body, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("batch export failed: %d %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("X-Export-Count"); got != "0" {
+		t.Errorf("X-Export-Count = %q, want \"0\" (a sheet has no docx)", got)
+	}
+
+	// markdown: the sheet is exported, like the old GET export did.
+	body = batchExportBody("markdown", []map[string]interface{}{{"id": sheetID, "title": "批量 sheet"}})
+	w = request("POST", teamPath("/documents/batch-export"), body, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("markdown batch export failed: %d %s", w.Code, w.Body.String())
+	}
+	if got := w.Header().Get("X-Export-Count"); got != "1" {
+		t.Errorf("X-Export-Count = %q, want \"1\" (markdown must keep exporting sheets)", got)
+	}
+}
+
+// TestBatchExportDocumentsMarkdownIgnoresClientHTML: the client-rendered
+// HTML exists for the docx image pipeline. A Markdown batch must use the
+// stored copy instead, so the same request cannot smuggle content into a
+// different format.
+func TestBatchExportDocumentsMarkdownIgnoresClientHTML(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "markdown 用存储副本")
+
+	body := batchExportBody("markdown", []map[string]interface{}{
+		{"id": docID, "title": "markdown 用存储副本", "html": "<p>客户端提交的伪造内容</p>"},
+	})
+	w := request("POST", teamPath("/documents/batch-export"), body, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("markdown batch export failed: %d %s", w.Code, w.Body.String())
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(w.Body.Bytes()), int64(w.Body.Len()))
+	if err != nil {
+		t.Fatalf("not a zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if !strings.HasSuffix(f.Name, ".md") {
+			continue
+		}
+		rc, _ := f.Open()
+		content, _ := io.ReadAll(rc)
+		rc.Close()
+		if strings.Contains(string(content), "客户端提交的伪造内容") {
+			t.Errorf("markdown batch must use the stored copy, not the client HTML: %s", content)
+		}
+	}
+}
+
 // TestBatchExportDocumentsViewer: a viewer with read permission may batch
 // export (same rule as the single-document export: no plan gate).
 func TestBatchExportDocumentsViewer(t *testing.T) {

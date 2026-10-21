@@ -214,6 +214,7 @@ export default {
     exporting: 'Exporting...',
     exportSuccess: '{0} documents exported',
     exportFailed: 'Batch export failed',
+    exportPartial: 'Exported {0} of {1} documents (the rest were skipped or failed — see _manifest.txt in the zip)',
     importDialogTitle: 'Import',
     importHint: 'Supports .txt, .md, .html, .docx, .xlsx files. Max 20 files, 10MB each.',
     importDragText: 'Drop files here, or',

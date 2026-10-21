@@ -328,6 +328,7 @@ export default {
     exporting: '正在导出...',
     exportSuccess: '已导出 {0} 个文档',
     exportFailed: '批量导出失败',
+    exportPartial: '已导出 {0} 篇（请求 {1} 篇，其余被跳过或失败，详见压缩包内 _manifest.txt）',
     importDialogTitle: '批量导入',
     importHint: '支持 .txt、.md、.html、.docx、.xlsx 文件，最多20个，每个不超过10MB',
     importDragText: '拖拽文件到此处，或',
