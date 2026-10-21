@@ -27,6 +27,12 @@ type docxImageFetcher func(src string) (data []byte, contentType string, ok bool
 // the generated document.
 const docxMaxImageBytes = 10 << 20 // 10 MB
 
+// docxMaxImageDimension caps the pixel width and height of one embedded
+// image. The byte cap alone does not bound the work: a small PNG can declare
+// an absurd canvas (1x100000), and Word has to lay that out. 16384 px is
+// far above any real diagram and keeps the layout sane.
+const docxMaxImageDimension = 16384
+
 // docxImage is one embedded picture inside the package (word/media/imageN.ext).
 type docxImage struct {
 	data      []byte
@@ -77,7 +83,27 @@ func fetchDocxDataURI(src string) ([]byte, string, bool) {
 	if err != nil || len(data) == 0 || len(data) > docxMaxImageBytes {
 		return nil, "", false
 	}
+	// A byte cap does not bound the pixel count: a tiny PNG can declare a
+	// 1x100000 canvas, and Word would have to lay that out. Refuse images
+	// whose dimensions are out of range — they degrade to alt text.
+	if !docxImageDimensionsOK(data) {
+		return nil, "", false
+	}
 	return data, mediaType, true
+}
+
+// docxImageDimensionsOK reports whether the image's declared width and
+// height are within docxMaxImageDimension. The image is only decoded for its
+// header (image.DecodeConfig), so this is cheap.
+func docxImageDimensionsOK(data []byte) bool {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return false
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 {
+		return false
+	}
+	return cfg.Width <= docxMaxImageDimension && cfg.Height <= docxMaxImageDimension
 }
 
 // fetchDocxLocalMedia resolves a signed same-origin media path to the file on
@@ -134,6 +160,9 @@ func fetchDocxLocalMedia(src string) ([]byte, string, bool) {
 	}
 	mediaType := docxSniffImageType(data)
 	if mediaType == "" {
+		return nil, "", false
+	}
+	if !docxImageDimensionsOK(data) {
 		return nil, "", false
 	}
 	return data, mediaType, true

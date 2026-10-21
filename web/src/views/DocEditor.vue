@@ -841,6 +841,7 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Collaboration from '@tiptap/extension-collaboration'
 import { MermaidPreview } from '@/extensions/mermaid-preview'
+import { renderMermaidForExport } from '@/utils/mermaidExport'
 import { WikiLink, type WikiLinkMatch } from '@/extensions/wikilink'
 import { ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { common, createLowlight } from 'lowlight'
@@ -2342,9 +2343,34 @@ async function handleExport(format: string) {
       return
     }
     const token = authToken()
-    const resp = await fetch(`/api/teams/${auth.currentTeamId}/documents/${docId}/export?format=${format}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
+    // Word 导出走客户端渲染路径（#56）：Mermaid 图表在浏览器里画成 PNG，
+    // 连同正文一起 POST 给服务端，服务端只做 HTML → docx。渲染失败的图
+    // 保留原代码块，整篇导出仍成功。
+    let resp: Response
+    if (format === 'docx') {
+      const source = editor.value?.getHTML() || doc.value?.content || ''
+      if (!source) { ElMessage.error(t('docEditor.exportFailed')); return }
+      const { html, rendered, failed } = await renderMermaidForExport(source)
+      if (failed > 0) {
+        ElMessage.warning(t('docEditor.exportMermaidFallback', [failed]))
+      }
+      resp = await fetch(`/api/teams/${auth.currentTeamId}/documents/${docId}/export?format=docx`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          'Content-Type': 'text/html; charset=utf-8',
+        },
+        body: html,
+      })
+      if (resp.ok && rendered > 0) {
+        // info 而非 success：紧接着还有一条「导出成功」，两条 success 会叠在一起。
+        ElMessage.info(t('docEditor.exportMermaidRendered', [rendered]))
+      }
+    } else {
+      resp = await fetch(`/api/teams/${auth.currentTeamId}/documents/${docId}/export?format=${format}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+    }
     if (!resp.ok) { ElMessage.error(t('docEditor.exportFailed')); return }
     const blob = await resp.blob()
     const cd = resp.headers.get('Content-Disposition') || ''
