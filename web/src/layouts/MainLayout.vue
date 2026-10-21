@@ -68,6 +68,11 @@
         </template>
       </el-menu>
       <div class="sidebar-bottom">
+        <!-- 涂鸦整理工具是独立服务（/doodle/，自带管理员登录），这里只放管理员可见的入口链接 -->
+        <a v-if="auth.isAdmin" class="help-btn doodle-link" href="/doodle/" target="_blank" rel="noopener" :title="collapsed ? t('mainLayout.doodleTool') : ''">
+          <el-icon><Picture /></el-icon>
+          <span v-if="!collapsed">{{ t('mainLayout.doodleTool') }}</span>
+        </a>
         <!-- 菜单里已有「帮助」入口，这里同样叫「帮助」会让人以为是重复项；
              这个按钮开的是快捷帮助弹窗，改叫「使用帮助」区分开。 -->
         <div class="help-btn" @click="showHelp = true" :title="collapsed ? t('mainLayout.helpDialogTitle') : ''">
@@ -228,7 +233,7 @@
 <script setup lang="ts">
 import { formatRelative } from '@/utils/time'
 import { ref, onMounted, computed } from 'vue'
-import { Sunny, Moon, Folder, FolderOpened, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled, Calendar, Lock, Link } from '@element-plus/icons-vue'
+import { Sunny, Moon, Folder, FolderOpened, Delete, DataAnalysis, User, OfficeBuilding, List, Monitor, Operation, ArrowDown, QuestionFilled, Calendar, Lock, Link, Picture } from '@element-plus/icons-vue'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -470,6 +475,7 @@ onMounted(() => {
 }
 .help-btn:hover { background: var(--md-sidebar-hover); color: var(--md-sidebar-text-active); }
 .help-btn .el-icon { font-size: 18px; }
+.doodle-link { text-decoration: none; }
 .sidebar.collapsed .help-btn { justify-content: center; padding: 10px 0; }
 .topbar {
   display: flex;

@@ -103,6 +103,7 @@ export default {
     storage: 'Storage Monitor',
     teamFolders: 'Folders',
     permissions: 'Permissions',
+    doodleTool: 'Doodle tool',
     webhooks: 'Webhooks',
     deadlines: 'Delivery Board',
     breadcrumbEdit: 'Edit',

@@ -103,6 +103,7 @@ export default {
     storage: '存储监控',
     teamFolders: '文件夹管理',
     permissions: '权限管理',
+    doodleTool: '涂鸦整理',
     webhooks: 'Webhook',
     breadcrumbEdit: '编辑',
     helpSectionDocMgmt: '文档管理',
