@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"database/sql"
@@ -273,6 +274,19 @@ func request(method, path string, body interface{}, token string) *httptest.Resp
 	}
 	req := httptest.NewRequest(method, path, bodyReader)
 	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+// requestHTML posts a raw text/html body (the client-rendered export path,
+// #56). request() always marshals to JSON, so it cannot be used here.
+func requestHTML(method, path, html, token string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, bytes.NewReader([]byte(html)))
+	req.Header.Set("Content-Type", "text/html; charset=utf-8")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -1235,6 +1249,107 @@ func TestExportDocumentDocxRejectsSheet(t *testing.T) {
 	w = request("GET", teamPath("/documents/"+docID+"/export?format=html"), nil, adminToken)
 	if w.Code != 200 {
 		t.Errorf("sheet html export should still work: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// ==================== 客户端渲染导出（#56） ====================
+
+// onePixelPNG is a valid 1x1 PNG. The docx image pipeline sniffs magic
+// bytes, so a real PNG header is required for the embed to succeed.
+const onePixelPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+// TestExportDocumentDocxClientRendered covers the #56 path: the browser
+// renders a Mermaid diagram to a PNG data: URI and posts the patched HTML.
+// The server converts it to a real Word file with the image embedded.
+func TestExportDocumentDocxClientRendered(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "客户端渲染导出")
+
+	html := `<p>图表如下</p><img src="` + onePixelPNG + `" alt="mermaid">`
+	w := requestHTML("POST", teamPath("/documents/"+docID+"/export?format=docx"), html, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("client-rendered docx export failed: %d %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
+		t.Errorf("content-type %s", ct)
+	}
+	if cd := w.Header().Get("Content-Disposition"); !strings.Contains(cd, ".docx") {
+		t.Errorf("disposition %s", cd)
+	}
+
+	// The image must be embedded as a package part, not dropped.
+	zr, err := zip.NewReader(bytes.NewReader(w.Body.Bytes()), int64(w.Body.Len()))
+	if err != nil {
+		t.Fatalf("not a zip: %v", err)
+	}
+	hasMedia := false
+	hasDrawing := false
+	for _, f := range zr.File {
+		if strings.HasPrefix(f.Name, "word/media/") {
+			hasMedia = true
+		}
+		if f.Name == "word/document.xml" {
+			rc, _ := f.Open()
+			content, _ := io.ReadAll(rc)
+			rc.Close()
+			hasDrawing = strings.Contains(string(content), "<w:drawing>")
+		}
+	}
+	if !hasMedia {
+		t.Error("client-rendered image missing from word/media/")
+	}
+	if !hasDrawing {
+		t.Error("client-rendered image missing <w:drawing> in document.xml")
+	}
+}
+
+// TestExportDocumentDocxClientRenderedViewer: a viewer with read permission
+// may export through the client-rendered path too (same rule as GET export).
+func TestExportDocumentDocxClientRenderedViewer(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "客户端渲染 viewer 导出")
+
+	w := requestHTML("POST", teamPath("/documents/"+docID+"/export?format=docx"),
+		`<p>hi</p><img src="`+onePixelPNG+`">`, viewerToken)
+	if w.Code != 200 {
+		t.Fatalf("viewer client-rendered export failed: %d %s", w.Code, w.Body.String())
+	}
+}
+
+// TestExportDocumentDocxClientRenderedRejectsBadInput: the endpoint only
+// speaks docx, and an empty body is a client error, not a 500.
+func TestExportDocumentDocxClientRenderedRejectsBadInput(t *testing.T) {
+	docID := createTestDoc(t, adminToken, "客户端渲染入参校验")
+
+	w := requestHTML("POST", teamPath("/documents/"+docID+"/export?format=html"),
+		`<p>hi</p>`, adminToken)
+	if w.Code != 400 {
+		t.Errorf("format=html must be 400, got %d %s", w.Code, w.Body.String())
+	}
+
+	w = requestHTML("POST", teamPath("/documents/"+docID+"/export?format=docx"),
+		"   ", adminToken)
+	if w.Code != 400 {
+		t.Errorf("empty body must be 400, got %d %s", w.Code, w.Body.String())
+	}
+}
+
+// TestExportDocumentDocxClientRenderedRejectsSheet keeps the sheet refusal
+// on the POST path too — no hidden sheet->docx.
+func TestExportDocumentDocxClientRenderedRejectsSheet(t *testing.T) {
+	w := request("POST", teamPath("/documents"), map[string]interface{}{
+		"title": "sheet 拒绝客户端导出",
+		"type":  "sheet",
+		"cells": map[string]interface{}{"A1": "hello"},
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("create sheet failed: %d %s", w.Code, w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	docID := getString(resp["data"].(map[string]interface{})["id"])
+
+	w = requestHTML("POST", teamPath("/documents/"+docID+"/export?format=docx"),
+		`<p>hi</p>`, adminToken)
+	if w.Code != 400 {
+		t.Fatalf("sheet client export must be 400, got %d %s", w.Code, w.Body.String())
 	}
 }
 
