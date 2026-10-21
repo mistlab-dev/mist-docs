@@ -83,6 +83,7 @@ func buildPaths() map[string]interface{} {
 	add(team+"/documents/{id}/comments", "post", "创建评论", "")
 	add(team+"/documents/{id}/export", "get", "导出文档", "format：markdown、html、txt、pdf、docx。下载扩展名与内容一致。docx 走 GET .../export?format=docx，全员免费（viewer 有 read 权限即可导出、无 402/plan_limit，不走 RequirePlanFeature('docx_export')），返回 OOXML MIME（application/vnd.openxmlformats-officedocument.wordprocessingml.document）及 Content-Disposition exportBaseName.docx；与服务端 PDF 导出刻意区分（服务端 pdf 在计费打开且套餐不含 pdf_export 时返回 402）。编辑器里的 PDF 由浏览器生成，不走此接口。")
 	add(team+"/documents/{id}/export", "post", "导出文档（客户端渲染）", "与 GET 同路径的 POST 版本：请求体是客户端渲染后的 HTML，服务端只做 HTML → docx。用于 #56 的 Mermaid 图表图片嵌入——浏览器把图表画成 PNG data: URI 后连同正文一起回传。权限与 GET 导出一致（read 即可导出、docx 不走计费门禁）；sheet 仍显式拒绝（400）。请求体上限 8MB。")
+	add(team+"/documents/batch-export", "post", "批量导出文档", "把多篇文档导出成一个 zip。请求体：{format: \"docx\"|\"markdown\", documents: [{id, title, html}]}。html 可选：传了就用客户端渲染后的 HTML（#56 的 Mermaid 图片），没传就用服务端存储的副本（Mermaid 保持代码块）。逐篇校验 read 权限：读不到的跳过并记进 zip 内的 _manifest.txt；一篇都读不到返回 403（不回空 zip）。单篇转换失败不中断整批，清单里标 error。Content-Disposition 带导出时间戳，Content-Type 为 application/zip。不走计费门禁。")
 	add(team+"/documents/{id}/fragments", "get", "文档关联片段", "")
 	add(team+"/documents/{id}/fragments", "post", "关联片段", "")
 	add(team+"/documents/{id}/fragments/{fragment_id}", "delete", "取消关联片段", "")

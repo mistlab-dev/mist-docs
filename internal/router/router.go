@@ -74,6 +74,8 @@ func RegisterAPI(r gin.IRouter) {
 				// 客户端渲染导出（#56）：浏览器把 Mermaid 画成 PNG 后回传 HTML，
 				// 服务端只做 HTML → docx，权限与免费策略与 GET 导出一致。
 				teams.POST("/documents/:id/export", handler.TeamExportDocumentPost)
+				// 批量导出（#57）：多篇合成一个 zip，逐篇校验 read 权限。
+				teams.POST("/documents/batch-export", handler.TeamBatchExportDocuments)
 
 				// 文档 ↔ 团队片段联动
 				teams.GET("/documents/:id/fragments", handler.TeamListDocFragments)
