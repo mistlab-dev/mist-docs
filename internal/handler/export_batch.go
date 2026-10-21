@@ -212,6 +212,7 @@ func TeamBatchExportDocuments(c *gin.Context) {
 	zw := zip.NewWriter(tmp)
 	used := map[string]bool{}
 	exported := 0
+	failed := 0
 	written := int64(0)
 
 	for _, p := range allowed {
@@ -224,6 +225,7 @@ func TeamBatchExportDocuments(c *gin.Context) {
 			entry.Status = "error"
 			entry.Reason = "读取文档信息失败"
 			manifest = append(manifest, entry)
+			failed++
 			continue
 		}
 		if title != "" {
@@ -255,6 +257,7 @@ func TeamBatchExportDocuments(c *gin.Context) {
 			entry.Status = "error"
 			entry.Reason = "文档内容为空"
 			manifest = append(manifest, entry)
+			failed++
 			continue
 		}
 		if len(html) > maxBatchExportDocBytes {
@@ -279,6 +282,7 @@ func TeamBatchExportDocuments(c *gin.Context) {
 			entry.Status = "error"
 			entry.Reason = "转换失败：" + err.Error()
 			manifest = append(manifest, entry)
+			failed++
 			continue
 		}
 
@@ -298,12 +302,14 @@ func TeamBatchExportDocuments(c *gin.Context) {
 			entry.Status = "error"
 			entry.Reason = "写入压缩包失败"
 			manifest = append(manifest, entry)
+			failed++
 			continue
 		}
 		if _, err := f.Write(data); err != nil {
 			entry.Status = "error"
 			entry.Reason = "写入压缩包失败"
 			manifest = append(manifest, entry)
+			failed++
 			continue
 		}
 		written += int64(len(data))
@@ -324,12 +330,16 @@ func TeamBatchExportDocuments(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成压缩包失败"})
 		return
 	}
-	if exported == 0 {
+	if exported == 0 && failed > 0 {
 		// Every permitted document failed to convert. Refuse instead of
 		// shipping a zip that contains nothing but a manifest.
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "所有文档都导出失败，请查看单篇导出结果"})
 		return
 	}
+	// exported == 0 && failed == 0 means every document was skipped for a
+	// legitimate reason (a sheet in a docx batch, over the size cap, …).
+	// That is not a server error: ship the manifest so the caller can read
+	// why nothing was exported.
 
 	stamp := time.Now().Format("20060102-150405")
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="mistdocs-export-%s.zip"`, stamp))
