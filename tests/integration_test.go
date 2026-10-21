@@ -1408,10 +1408,12 @@ func TestBatchExportDocumentsReportsCount(t *testing.T) {
 // for docx, but the old per-document GET export produced Markdown for them —
 // so a Markdown batch must still include a sheet.
 func TestBatchExportDocumentsSheetOnlySkippedForDocx(t *testing.T) {
+	// The create endpoint only persists the "content" field; a "cells" key
+	// would be dropped and the document would have no stored body.
 	w := request("POST", teamPath("/documents"), map[string]interface{}{
-		"title": "批量 sheet",
-		"type":  "sheet",
-		"cells": map[string]interface{}{"A1": "hello"},
+		"title":   "批量 sheet",
+		"type":    "sheet",
+		"content": `{"A1":{"v":"hello"}}`,
 	}, adminToken)
 	if w.Code != 200 {
 		t.Fatalf("create sheet failed: %d %s", w.Code, w.Body.String())
