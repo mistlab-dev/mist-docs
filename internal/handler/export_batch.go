@@ -3,6 +3,7 @@ package handler
 import (
 	"archive/zip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -21,9 +22,17 @@ import (
 const maxBatchExportDocs = 200
 
 // maxBatchExportBody caps the JSON request body of a batch export. The body
-// holds one HTML blob per document (a client-rendered diagram is a base64
-// data: URI, so it is large), so the ceiling is generous but finite.
-const maxBatchExportBody = 64 << 20 // 64 MB
+// holds one HTML blob per document, and a client-rendered diagram is a
+// base64 data: URI, so it is large.
+//
+// It has to stay comfortably above maxBatchExportDocBytes: with 64MB here
+// only two documents at the 32MB per-document ceiling fit, so a caller
+// following the documented "32MB per document" limit would hit 413 while
+// still well inside the documented rules. Keep this at 256MB — the same
+// order as maxBatchExportOutput, which is what actually bounds the work.
+//
+// It is a var only so tests can lower it; nothing at runtime writes it.
+var maxBatchExportBody int64 = 256 << 20 // 256 MB
 
 // maxBatchExportOutput caps the total size of the produced zip. The
 // production box has 7.5GB of RAM and no swap: a viewer selecting 200
@@ -117,15 +126,23 @@ func TeamBatchExportDocuments(c *gin.Context) {
 	}
 	defer releaseBatchExportSlot()
 
+	// Decode straight from the body instead of io.ReadAll + Unmarshal: the
+	// old shape held the raw JSON *and* the decoded struct (which carries a
+	// copy of every HTML blob) at the same time, so a large batch briefly
+	// needed twice its size in RAM. The decoder reuses one buffer.
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBatchExportBody)
-	raw, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "批量导出内容过大，请分批导出"})
-		return
-	}
-
 	var req batchExportRequest
-	if err := json.Unmarshal(raw, &req); err != nil {
+	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil {
+		// MaxBytesReader makes the read fail once the body exceeds the cap;
+		// that is an oversize request, not malformed JSON, so it must not be
+		// reported as 400 — the caller needs to know to split the batch.
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+				"error": fmt.Sprintf("批量导出内容过大（上限 %dMB），请分批导出", maxBatchExportBody>>20),
+			})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误，需要 JSON：{format, documents:[{id, title, html}]}"})
 		return
 	}

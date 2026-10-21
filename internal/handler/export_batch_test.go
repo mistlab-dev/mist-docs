@@ -3,6 +3,7 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -160,5 +161,56 @@ func TestServeBatchArchiveOverRealHTTP(t *testing.T) {
 	}
 	if !hasManifest {
 		t.Error("downloaded archive is missing _manifest.txt")
+	}
+}
+
+// TestBatchExportOversizeBodyIs413: a body over the cap must be reported as
+// 413, not 400.
+//
+// The handler reads through http.MaxBytesReader, which fails the read once
+// the body is too large. That failure surfaces as a decode error, so the
+// naive "if err != nil { 400 }" turned an oversize batch into "malformed
+// JSON" — the caller could not tell that the fix is to send fewer documents.
+//
+// This runs before any permission check or database access, so it works
+// without a DB.
+func TestBatchExportOversizeBodyIs413(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Shrink the cap for the test, then put it back. The handler is the only
+	// reader, and this test does not run in parallel.
+	original := maxBatchExportBody
+	maxBatchExportBody = 1024
+	defer func() { maxBatchExportBody = original }()
+
+	// Valid JSON, but padded well past the cap.
+	docs := []map[string]string{}
+	for i := 0; i < 40; i++ {
+		docs = append(docs, map[string]string{
+			"id":   "doc-1",
+			"html": strings.Repeat("x", 100),
+		})
+	}
+	body, err := json.Marshal(map[string]interface{}{"format": "docx", "documents": docs})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if len(body) <= 1024 {
+		t.Fatalf("test body is only %d bytes; it must exceed the 1024 cap", len(body))
+	}
+
+	r := gin.New()
+	r.POST("/batch", TeamBatchExportDocuments)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413 (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "过大") {
+		t.Errorf("body should tell the caller the payload is too large, got: %s", w.Body.String())
 	}
 }
