@@ -15,7 +15,8 @@
 import { renderMermaidSvg, sanitizeMermaidSvg } from './mermaid'
 
 // 单张图 PNG 的体积上限。data: URI 走的是 base64（体积 ×4/3），导出的
-// HTML body 上限是 8MB；留出余量，超限就回退成代码块。
+// HTML body 上限是 32MB（服务端 maxClientExportBytes）；留出余量，
+// 超限就回退成代码块。
 const MAX_DIAGRAM_PNG_BYTES = 2 * 1024 * 1024
 
 // Mermaid 代码块在 TipTap HTML 里的形状：<pre><code class="language-mermaid">。

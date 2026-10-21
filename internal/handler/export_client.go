@@ -80,8 +80,17 @@ func TeamExportDocumentPost(c *gin.Context) {
 }
 
 // restrictMediaToTeam removes media references that do not belong to teamID.
-// Own-team files keep their (re-signed) URL; foreign ones lose their src so
-// the converter degrades them to alt text instead of embedding them.
+// Own-team files keep their (re-signed) URL; foreign ones are replaced by
+// their bare file name.
+//
+// The replacement matters: the docx converter falls back to the alt text
+// (or, when there is none, the src) when it cannot embed an image. Leaving a
+// "#" there produced a lone "#" character in the exported document, and
+// leaving the full URL would keep a reference to another team's file. The
+// bare file name is neither resolvable by the image fetcher (it accepts
+// only data: URIs and signed /api/media paths) nor a URL — so the image
+// degrades to its alt text, and the file name still shows when there is no
+// alt text.
 func restrictMediaToTeam(teamID, html string) string {
 	if teamID == "" || html == "" {
 		return html
@@ -95,7 +104,6 @@ func restrictMediaToTeam(teamID, html string) string {
 		if team == teamID {
 			return m
 		}
-		// Keep the file name visible but make the src unresolvable.
-		return "#"
+		return p[3]
 	})
 }
