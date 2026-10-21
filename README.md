@@ -87,7 +87,7 @@ cd web && npx vitest run
 | 团队级 | `/api/teams/:team_id/**` | JWT + 团队成员 |
 | 协同 | `WS /ws/teams/:team_id/docs/:doc_id` | JWT |
 
-团队级 API 覆盖：文件夹树、文档 CRUD / 版本 / 锁定 / 分享 / 协作者 / 评论 / 导出（含 Word .docx，单篇）、
+团队级 API 覆盖：文件夹树、文档 CRUD / 版本 / 锁定 / 分享 / 协作者 / 评论 / 导出（单篇与批量均支持 Word .docx）、
 回收站、标签、模板、权限、审计、收藏、存储、Webhook、媒体上传、通知（列表带 `unread_count`），
 交期看板与提醒规则，以及与 MistTerm 联动的 `/documents/:id/fragments`、`/fragments-search`、`/docs/search`。
 
