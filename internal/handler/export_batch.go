@@ -2,11 +2,13 @@ package handler
 
 import (
 	"archive/zip"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +24,43 @@ const maxBatchExportDocs = 200
 // holds one HTML blob per document (a client-rendered diagram is a base64
 // data: URI, so it is large), so the ceiling is generous but finite.
 const maxBatchExportBody = 64 << 20 // 64 MB
+
+// maxBatchExportOutput caps the total size of the produced zip. The
+// production box has 7.5GB of RAM and no swap: a viewer selecting 200
+// image-heavy documents would otherwise build a multi-GB archive in one
+// request and starve every other team. Documents that do not fit are
+// skipped and listed in the manifest.
+const maxBatchExportOutput = 200 << 20 // 200 MB
+
+// maxBatchExportDocBytes caps one document's HTML inside a batch. It bounds
+// the per-document working set: a single huge document is converted
+// in memory, and the zip is written to a file.
+const maxBatchExportDocBytes = 32 << 20 // 32 MB
+
+// batchExportSlots limits how many batch exports run at the same time
+// across the whole service. Each one is CPU- and memory-hungry (it
+// converts documents), so a global gate keeps a burst of large batches
+// from taking the box down. Requests that do not get a slot are told to
+// retry instead of queueing without bound.
+var batchExportSlots = make(chan struct{}, 2)
+
+// acquireBatchExportSlot takes one of the global batch-export slots. It
+// reports false when all slots are busy.
+func acquireBatchExportSlot() bool {
+	select {
+	case batchExportSlots <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func releaseBatchExportSlot() {
+	select {
+	case <-batchExportSlots:
+	default:
+	}
+}
 
 // batchExportItem is one document in a batch request.
 //
@@ -68,6 +107,15 @@ func TeamBatchExportDocuments(c *gin.Context) {
 	teamID := getTeamID(c)
 	userID := c.GetString("user_id")
 	teamRole := getTeamRole(c)
+
+	// Global gate: a batch export converts documents, so it is both CPU- and
+	// memory-hungry. Only a couple may run at a time; the rest are told to
+	// retry rather than queued without bound.
+	if !acquireBatchExportSlot() {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "批量导出请求过多，请稍后重试"})
+		return
+	}
+	defer releaseBatchExportSlot()
 
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBatchExportBody)
 	raw, err := io.ReadAll(c.Request.Body)
@@ -146,10 +194,25 @@ func TeamBatchExportDocuments(c *gin.Context) {
 
 	// Convert each permitted document. A failure is recorded and the batch
 	// continues — one broken document must not cost the caller the rest.
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
+	//
+	// The archive is written to a temp file, not to memory: the production
+	// box has 7.5GB of RAM and no swap, and a 200-document batch of
+	// image-heavy documents would otherwise build a multi-GB buffer.
+	tmp, err := os.CreateTemp("", "mistdocs-batch-*.zip")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建临时文件失败"})
+		return
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		tmp.Close()
+		os.Remove(tmpName)
+	}()
+
+	zw := zip.NewWriter(tmp)
 	used := map[string]bool{}
 	exported := 0
+	written := int64(0)
 
 	for _, p := range allowed {
 		item := p.item
@@ -166,7 +229,9 @@ func TeamBatchExportDocuments(c *gin.Context) {
 		if title != "" {
 			entry.Title = title
 		}
-		if docType == "sheet" {
+		if docType == "sheet" && format == "docx" {
+			// Sheets have no HTML, and sheet→docx stays out of scope (#40).
+			// Markdown is fine: the old per-document GET export produced it.
 			entry.Status = "skipped"
 			entry.Reason = "sheet 暂不支持批量导出 docx"
 			manifest = append(manifest, entry)
@@ -174,6 +239,13 @@ func TeamBatchExportDocuments(c *gin.Context) {
 		}
 
 		html := strings.TrimSpace(item.HTML)
+		if format != "docx" {
+			// Markdown always uses the stored copy. The client-rendered HTML
+			// exists for the docx image pipeline; accepting it for markdown
+			// would widen the attack surface for no benefit (the markdown
+			// output is the same either way, minus the images).
+			html = ""
+		}
 		if html == "" {
 			// No client-rendered HTML: use the stored copy. Mermaid stays a
 			// code block here — the client-rendered path is optional.
@@ -182,6 +254,12 @@ func TeamBatchExportDocuments(c *gin.Context) {
 		if strings.TrimSpace(html) == "" {
 			entry.Status = "error"
 			entry.Reason = "文档内容为空"
+			manifest = append(manifest, entry)
+			continue
+		}
+		if len(html) > maxBatchExportDocBytes {
+			entry.Status = "skipped"
+			entry.Reason = "文档过大，单篇超过 32MB，请单独导出"
 			manifest = append(manifest, entry)
 			continue
 		}
@@ -204,6 +282,16 @@ func TeamBatchExportDocuments(c *gin.Context) {
 			continue
 		}
 
+		// Total-output guard: stop adding documents once the archive
+		// exceeds the cap. The remaining documents are reported as skipped
+		// so the caller knows to export them in a second batch.
+		if written+int64(len(data)) > maxBatchExportOutput {
+			entry.Status = "skipped"
+			entry.Reason = "超出单次导出体积上限（200MB），请分批导出"
+			manifest = append(manifest, entry)
+			continue
+		}
+
 		name := uniqueBatchName(used, exportBaseName(entry.Title), ext)
 		f, err := zw.Create(name)
 		if err != nil {
@@ -218,6 +306,7 @@ func TeamBatchExportDocuments(c *gin.Context) {
 			manifest = append(manifest, entry)
 			continue
 		}
+		written += int64(len(data))
 		entry.Status = "ok"
 		entry.File = name
 		exported++
@@ -244,7 +333,22 @@ func TeamBatchExportDocuments(c *gin.Context) {
 
 	stamp := time.Now().Format("20060102-150405")
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="mistdocs-export-%s.zip"`, stamp))
-	c.Data(http.StatusOK, "application/zip", buf.Bytes())
+	// The number of documents that actually made it into the zip. The
+	// frontend shows this instead of the requested count, which would
+	// include skipped and failed documents.
+	c.Header("X-Export-Count", strconv.Itoa(exported))
+	c.Header("Content-Length", strconv.FormatInt(written, 10))
+
+	// Serve the archive from the temp file instead of a memory buffer.
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取导出文件失败"})
+		return
+	}
+	c.Status(http.StatusOK)
+	c.Header("Content-Type", "application/zip")
+	if _, err := io.Copy(c.Writer, tmp); err != nil {
+		log.Printf("batch export: streaming zip failed: %v", err)
+	}
 
 	userName, _ := c.Get("username")
 	audit(c, "export", "document", "", fmt.Sprintf("%d 篇", exported),

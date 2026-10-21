@@ -905,7 +905,16 @@ async function batchExport(format: string) {
     const a = document.createElement('a'); a.href = url
     a.download = resp.headers['content-disposition']?.match(/"([^"]+)"/)?.[1] || 'mistdocs-export.zip'
     a.click(); URL.revokeObjectURL(url)
-    ElMessage.success(t('docs.exportSuccess', [documents.length]))
+    // The server reports how many documents actually made it into the zip.
+    // The requested count is not the same: documents can be skipped (no
+    // read permission, over the size cap) or fail to convert. The zip's
+    // _manifest.txt lists every one of them with the reason.
+    const exported = Number(resp.headers['x-export-count'] ?? documents.length)
+    if (exported < documents.length) {
+      ElMessage.warning(t('docs.exportPartial', [exported, documents.length]))
+    } else {
+      ElMessage.success(t('docs.exportSuccess', [exported]))
+    }
   } catch (e: any) {
     console.error(e)
     ElMessage.error(t('docs.exportFailed'))
