@@ -47,7 +47,15 @@
           <span v-html="t('docs.selectedCount', [selectedDocs.length])"></span>
         </div>
         <el-button v-if="docActs.move" size="small" data-test="batch-move" @click="showBatchMove = true">{{ t('docs.batchMove') }}</el-button>
-        <el-button size="small" @click="batchExport">{{ t('docs.batchExport') }}</el-button>
+        <el-dropdown trigger="click" @command="batchExport">
+          <el-button size="small">{{ t('docs.batchExport') }}</el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="markdown">{{ t('docs.batchExportMarkdown') }}</el-dropdown-item>
+              <el-dropdown-item command="docx">{{ t('docs.batchExportWord') }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button v-if="docActs.delete" size="small" type="danger" data-test="batch-delete" @click="batchDelete">{{ t('common.delete') }}</el-button>
         <el-button size="small" link @click="selectedDocs = []">{{ t('common.cancel') }}</el-button>
       </div>
@@ -437,6 +445,7 @@ import GuardedButton from '@/components/GuardedButton.vue'
 import { useAuthStore } from '@/stores/auth'
 import { docListActions } from '@/utils/roles'
 import { opsTemplateKeys, isOpsTemplate, opsTemplateHTML } from '@/utils/opsTemplates'
+import { renderMermaidForExport } from '@/utils/mermaidExport'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -862,21 +871,54 @@ async function batchDelete() {
   loadDocs()
 }
 
-async function batchExport() {
+// batchExport 导出选中文档。format=markdown 走服务端转换（一次请求，
+// 服务端直接用存储的副本）；format=docx 走客户端渲染路径（#56）：先把
+// 每篇的 Mermaid 图表在浏览器里画成 PNG，再连同正文回传，服务端合成 zip。
+async function batchExport(format: string) {
   if (!selectedDocs.value.length) return
   ElMessage.info(t('docs.exporting'))
-  let ok = 0
-  for (const id of selectedDocs.value) {
-    try {
-      const resp = await teamApi.get(`/documents/${id}/export`, { params: { format: 'markdown' }, responseType: 'blob' })
-      const url = URL.createObjectURL(resp.data)
-      const a = document.createElement('a'); a.href = url
-      a.download = resp.headers['content-disposition']?.match(/"([^"]+)"/)?.[1] || `${id}.md`
-      a.click(); URL.revokeObjectURL(url)
-      ok++
-    } catch {}
+  try {
+    const documents: Array<{ id: string; title: string; html?: string }> = []
+    for (const id of selectedDocs.value) {
+      const doc = docs.value.find((d: any) => d.id === id)
+      const title = (doc?.title || '').trim()
+      if (format === 'docx') {
+        // 逐篇取内容并渲染图表。取不到就交回服务端用存储副本（图表保持代码块），
+        // 不因为一篇取不到就放弃整批。
+        try {
+          const { data } = await teamApi.get(`/documents/${id}/content`)
+          const content = data?.data?.content || ''
+          if (content) {
+            const { html } = await renderMermaidForExport(content)
+            documents.push({ id, title, html })
+            continue
+          }
+        } catch { /* fall through: no client HTML */ }
+      }
+      documents.push({ id, title })
+    }
+
+    const resp = await teamApi.post('/documents/batch-export',
+      { format: format === 'docx' ? 'docx' : 'markdown', documents },
+      { responseType: 'blob' })
+    const url = URL.createObjectURL(resp.data)
+    const a = document.createElement('a'); a.href = url
+    a.download = resp.headers['content-disposition']?.match(/"([^"]+)"/)?.[1] || 'mistdocs-export.zip'
+    a.click(); URL.revokeObjectURL(url)
+    // The server reports how many documents actually made it into the zip.
+    // The requested count is not the same: documents can be skipped (no
+    // read permission, over the size cap) or fail to convert. The zip's
+    // _manifest.txt lists every one of them with the reason.
+    const exported = Number(resp.headers['x-export-count'] ?? documents.length)
+    if (exported < documents.length) {
+      ElMessage.warning(t('docs.exportPartial', [exported, documents.length]))
+    } else {
+      ElMessage.success(t('docs.exportSuccess', [exported]))
+    }
+  } catch (e: any) {
+    console.error(e)
+    ElMessage.error(t('docs.exportFailed'))
   }
-  ElMessage.success(t('docs.exportSuccess', [ok]))
 }
 
 async function doBatchMove() {
