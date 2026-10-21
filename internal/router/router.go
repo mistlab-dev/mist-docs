@@ -71,6 +71,9 @@ func RegisterAPI(r gin.IRouter) {
 				teams.GET("/documents/:id/comments", handler.TeamListComments)
 				teams.POST("/documents/:id/comments", handler.TeamCreateComment)
 				teams.GET("/documents/:id/export", handler.TeamExportDocument)
+				// 客户端渲染导出（#56）：浏览器把 Mermaid 画成 PNG 后回传 HTML，
+				// 服务端只做 HTML → docx，权限与免费策略与 GET 导出一致。
+				teams.POST("/documents/:id/export", handler.TeamExportDocumentPost)
 
 				// 文档 ↔ 团队片段联动
 				teams.GET("/documents/:id/fragments", handler.TeamListDocFragments)

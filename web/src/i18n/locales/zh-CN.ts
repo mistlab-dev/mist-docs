@@ -551,6 +551,8 @@ export default {
     exportFailed: '导出失败',
     exportSuccess: '导出成功',
     exportPdfSuccess: 'PDF 导出成功',
+    exportMermaidRendered: '已渲染 {0} 张 Mermaid 图表为图片',
+    exportMermaidFallback: '{0} 张 Mermaid 图表渲染失败，已保留为代码块',
     collabAdded: '已添加',
     toolbar: {
       bold: '粗体',

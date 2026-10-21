@@ -437,6 +437,8 @@ export default {
     exportFailed: 'Export failed',
     exportSuccess: 'Exported',
     exportPdfSuccess: 'PDF exported',
+    exportMermaidRendered: 'Rendered {0} Mermaid diagram(s) as images',
+    exportMermaidFallback: '{0} Mermaid diagram(s) failed to render and were kept as code blocks',
     collabAdded: 'Added',
     toolbar: {
       bold: 'Bold',
