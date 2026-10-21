@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -120,6 +121,17 @@ func TestServeBatchArchiveOverRealHTTP(t *testing.T) {
 	}
 	if got := resp.Header.Get("X-Export-Count"); got != "2" {
 		t.Errorf("X-Export-Count = %q, want 2", got)
+	}
+	// The archive must be labelled application/zip so the browser routes it
+	// to a download instead of trying to render it. Worth pinning: if the
+	// explicit header ever goes away, net/http falls back to sniffing, and
+	// what the client sees then depends on the first bytes of the archive
+	// rather than on our intent.
+	if got := resp.Header.Get("Content-Type"); got != "application/zip" {
+		t.Errorf("Content-Type = %q, want application/zip", got)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); cd != "" && !strings.Contains(cd, ".zip") {
+		t.Errorf("Content-Disposition = %q, want a .zip filename", cd)
 	}
 
 	// The declared length must match the archive we are about to receive.
