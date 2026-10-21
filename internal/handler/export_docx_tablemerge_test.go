@@ -114,8 +114,9 @@ func TestHtmlToDocx_TableRowspan(t *testing.T) {
 	if got := docxRowCount(tbl); got != 3 {
 		t.Errorf("w:tr count = %d, want 3", got)
 	}
-	// The continuation cell is <w:tc><w:tcPr><w:vMerge/> + tcW + <w:p/>.
-	if !strings.Contains(tbl, `<w:tc><w:tcPr><w:vMerge/><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p/></w:tc>`) {
+	// The continuation cell is <w:tc><w:tcPr>tcW + <w:vMerge/> + <w:p/>.
+	// CT_TcPr fixes the child order: tcW → gridSpan → vMerge.
+	if !strings.Contains(tbl, `<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/><w:vMerge/></w:tcPr><w:p/></w:tc>`) {
 		t.Errorf("missing <w:vMerge/> continuation cell")
 	}
 	// Every row keeps both grid columns (2 gridCol, span sum 2 per row).
@@ -169,8 +170,9 @@ func TestHtmlToDocx_TableMixedMergeRagged(t *testing.T) {
 	if got := strings.Count(tbl, `<w:vMerge/>`); got != 2 {
 		t.Errorf("vMerge continuation count = %d, want 2 (名称×1 + 乙×1)", got)
 	}
-	// The 乙 continuation tc must carry gridSpan=2 together with vMerge.
-	if !strings.Contains(tbl, `<w:tc><w:tcPr><w:gridSpan w:val="2"/><w:vMerge/>`) {
+	// The 乙 continuation tc must carry gridSpan=2 together with vMerge,
+	// in CT_TcPr order: tcW → gridSpan → vMerge.
+	if !strings.Contains(tbl, `<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/><w:gridSpan w:val="2"/><w:vMerge/>`) {
 		t.Errorf("missing merged continuation tc with gridSpan+vMerge")
 	}
 	// Conservation on every row: gridSpan sums all equal 3.
@@ -270,7 +272,7 @@ func TestHtmlToDocx_TableContAndEmptyHaveParagraph(t *testing.T) {
 	</table>`
 	tbl := docxTableForTest(t, html)
 
-	// Continuation tc: <w:vMerge/> followed by tcW + <w:p/>.
+	// Continuation tc: <w:vMerge/> + tcW + <w:p/>.
 	if strings.Contains(tbl, `<w:vMerge/></w:tcPr></w:tc>`) {
 		t.Errorf("continuation tc missing <w:p/>")
 	}
@@ -278,8 +280,9 @@ func TestHtmlToDocx_TableContAndEmptyHaveParagraph(t *testing.T) {
 	if strings.Contains(tbl, `<w:tcW w:w="0" w:type="auto"/></w:tcPr></w:tc>`) {
 		t.Errorf("empty pad tc missing <w:p/>")
 	}
-	if !strings.Contains(tbl, `<w:vMerge/><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p/></w:tc>`) {
-		t.Errorf("continuation tc should be <w:vMerge/> + tcW + <w:p/>")
+	// CT_TcPr child order: tcW → gridSpan → vMerge.
+	if !strings.Contains(tbl, `<w:tcW w:w="0" w:type="auto"/><w:vMerge/></w:tcPr><w:p/></w:tc>`) {
+		t.Errorf("continuation tc should be tcW + vMerge + <w:p/>")
 	}
 	// Conservation: row2 = 1 cont + 2 cells = 3.
 	for i, sum := range docxRowSums(t, tbl) {
@@ -302,5 +305,85 @@ func TestHtmlToDocx_TableSpanClamped(t *testing.T) {
 	want := `<w:gridSpan w:val="` + strconv.Itoa(docxMaxTableSpan) + `"/>`
 	if !strings.Contains(tbl, want) {
 		t.Errorf("missing clamped %s", want)
+	}
+}
+
+// TestHtmlToDocx_TableTcPrChildOrder: CT_TcPr fixes the child order
+// (tcW → gridSpan → vMerge → … → shd). Word rejects a tcPr whose children
+// are out of order ("unreadable content") even though LibreOffice and
+// python-docx tolerate it — so the order is asserted here, not just implied.
+func TestHtmlToDocx_TableTcPrChildOrder(t *testing.T) {
+	html := `<table>
+	  <tr><td rowspan="2" colspan="2">乙</td><td>3</td></tr>
+	  <tr><th>表头</th></tr>
+	</table>`
+	tbl := docxTableForTest(t, html)
+
+	tcRe := regexp.MustCompile(`(?s)<w:tc>.*?</w:tc>`)
+	spanRe := regexp.MustCompile(`<w:gridSpan w:val="(\d+)"/>`)
+	mergeRe := regexp.MustCompile(`<w:vMerge(?: w:val="restart")?/>`)
+	for _, tc := range tcRe.FindAllString(tbl, -1) {
+		// Only the tcPr part matters for ordering.
+		start := strings.Index(tc, "<w:tcPr>")
+		if start < 0 {
+			continue
+		}
+		end := strings.Index(tc, "</w:tcPr>")
+		if end < 0 {
+			t.Errorf("tc without closing tcPr: %s", tc)
+			continue
+		}
+		pr := tc[start:end]
+
+		tcWAt := strings.Index(pr, "<w:tcW")
+		spanAt := strings.Index(pr, "<w:gridSpan")
+		mergeAt := strings.Index(pr, "<w:vMerge")
+		shdAt := strings.Index(pr, "<w:shd")
+
+		if tcWAt < 0 {
+			t.Errorf("tcPr without tcW: %s", pr)
+			continue
+		}
+		if spanAt >= 0 && tcWAt > spanAt {
+			t.Errorf("tcW must come before gridSpan: %s", pr)
+		}
+		if mergeAt >= 0 && spanAt >= 0 && spanAt > mergeAt {
+			t.Errorf("gridSpan must come before vMerge: %s", pr)
+		}
+		if mergeAt >= 0 && tcWAt > mergeAt {
+			t.Errorf("tcW must come before vMerge: %s", pr)
+		}
+		if shdAt >= 0 && mergeAt >= 0 && mergeAt > shdAt {
+			t.Errorf("vMerge must come before shd: %s", pr)
+		}
+	}
+	// The merged cell really does carry both gridSpan and vMerge, in that order.
+	if !strings.Contains(tbl, `<w:tcW w:w="0" w:type="auto"/><w:gridSpan w:val="2"/><w:vMerge w:val="restart"/>`) {
+		t.Errorf("missing tcW → gridSpan → vMerge(restart) sequence")
+	}
+	_ = spanRe
+	_ = mergeRe
+}
+
+// TestHtmlToDocx_TableEmptyRowDropped: an empty <tr> must be dropped, not
+// padded into a row of blank cells. Padding before the emptiness check
+// turned it into [”, ”, ”, ”] — a visible blank row in Word.
+func TestHtmlToDocx_TableEmptyRowDropped(t *testing.T) {
+	html := `<table>
+	  <tr><td>A</td><td>B</td></tr>
+	  <tr></tr>
+	  <tr><td>C</td><td>D</td></tr>
+	</table>`
+	tbl := docxTableForTest(t, html)
+
+	// 2 real rows, not 3.
+	if got := docxRowCount(tbl); got != 2 {
+		t.Errorf("w:tr count = %d, want 2 (the empty row must be dropped)", got)
+	}
+	// Every row still spans the full grid width.
+	for i, sum := range docxRowSums(t, tbl) {
+		if sum != 2 {
+			t.Errorf("row %d gridSpan sum = %d, want 2", i, sum)
+		}
 	}
 }

@@ -382,6 +382,10 @@ const (
 type docxTableRow struct {
 	slots  []docxSlot // ordered by grid column
 	isHead bool       // tr inside thead, or contains at least one th
+	// hasContent reports whether this row contributes anything: a real cell
+	// or a rowspan continuation. A row with neither is an empty <tr> and is
+	// dropped — it must not be padded into a row of blank cells.
+	hasContent bool
 }
 
 // docxTableLayout is the pre-scan result for one <table>. rowspan cannot be
@@ -525,7 +529,18 @@ func docxScanTable(n *golanghtml.Node) docxTableLayout {
 				}
 			}
 		}
+		// A row contributes content when it has a real cell or holds a
+		// rowspan continuation. Free columns (kind "empty" here) are just
+		// padding, not content.
+		rowHasContent := false
+		for _, sl := range slots {
+			if sl.kind == docxSlotCell || sl.kind == docxSlotCont {
+				rowHasContent = true
+				break
+			}
+		}
 		rc.row.slots = slots
+		rc.row.hasContent = rowHasContent
 		if total > layout.cols {
 			layout.cols = total
 		}
@@ -553,21 +568,26 @@ func docxScanTable(n *golanghtml.Node) docxTableLayout {
 	if layout.cols < 1 {
 		layout.cols = 1
 	}
-	// Rows placed before a later row widened the grid are short: pad them to
-	// layout.cols with empty slots so every row's span sum equals the grid
-	// width (the conservation invariant Word's table model requires).
-	for _, rc := range rows {
-		for len(rc.row.slots) < layout.cols {
-			rc.row.slots = append(rc.row.slots, docxSlot{kind: docxSlotEmpty})
-		}
-	}
 	layout.rows = make([]*docxTableRow, 0, len(rows))
 	for _, rc := range rows {
 		// An entirely empty <tr> has no cells and holds no continuation
-		// columns; emitting it would produce <w:tr></w:tr> with a span sum
-		// of 0, which strict readers reject. Drop it.
-		if len(rc.row.slots) == 0 {
+		// columns; emitting it would produce a row of blank cells (or a
+		// <w:tr> with a span sum of 0, which strict readers reject). Drop it
+		// BEFORE padding — padding first would turn an empty row into a row
+		// of N empty cells, which is what the row was not.
+		//
+		// The test is hasContent, not len(slots): the scan's ensure() grows
+		// the active-column list, so an empty row still gets slots for the
+		// free columns of the grid.
+		if !rc.row.hasContent {
 			continue
+		}
+		// Rows placed before a later row widened the grid are short: pad them
+		// to layout.cols with empty slots so every row's span sum equals the
+		// grid width (the conservation invariant Word's table model
+		// requires).
+		for len(rc.row.slots) < layout.cols {
+			rc.row.slots = append(rc.row.slots, docxSlot{kind: docxSlotEmpty})
 		}
 		layout.rows = append(layout.rows, rc.row)
 	}
@@ -735,11 +755,14 @@ func (dc *docxConverter) emitSlot(slot docxSlot, isRowHead bool) {
 	case docxSlotSpan:
 		return
 	case docxSlotCont:
-		dc.body.WriteString(`<w:tc><w:tcPr>`)
+		// CT_TcPr fixes the child order: tcW → gridSpan → vMerge → … → shd.
+		// Word rejects a tcPr whose children are out of order ("unreadable
+		// content"), even though LibreOffice and python-docx tolerate it.
+		dc.body.WriteString(`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>`)
 		if slot.cell != nil && slot.cell.colspan > 1 {
 			fmt.Fprintf(&dc.body, `<w:gridSpan w:val="%d"/>`, slot.cell.colspan)
 		}
-		dc.body.WriteString(`<w:vMerge/><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p/></w:tc>`)
+		dc.body.WriteString(`<w:vMerge/></w:tcPr><w:p/></w:tc>`)
 		return
 	case docxSlotEmpty:
 		dc.body.WriteString(`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p/></w:tc>`)
@@ -747,14 +770,14 @@ func (dc *docxConverter) emitSlot(slot docxSlot, isRowHead bool) {
 	}
 	cell := slot.cell
 	isTh := isRowHead || cell.node.Data == "th"
-	dc.body.WriteString(`<w:tc><w:tcPr>`)
+	// CT_TcPr fixes the child order: tcW → gridSpan → vMerge → … → shd.
+	dc.body.WriteString(`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>`)
 	if cell.colspan > 1 {
 		fmt.Fprintf(&dc.body, `<w:gridSpan w:val="%d"/>`, cell.colspan)
 	}
 	if cell.rowspan > 1 {
 		dc.body.WriteString(`<w:vMerge w:val="restart"/>`)
 	}
-	dc.body.WriteString(`<w:tcW w:w="0" w:type="auto"/>`)
 	if isTh {
 		dc.body.WriteString(`<w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>`)
 	}
