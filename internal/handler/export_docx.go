@@ -342,6 +342,12 @@ func (dc *docxConverter) processList(n *golanghtml.Node, isOrdered bool, level i
 // split evenly across tblGrid columns (tblW stays 100% so Word reflows).
 const docxTableWidthTwips = 9000
 
+// docxMaxTableSpan clamps colspan/rowspan values. Document HTML is user
+// content, so an unbounded colspan="50000" would allocate tens of thousands
+// of grid columns and blow up the exported XML; 64 matches the practical
+// upper limit of real-world tables.
+const docxMaxTableSpan = 64
+
 // docxTableCell is one td/th node together with its parsed colspan/rowspan
 // (both clamped to >= 1 by docxParseSpan).
 type docxTableCell struct {
@@ -387,11 +393,15 @@ type docxTableLayout struct {
 }
 
 // docxParseSpan reads a colspan/rowspan attribute. Missing, empty, malformed
-// or non-positive values fall back to 1 (the HTML default).
+// or non-positive values fall back to 1 (the HTML default); values above
+// docxMaxTableSpan are clamped (export-path resource guard).
 func docxParseSpan(n *golanghtml.Node, attr string) int {
 	for _, a := range n.Attr {
 		if a.Key == attr {
 			if v, err := strconv.Atoi(strings.TrimSpace(a.Val)); err == nil && v > 1 {
+				if v > docxMaxTableSpan {
+					return docxMaxTableSpan
+				}
 				return v
 			}
 			break
@@ -445,13 +455,17 @@ func docxScanTable(n *golanghtml.Node) docxTableLayout {
 	}
 	collect(n, false)
 
-	// active[j] tracks the cell covering grid column j from an earlier row
-	// plus how many more rows it still spans; nil means the column is free.
-	// The remaining counter is kept here (not on docxTableCell.rowspan) so
-	// the scan never mutates cell data the emitter still needs to read.
+	// active[j] tracks the rowspan started above that still covers grid
+	// column j: start=true only on the cell's first grid column (the column
+	// that must emit the <w:vMerge/> continuation, with the cell's gridSpan);
+	// covered further columns are start=false and emit no w:tc at all —
+	// Word models a colspan+rowspan continuation as ONE merged tc, not N.
+	// The remaining counter lives here (not on docxTableCell.rowspan) so the
+	// scan never mutates cell data the emitter still needs to read.
 	type activeSpan struct {
-		cell *docxTableCell
-		left int
+		cell  *docxTableCell
+		left  int
+		start bool
 	}
 	var active []activeSpan
 	ensure := func(total int) {
@@ -499,10 +513,16 @@ func docxScanTable(n *golanghtml.Node) docxTableLayout {
 			}
 		}
 		// Columns held by a rowspan from above but not claimed by this row's
-		// own cells become continuation slots (emitted as <w:vMerge/> cells).
+		// own cells become continuation slots. Only the rowspan's FIRST grid
+		// column emits a <w:vMerge/> tc (carrying the origin cell's gridSpan);
+		// the columns it spans emit nothing (kind stays "span").
 		for j := range slots {
 			if slots[j].kind == docxSlotEmpty && active[j].cell != nil {
-				slots[j] = docxSlot{kind: docxSlotCont}
+				if active[j].start {
+					slots[j] = docxSlot{kind: docxSlotCont, cell: active[j].cell}
+				} else {
+					slots[j] = docxSlot{kind: docxSlotSpan}
+				}
 			}
 		}
 		rc.row.slots = slots
@@ -525,7 +545,7 @@ func docxScanTable(n *golanghtml.Node) docxTableLayout {
 			if p.cell.rowspan > 1 {
 				for j := p.col; j < p.col+p.cell.colspan; j++ {
 					ensure(j + 1)
-					active[j] = activeSpan{cell: p.cell, left: p.cell.rowspan}
+					active[j] = activeSpan{cell: p.cell, left: p.cell.rowspan, start: j == p.col}
 				}
 			}
 		}
@@ -533,8 +553,22 @@ func docxScanTable(n *golanghtml.Node) docxTableLayout {
 	if layout.cols < 1 {
 		layout.cols = 1
 	}
+	// Rows placed before a later row widened the grid are short: pad them to
+	// layout.cols with empty slots so every row's span sum equals the grid
+	// width (the conservation invariant Word's table model requires).
+	for _, rc := range rows {
+		for len(rc.row.slots) < layout.cols {
+			rc.row.slots = append(rc.row.slots, docxSlot{kind: docxSlotEmpty})
+		}
+	}
 	layout.rows = make([]*docxTableRow, 0, len(rows))
 	for _, rc := range rows {
+		// An entirely empty <tr> has no cells and holds no continuation
+		// columns; emitting it would produce <w:tr></w:tr> with a span sum
+		// of 0, which strict readers reject. Drop it.
+		if len(rc.row.slots) == 0 {
+			continue
+		}
 		layout.rows = append(layout.rows, rc.row)
 	}
 	return layout
@@ -628,10 +662,11 @@ func docxGridWidths(n *golanghtml.Node, cols int) []int {
 	return widths
 }
 
-// docxParseWidth parses a CSS/HTML width token into twips. pct reports a
-// percentage already scaled against docxTableWidthTwips; bare numbers and px
-// use the CSS 96dpi conversion (1px = 15 twips). Invalid → (0, false).
-func docxParseWidth(raw string) (float64, bool) {
+// docxParseWidth parses a CSS/HTML width token into twips. Percentages are
+// scaled against docxTableWidthTwips; bare numbers and px use the CSS 96dpi
+// conversion (1px = 15 twips). ok reports whether the token parsed at all —
+// callers only need the width, so a failed parse simply yields 0.
+func docxParseWidth(raw string) (w float64, ok bool) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return 0, false
@@ -686,21 +721,28 @@ func (dc *docxConverter) processTable(n *golanghtml.Node) {
 	dc.closeParagraph()
 }
 
-// emitSlot writes the w:tc(s) for one grid column of one row.
+// emitSlot writes the w:tc(s) for one grid column of one row. CT_Tc requires
+// at least one block-level child, so every emitted tc ends with <w:p/>.
 //
 //	cell  → <w:tc><w:tcPr>…gridSpan…vMerge…</w:tcPr><w:p/></w:tc>
-//	cont  → <w:tc><w:tcPr><w:vMerge/></w:tcPr></w:tc> (rowspan continuation)
-//	span  → nothing; the cell's w:gridSpan already covers this column
-//	empty → <w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr></w:tc>
+//	cont  → ONE continuation tc per merged region: <w:vMerge/> plus the
+//	        origin cell's gridSpan when it covered more than one column
+//	span  → nothing; a gridSpan (real cell or continuation) already covers
+//	        this column
+//	empty → <w:tc><w:tcPr><w:tcW …/></w:tcPr><w:p/></w:tc>
 func (dc *docxConverter) emitSlot(slot docxSlot, isRowHead bool) {
 	switch slot.kind {
 	case docxSlotSpan:
 		return
 	case docxSlotCont:
-		dc.body.WriteString(`<w:tc><w:tcPr><w:vMerge/></w:tcPr></w:tc>`)
+		dc.body.WriteString(`<w:tc><w:tcPr>`)
+		if slot.cell != nil && slot.cell.colspan > 1 {
+			fmt.Fprintf(&dc.body, `<w:gridSpan w:val="%d"/>`, slot.cell.colspan)
+		}
+		dc.body.WriteString(`<w:vMerge/><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p/></w:tc>`)
 		return
 	case docxSlotEmpty:
-		dc.body.WriteString(`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr></w:tc>`)
+		dc.body.WriteString(`<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p/></w:tc>`)
 		return
 	}
 	cell := slot.cell

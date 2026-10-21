@@ -43,14 +43,10 @@ func docxRowSums(t *testing.T, tbl string) []int {
 			}
 			sum += span
 		}
-		sums = append(sums, spanSum{
-			sum: sum,
-		}.sum)
+		sums = append(sums, sum)
 	}
 	return sums
 }
-
-type spanSum struct{ sum int }
 
 // TestHtmlToDocx_TableColspan guards acceptance #55-1: colspan=N maps to
 // <w:gridSpan w:val="N"/>, one w:tc per real cell (not per covered column),
@@ -118,9 +114,9 @@ func TestHtmlToDocx_TableRowspan(t *testing.T) {
 	if got := docxRowCount(tbl); got != 3 {
 		t.Errorf("w:tr count = %d, want 3", got)
 	}
-	// The continuation cell must be a bare <w:tc><w:tcPr><w:vMerge/></w:tcPr></w:tc>.
-	if !strings.Contains(tbl, `<w:tc><w:tcPr><w:vMerge/></w:tcPr></w:tc>`) {
-		t.Errorf("missing bare <w:vMerge/> continuation cell")
+	// The continuation cell is <w:tc><w:tcPr><w:vMerge/> + tcW + <w:p/>.
+	if !strings.Contains(tbl, `<w:tc><w:tcPr><w:vMerge/><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p/></w:tc>`) {
+		t.Errorf("missing <w:vMerge/> continuation cell")
 	}
 	// Every row keeps both grid columns (2 gridCol, span sum 2 per row).
 	if got := strings.Count(tbl, "<w:gridCol "); got != 2 {
@@ -160,15 +156,22 @@ func TestHtmlToDocx_TableMixedMergeRagged(t *testing.T) {
 		t.Errorf("gridCol count = %d, want 3 (max column count)", got)
 	}
 	// Header spans: 名称 rowspan → 1 restart + 1 continuation; 数据 colspan=2.
-	if got := strings.Count(tbl, `<w:gridSpan w:val="2"/>`); got != 2 {
-		t.Errorf("gridSpan val=2 count = %d, want 2 (数据 + 乙)", got)
+	// gridSpan val=2 appears 3 times: 数据 (start), 乙 restart, and 乙's
+	// continuation tc — a colspan+rowspan continuation is ONE tc carrying
+	// both <w:gridSpan> and <w:vMerge/>, not N bare vMerge placeholders.
+	if got := strings.Count(tbl, `<w:gridSpan w:val="2"/>`); got != 3 {
+		t.Errorf("gridSpan val=2 count = %d, want 3 (数据 + 乙 restart + 乙 cont)", got)
 	}
-	// 乙: rowspan=2 + colspan=2 → restart, and the row below has 2 continuations.
+	// 乙: rowspan=2 + colspan=2 → 1 restart + 1 merged continuation.
 	if got := strings.Count(tbl, `<w:vMerge w:val="restart"/>`); got != 2 {
 		t.Errorf("vMerge restart count = %d, want 2 (名称 + 乙)", got)
 	}
-	if got := strings.Count(tbl, `<w:vMerge/>`); got != 3 {
-		t.Errorf("vMerge continuation count = %d, want 3 (名称×1 + 乙×2)", got)
+	if got := strings.Count(tbl, `<w:vMerge/>`); got != 2 {
+		t.Errorf("vMerge continuation count = %d, want 2 (名称×1 + 乙×1)", got)
+	}
+	// The 乙 continuation tc must carry gridSpan=2 together with vMerge.
+	if !strings.Contains(tbl, `<w:tc><w:tcPr><w:gridSpan w:val="2"/><w:vMerge/>`) {
+		t.Errorf("missing merged continuation tc with gridSpan+vMerge")
 	}
 	// Conservation on every row: gridSpan sums all equal 3.
 	for i, sum := range docxRowSums(t, tbl) {
@@ -231,5 +234,73 @@ func TestHtmlToDocx_TableEqualSplitFallback(t *testing.T) {
 	}
 	if len(widths) != 3 || widths[0] != 3000 || widths[1] != 3000 || widths[2] != 3000 {
 		t.Errorf("fallback widths = %v, want [3000 3000 3000]", widths)
+	}
+}
+
+// TestHtmlToDocx_TableRaggedShortFirstRow: when a later row widens the grid,
+// the earlier short row must be padded so every row's span sum still equals
+// the grid column count (the conservation invariant).
+func TestHtmlToDocx_TableRaggedShortFirstRow(t *testing.T) {
+	html := `<table>
+	  <tr><td>A</td></tr>
+	  <tr><td>B</td><td>C</td></tr>
+	</table>`
+	tbl := docxTableForTest(t, html)
+
+	if got := strings.Count(tbl, "<w:gridCol "); got != 2 {
+		t.Errorf("gridCol count = %d, want 2", got)
+	}
+	sums := docxRowSums(t, tbl)
+	if len(sums) != 2 {
+		t.Fatalf("row count = %d, want 2", len(sums))
+	}
+	for i, sum := range sums {
+		if sum != 2 {
+			t.Errorf("row %d gridSpan sum = %d, want 2 (short row must pad)", i, sum)
+		}
+	}
+}
+
+// TestHtmlToDocx_TableContAndEmptyHaveParagraph: CT_Tc requires at least one
+// block-level child; every continuation and empty tc must end with <w:p/>.
+func TestHtmlToDocx_TableContAndEmptyHaveParagraph(t *testing.T) {
+	html := `<table>
+	  <tr><td rowspan="2">左</td><td>1</td></tr>
+	  <tr><td>2</td><td>3</td></tr>
+	</table>`
+	tbl := docxTableForTest(t, html)
+
+	// Continuation tc: <w:vMerge/> followed by tcW + <w:p/>.
+	if strings.Contains(tbl, `<w:vMerge/></w:tcPr></w:tc>`) {
+		t.Errorf("continuation tc missing <w:p/>")
+	}
+	// Empty pad tc must also carry <w:p/>.
+	if strings.Contains(tbl, `<w:tcW w:w="0" w:type="auto"/></w:tcPr></w:tc>`) {
+		t.Errorf("empty pad tc missing <w:p/>")
+	}
+	if !strings.Contains(tbl, `<w:vMerge/><w:tcW w:w="0" w:type="auto"/></w:tcPr><w:p/></w:tc>`) {
+		t.Errorf("continuation tc should be <w:vMerge/> + tcW + <w:p/>")
+	}
+	// Conservation: row2 = 1 cont + 2 cells = 3.
+	for i, sum := range docxRowSums(t, tbl) {
+		if sum != 3 {
+			t.Errorf("row %d gridSpan sum = %d, want 3", i, sum)
+		}
+	}
+}
+
+// TestHtmlToDocx_TableSpanClamped: colspan/rowspan come from user HTML and
+// are clamped to docxMaxTableSpan so a hostile colspan="50000" cannot blow
+// up the exported XML.
+func TestHtmlToDocx_TableSpanClamped(t *testing.T) {
+	html := `<table><tr><td colspan="50000">宽</td></tr></table>`
+	tbl := docxTableForTest(t, html)
+
+	if got := strings.Count(tbl, "<w:gridCol "); got != docxMaxTableSpan {
+		t.Errorf("gridCol count = %d, want clamped %d", got, docxMaxTableSpan)
+	}
+	want := `<w:gridSpan w:val="` + strconv.Itoa(docxMaxTableSpan) + `"/>`
+	if !strings.Contains(tbl, want) {
+		t.Errorf("missing clamped %s", want)
 	}
 }
