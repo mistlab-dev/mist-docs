@@ -32,8 +32,12 @@ docker compose up -d
 ### 📤 导出
 - HTML / Markdown / 纯文本 / PDF / Word（.docx，全员免费，扩展名与内容一致）
 - Word 导出为纯 Go OOXML 生成：标题/段落/列表/表格/链接/中文保真；代码块与引用有近似样式；同源图片与 data: 图嵌入，外部图片降级为链接或 alt 文本
-- Mermaid 等图表代码块在 docx 里导出为等宽代码块（保留 Mermaid 源码，不渲染 SVG）
-- **批量导出仍仅 Markdown**；单篇导出才支持 Word
+- Mermaid 等图表在浏览器里渲染成 PNG 后嵌进 docx；**渲染失败时退回等宽代码块**（保留 Mermaid 源码），
+  整篇导出仍然成功
+- **单篇与批量都支持 Word (.docx)**：列表页「批量导出」可选 Markdown(.zip) 或 Word(.docx)，
+  多篇合成一个 zip（内含 `_manifest.txt` 记录每篇成功/跳过/失败原因）
+- 批量导出限制：一次最多 200 篇、单篇 HTML ≤32MB、压缩包总大小 ≤200MB（超出的文档跳过并在
+  清单里提示分批）；同时最多 2 个批量导出在跑，超出返回 429。响应头 `X-Export-Count` 是实际进包篇数
 - 编辑器里的 PDF 由浏览器生成，不走服务端导出
 
 ### 📊 表格
