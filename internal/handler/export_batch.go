@@ -343,26 +343,43 @@ func TeamBatchExportDocuments(c *gin.Context) {
 
 	stamp := time.Now().Format("20060102-150405")
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="mistdocs-export-%s.zip"`, stamp))
+	serveBatchArchive(c, tmp, exported)
+
+	userName, _ := c.Get("username")
+	audit(c, "export", "document", "", fmt.Sprintf("%d 篇", exported),
+		fmt.Sprintf("%s 批量导出文档 (%s, %d/%d 篇成功)", userName, format, exported, readable))
+}
+
+// serveBatchArchive sends the finished archive to the client.
+//
+// The archive is streamed from the temp file rather than a memory buffer.
+// Content-Length must be the size of the zip file we are about to send, not
+// the sum of the (uncompressed) document bytes: the archive also carries
+// per-entry local headers, the central directory and the manifest, so it is
+// always larger. Declaring the smaller number made net/http abort with
+// "wrote more than the declared Content-Length" and truncate the download —
+// the central directory was cut off and the zip could not be opened.
+//
+// exported is reported in X-Export-Count so the frontend can show how many
+// documents really made it into the archive.
+func serveBatchArchive(c *gin.Context, tmp *os.File, exported int) {
 	// The number of documents that actually made it into the zip. The
 	// frontend shows this instead of the requested count, which would
 	// include skipped and failed documents.
 	c.Header("X-Export-Count", strconv.Itoa(exported))
-	c.Header("Content-Length", strconv.FormatInt(written, 10))
 
-	// Serve the archive from the temp file instead of a memory buffer.
 	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取导出文件失败"})
 		return
+	}
+	if info, err := tmp.Stat(); err == nil {
+		c.Header("Content-Length", strconv.FormatInt(info.Size(), 10))
 	}
 	c.Status(http.StatusOK)
 	c.Header("Content-Type", "application/zip")
 	if _, err := io.Copy(c.Writer, tmp); err != nil {
 		log.Printf("batch export: streaming zip failed: %v", err)
 	}
-
-	userName, _ := c.Get("username")
-	audit(c, "export", "document", "", fmt.Sprintf("%d 篇", exported),
-		fmt.Sprintf("%s 批量导出文档 (%s, %d/%d 篇成功)", userName, format, exported, readable))
 }
 
 // batchDocMeta reads a document's title and type, scoped to the team.
