@@ -10,6 +10,9 @@ timezone: "Asia/Shanghai"
 server:
   host: "0.0.0.0"
   port: 8900
+  # 段落检索返回的文档绝对地址（只接受 http/https 源站，不要带路径或账号）。
+  # 留空则用 https://docs.mistlab.dev 。自建站写成自己的文档站点根，例如：
+  # base_url: "https://docs.example.com"
 
 database:
   host: "127.0.0.1"

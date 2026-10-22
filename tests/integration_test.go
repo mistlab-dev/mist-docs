@@ -2992,3 +2992,257 @@ func TestWebhookRejectsBadURL(t *testing.T) {
 		t.Fatalf("bad webhook url should be 400, got %d %s", w.Code, w.Body.String())
 	}
 }
+
+// ==================== 段落检索（MistTerm 只读召回，#66 / MistTerm#78）====================
+
+func createTestDocWithContent(t *testing.T, token, title, content string) string {
+	t.Helper()
+	w := request("POST", teamPath("/documents"), map[string]interface{}{
+		"title": title, "type": "doc", "content": content,
+	}, token)
+	if w.Code != 200 {
+		t.Fatalf("create doc failed: %d %s", w.Code, w.Body.String())
+	}
+	return getString(parseJSON(t, w)["data"].(map[string]interface{})["id"])
+}
+
+func searchItems(t *testing.T, w *httptest.ResponseRecorder) []map[string]interface{} {
+	t.Helper()
+	if w.Code != 200 {
+		t.Fatalf("search: %d %s", w.Code, w.Body.String())
+	}
+	raw, ok := parseJSON(t, w)["items"].([]interface{})
+	if !ok {
+		t.Fatalf("items missing: %s", w.Body.String())
+	}
+	out := make([]map[string]interface{}, 0, len(raw))
+	for _, it := range raw {
+		out = append(out, it.(map[string]interface{}))
+	}
+	return out
+}
+
+func findSearchItem(items []map[string]interface{}, id string) map[string]interface{} {
+	for _, it := range items {
+		if getString(it["id"]) == id {
+			return it
+		}
+	}
+	return nil
+}
+
+func TestParagraphSearchEmptyQuery(t *testing.T) {
+	w := request("GET", teamPath("/docs/search?q="), nil, viewerToken)
+	items := searchItems(t, w)
+	if len(items) != 0 {
+		t.Fatalf("empty query should return no items, got %d", len(items))
+	}
+}
+
+func TestParagraphSearchReturnsSlugAndURL(t *testing.T) {
+	docID := createTestDocWithContent(t, adminToken, "段落检索-清理手册",
+		`<h2>先看这里</h2><p>无关</p><h2>Safe Cleanup</h2><p>使用 ZQSLUG9f3c 清理日志，禁止 rm -rf。</p><h2>后面</h2>`)
+	t.Cleanup(func() {
+		database.DB.Exec(`DELETE FROM md_versions WHERE document_id=?`, docID)
+		database.DB.Exec(`DELETE FROM md_documents WHERE id=?`, docID)
+	})
+
+	for _, token := range []string{adminToken, viewerToken} {
+		items := searchItems(t, request("GET", teamPath("/docs/search?q=ZQSLUG9f3c"), nil, token))
+		hit := findSearchItem(items, docID)
+		if hit == nil {
+			t.Fatalf("readable doc missing from search: %v", items)
+		}
+		if getString(hit["slug"]) != "safe-cleanup" {
+			t.Errorf("slug = %q, want safe-cleanup", getString(hit["slug"]))
+		}
+		wantURL := "https://docs.mistlab.dev/docs/" + docID + "#safe-cleanup"
+		if getString(hit["url"]) != wantURL {
+			t.Errorf("url = %q, want %q", getString(hit["url"]), wantURL)
+		}
+		if !strings.Contains(getString(hit["excerpt"]), "ZQSLUG9f3c") {
+			t.Errorf("excerpt should contain the keyword, got %q", getString(hit["excerpt"]))
+		}
+	}
+
+	// 只命中标题时没有段落锚点，但仍然给出文档绝对地址。
+	titleID := createTestDocWithContent(t, adminToken, "ZQTITLE9f3c 只有标题", `<p>正文里没有那个词</p>`)
+	t.Cleanup(func() {
+		database.DB.Exec(`DELETE FROM md_versions WHERE document_id=?`, titleID)
+		database.DB.Exec(`DELETE FROM md_documents WHERE id=?`, titleID)
+	})
+	items := searchItems(t, request("GET", teamPath("/docs/search?q=ZQTITLE9f3c"), nil, viewerToken))
+	hit := findSearchItem(items, titleID)
+	if hit == nil {
+		t.Fatal("title hit missing")
+	}
+	if getString(hit["slug"]) != "" {
+		t.Errorf("title-only hit slug = %q, want empty", getString(hit["slug"]))
+	}
+	if getString(hit["url"]) != "https://docs.mistlab.dev/docs/"+titleID {
+		t.Errorf("title-only url = %q", getString(hit["url"]))
+	}
+}
+
+func TestParagraphSearchHonorsBaseURL(t *testing.T) {
+	config.C.Server.BaseURL = "https://docs.example.test/"
+	t.Cleanup(func() { config.C.Server.BaseURL = "" })
+
+	docID := createTestDocWithContent(t, adminToken, "自建站点", `<h2>磁盘满了</h2><p>ZQBASE9f3c</p>`)
+	t.Cleanup(func() {
+		database.DB.Exec(`DELETE FROM md_versions WHERE document_id=?`, docID)
+		database.DB.Exec(`DELETE FROM md_documents WHERE id=?`, docID)
+	})
+	items := searchItems(t, request("GET", teamPath("/docs/search?q=ZQBASE9f3c"), nil, adminToken))
+	hit := findSearchItem(items, docID)
+	if hit == nil {
+		t.Fatal("hit missing")
+	}
+	if getString(hit["slug"]) != "磁盘满了" {
+		t.Errorf("slug = %q", getString(hit["slug"]))
+	}
+	want := "https://docs.example.test/docs/" + docID + "#磁盘满了"
+	if getString(hit["url"]) != want {
+		t.Errorf("url = %q, want %q", getString(hit["url"]), want)
+	}
+}
+
+// TestParagraphSearchSkipsUnreadableAndFillsFromPool：空角色默认权限是 none，
+// 与 requireDoc(read) 打不开正文一致。较新的两篇无权文档必须被跳过，名额留给
+// 候选池里较旧、但被显式授予 read 的那一篇（limit*3，与 MCP SearchDocContent 相同）。
+func TestParagraphSearchSkipsUnreadableAndFillsFromPool(t *testing.T) {
+	const guestID = "test-user-nosearch"
+	const kw = "ZQACL9f3c"
+	ctx := context.Background()
+	hashed := "$2a$10$X5VtjlPu/whem0Jgbe/WDecwDAI9tTQYLNVMhq3OVoacvnwLEHWiS"
+	if _, err := database.DB.ExecContext(ctx,
+		`INSERT INTO users (id, email, username, display_name, password_hash, is_admin, email_verified) VALUES (?,?,?,?,?,0,1)`,
+		guestID, "test-nosearch@mistdocs.invalid", "test-nosearch", "无读成员", hashed); err != nil {
+		t.Fatalf("insert guest: %v", err)
+	}
+	if _, err := database.DB.ExecContext(ctx,
+		`INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, '')`, teamID, guestID); err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+	guestToken, err := middleware.GenerateToken(guestID, "nosearch", "member", "")
+	if err != nil {
+		t.Fatalf("token: %v", err)
+	}
+	t.Cleanup(func() {
+		database.DB.ExecContext(ctx, `DELETE FROM md_permissions WHERE target_id=?`, guestID)
+		database.DB.ExecContext(ctx, `DELETE FROM team_members WHERE user_id=?`, guestID)
+		database.DB.ExecContext(ctx, `DELETE FROM users WHERE id=?`, guestID)
+	})
+
+	readable := createTestDocWithContent(t, adminToken, "可读手册", `<h2>Safe Cleanup</h2><p>`+kw+` 可读</p>`)
+	deniedNew := createTestDocWithContent(t, adminToken, "机密较新", `<h2>Secret</h2><p>`+kw+` 机密较新</p>`)
+	deniedMid := createTestDocWithContent(t, adminToken, "机密居中", `<p>`+kw+` 机密居中</p>`)
+	t.Cleanup(func() {
+		for _, id := range []string{readable, deniedNew, deniedMid} {
+			database.DB.ExecContext(ctx, `DELETE FROM md_versions WHERE document_id=?`, id)
+			database.DB.ExecContext(ctx, `DELETE FROM md_permissions WHERE resource_id=?`, id)
+			database.DB.ExecContext(ctx, `DELETE FROM md_documents WHERE id=?`, id)
+		}
+	})
+	// 更新时间决定排序：无权文档更新，可读文档最旧，但三者都落在 limit*3 的窗口里。
+	for _, row := range []struct{ id, at string }{
+		{readable, "2030-01-01 00:00:00"},
+		{deniedMid, "2030-01-02 00:00:00"},
+		{deniedNew, "2030-01-03 00:00:00"},
+	} {
+		if _, err := database.DB.ExecContext(ctx, `UPDATE md_documents SET updated_at=? WHERE id=?`, row.at, row.id); err != nil {
+			t.Fatalf("stamp %s: %v", row.id, err)
+		}
+	}
+	w := request("POST", teamPath("/permissions"), map[string]interface{}{
+		"resource_type": "document",
+		"resource_id":   readable,
+		"target_type":   "user",
+		"target_id":     guestID,
+		"permission":    "read",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("grant read: %d %s", w.Code, w.Body.String())
+	}
+
+	if got := request("GET", teamPath("/documents/"+deniedNew+"/content"), nil, guestToken); got.Code != 403 {
+		t.Fatalf("guest should not open the newer doc, got %d %s", got.Code, got.Body.String())
+	}
+	if got := request("GET", teamPath("/documents/"+readable+"/content"), nil, guestToken); got.Code != 200 {
+		t.Fatalf("guest should open the granted doc, got %d %s", got.Code, got.Body.String())
+	}
+
+	items := searchItems(t, request("GET", teamPath("/docs/search?q="+kw+"&limit=1"), nil, guestToken))
+	if len(items) != 1 {
+		t.Fatalf("limit=1 after ACL filter want 1 item, got %d (%v)", len(items), items)
+	}
+	if getString(items[0]["id"]) != readable {
+		t.Fatalf("unreadable doc leaked or the readable one was dropped: %+v", items[0])
+	}
+	if getString(items[0]["slug"]) != "safe-cleanup" {
+		t.Errorf("slug = %q", getString(items[0]["slug"]))
+	}
+	for _, it := range items {
+		title := getString(it["title"])
+		if title == "机密较新" || title == "机密居中" {
+			t.Errorf("unreadable excerpt leaked: %+v", it)
+		}
+	}
+
+	// 管理员不受文档级 ACL 限制，较新的文档仍在结果里。
+	adminItems := searchItems(t, request("GET", teamPath("/docs/search?q="+kw+"&limit=10"), nil, adminToken))
+	if findSearchItem(adminItems, deniedNew) == nil || findSearchItem(adminItems, readable) == nil {
+		t.Fatalf("admin should see both docs, got %v", adminItems)
+	}
+}
+
+func TestParagraphSearchLimitRespected(t *testing.T) {
+	const kw = "ZQLIMIT9f3c"
+	var ids []string
+	for i := 0; i < 3; i++ {
+		ids = append(ids, createTestDocWithContent(t, adminToken, fmt.Sprintf("限额-%d", i), "<p>"+kw+"</p>"))
+	}
+	t.Cleanup(func() {
+		for _, id := range ids {
+			database.DB.Exec(`DELETE FROM md_versions WHERE document_id=?`, id)
+			database.DB.Exec(`DELETE FROM md_documents WHERE id=?`, id)
+		}
+	})
+	items := searchItems(t, request("GET", teamPath("/docs/search?q="+kw+"&limit=2"), nil, adminToken))
+	if len(items) != 2 {
+		t.Fatalf("limit=2 got %d items", len(items))
+	}
+}
+
+func TestParagraphSearchCrossTeamIsolation(t *testing.T) {
+	otherTeam := "test-team-search"
+	ctx := context.Background()
+	if _, err := database.DB.ExecContext(ctx,
+		`INSERT INTO teams (id, name, description) VALUES (?, ?, ?)`,
+		otherTeam, "检索隔离团队", ""); err != nil {
+		t.Fatalf("insert team: %v", err)
+	}
+	if _, err := database.DB.ExecContext(ctx,
+		`INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'admin')`, otherTeam, adminID); err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+	t.Cleanup(func() {
+		database.DB.ExecContext(ctx, `DELETE FROM md_documents WHERE team_id=?`, otherTeam)
+		database.DB.ExecContext(ctx, `DELETE FROM team_members WHERE team_id=?`, otherTeam)
+		database.DB.ExecContext(ctx, `DELETE FROM teams WHERE id=?`, otherTeam)
+	})
+
+	const secret = "ZQSECRET9f3c"
+	w := request("POST", "/api/teams/"+otherTeam+"/documents", map[string]interface{}{
+		"title": "他队机密", "type": "doc", "content": "<p>" + secret + "</p>",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("create other-team doc: %d %s", w.Code, w.Body.String())
+	}
+	items := searchItems(t, request("GET", teamPath("/docs/search?q="+secret), nil, adminToken))
+	for _, it := range items {
+		if getString(it["title"]) == "他队机密" || strings.Contains(getString(it["excerpt"]), secret) {
+			t.Fatalf("cross-team document leaked: %+v", it)
+		}
+	}
+}

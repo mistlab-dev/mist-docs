@@ -325,7 +325,10 @@ func TeamListDocuments(c *gin.Context) {
 }
 
 // TeamDocParagraphSearch GET /teams/:team_id/docs/search
-// 满足 MistTerm 客户端文档检索契约 (docs/tech/TEAM-DOCS.md)
+// MistTerm 只读召回（mist-docs#66 / MistTerm#78）。
+// 逐篇 HasTeamPermission(read)，与 MCP SearchDocContent 相同：团队成员对打不开的
+// 文档拿不到标题和摘要。slug 是命中处最近标题的锚点，url 是可打开的绝对地址。
+// 只读，不写文档，也不走计费门禁（#29：有 read 即可，不另设套餐门）。
 func TeamDocParagraphSearch(c *gin.Context) {
 	teamID := getTeamID(c)
 	keyword := strings.TrimSpace(c.Query("q"))
@@ -340,13 +343,16 @@ func TeamDocParagraphSearch(c *gin.Context) {
 		limit = 20
 	}
 
+	// 候选池放大：逐篇权限过滤会丢掉一部分，先多取再截到 limit，
+	// 避免「取前 10 条过滤后只剩 3 条」。与 SearchDocContent 的 limit*3 相同。
+	fetch := limit * 3
 	pattern := "%" + keyword + "%"
 	query := `SELECT d.id, d.title, IFNULL(d.content_text, '') as content_text
 		FROM md_documents d
 		WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR d.content_text LIKE ?)
 		ORDER BY d.updated_at DESC LIMIT ?`
 
-	rows, err := database.DB.Query(query, teamID, pattern, pattern, limit)
+	rows, err := database.DB.Query(query, teamID, pattern, pattern, fetch)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -359,12 +365,20 @@ func TeamDocParagraphSearch(c *gin.Context) {
 		Excerpt string `json:"excerpt"`
 		Slug    string `json:"slug"`
 		Score   int    `json:"score"`
+		URL     string `json:"url"`
 	}
+
+	ctx := c.Request.Context()
+	userID := c.GetString("user_id")
+	teamRole := getTeamRole(c)
 
 	var items []SearchHitItem
 	for rows.Next() {
 		var id, title, contentText string
 		if err := rows.Scan(&id, &title, &contentText); err != nil {
+			continue
+		}
+		if !service.HasTeamPermission(ctx, userID, teamID, teamRole, "document", id, "read") {
 			continue
 		}
 
@@ -402,13 +416,22 @@ func TeamDocParagraphSearch(c *gin.Context) {
 			}
 		}
 
+		slug := paragraphAnchor(contentText, keyword)
 		items = append(items, SearchHitItem{
 			ID:      id,
 			Title:   title,
 			Excerpt: excerpt,
-			Slug:    "",
+			Slug:    slug,
 			Score:   10,
+			URL:     paragraphDocURL(id, slug),
 		})
+		if len(items) >= limit {
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	if items == nil {
@@ -1527,9 +1550,9 @@ func TeamListComments(c *gin.Context) {
 
 // mentionMember is a team member candidate for @-mention matching.
 type mentionMember struct {
-	id        string
-	dispName  string
-	username  string
+	id       string
+	dispName string
+	username string
 }
 
 // matchMentions returns the ids of members @-mentioned in content.
