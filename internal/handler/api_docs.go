@@ -62,7 +62,7 @@ func buildPaths() map[string]interface{} {
 	add(team+"/documents", "post", "创建文档", "type 为 doc 或 sheet。计费打开且套餐缺失时会检查文档篇数。")
 	add(team+"/documents/search", "get", "搜索文档", "参数 q。")
 	add(team+"/documents/recent", "get", "最近文档", "")
-	add(team+"/docs/search", "get", "段落检索", "")
+	add(team+"/docs/search", "get", "段落检索", "参数 q、limit（1–20，默认 10）。只返回当前用户对文档有 read 权限的命中，与 MCP search_doc_content 一样走 HasTeamPermission；打不开的文档不会返回标题或摘要。items 含 id、title、excerpt、slug（命中位置之前最近标题的锚点，没有则为空字符串）、score、url（文档绝对地址，slug 非空时带 #slug）。默认站点 https://docs.mistlab.dev，server.base_url 可覆盖为自建源站。只读，不写文档，不走计费门禁。")
 	add(team+"/documents/{id}", "get", "获取文档", "")
 	add(team+"/documents/{id}", "put", "更新文档", "")
 	add(team+"/documents/{id}", "delete", "删除文档", "软删除，留在回收站直到恢复或清空。")
