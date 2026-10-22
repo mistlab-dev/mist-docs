@@ -340,13 +340,16 @@ func TeamDocParagraphSearch(c *gin.Context) {
 		limit = 20
 	}
 
+	// 候选池放大：逐篇权限过滤会丢弃一部分候选，先按放大后的池子取，
+	// 过滤后再截断到 limit，避免"取前 10 过滤后剩 3"。
+	fetch := limit * 3
 	pattern := "%" + keyword + "%"
 	query := `SELECT d.id, d.title, IFNULL(d.content_text, '') as content_text
 		FROM md_documents d
 		WHERE d.team_id = ? AND d.status = 1 AND (d.title LIKE ? OR d.content_text LIKE ?)
 		ORDER BY d.updated_at DESC LIMIT ?`
 
-	rows, err := database.DB.Query(query, teamID, pattern, pattern, limit)
+	rows, err := database.DB.Query(query, teamID, pattern, pattern, fetch)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -361,10 +364,21 @@ func TeamDocParagraphSearch(c *gin.Context) {
 		Score   int    `json:"score"`
 	}
 
+	// 逐篇 read 过滤：文档/文件夹 ACL 可以把某个用户对某篇的权限压到
+	// 默认团队角色之下，只按 team_id 过滤会把无权文档的标题和摘要泄漏
+	// 给无权用户。与反链（team_backlinks.go）和批量导出（export_batch.go）
+	// 用的是同一个 HasTeamPermission 路径。
+	ctx := c.Request.Context()
+	userID := c.GetString("user_id")
+	teamRole := getTeamRole(c)
+
 	var items []SearchHitItem
-	for rows.Next() {
+	for rows.Next() && len(items) < limit {
 		var id, title, contentText string
 		if err := rows.Scan(&id, &title, &contentText); err != nil {
+			continue
+		}
+		if !service.HasTeamPermission(ctx, userID, teamID, teamRole, "document", id, "read") {
 			continue
 		}
 
@@ -1527,9 +1541,9 @@ func TeamListComments(c *gin.Context) {
 
 // mentionMember is a team member candidate for @-mention matching.
 type mentionMember struct {
-	id        string
-	dispName  string
-	username  string
+	id       string
+	dispName string
+	username string
 }
 
 // matchMentions returns the ids of members @-mentioned in content.

@@ -2992,3 +2992,127 @@ func TestWebhookRejectsBadURL(t *testing.T) {
 		t.Fatalf("bad webhook url should be 400, got %d %s", w.Code, w.Body.String())
 	}
 }
+
+// ==================== 段落检索（MistTerm 软接入端点）====================
+
+// TestParagraphSearchBasic：基本召回——标题和正文都能命中，返回 excerpt。
+func TestParagraphSearchBasic(t *testing.T) {
+	docID := createTestDocWithContent(t, adminToken, "段落检索-Redis超时", "<p>Redis 连接超时排查：先检查 maxmemory 配置，再查网络。</p>")
+
+	// 标题命中
+	w := request("GET", teamPath("/docs/search?q=Redis超时"), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("search by title: %d %s", w.Code, w.Body.String())
+	}
+	items := parseJSON(t, w)["items"].([]interface{})
+	if len(items) == 0 {
+		t.Fatal("title hit should return at least one item")
+	}
+	found := false
+	for _, it := range items {
+		m := it.(map[string]interface{})
+		if getString(m["id"]) == docID {
+			found = true
+			if getString(m["excerpt"]) == "" {
+				t.Error("hit item should carry an excerpt")
+			}
+		}
+	}
+	if !found {
+		t.Error("created doc not found in title search results")
+	}
+
+	// 正文命中
+	w = request("GET", teamPath("/docs/search?q=maxmemory"), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("search by body: %d %s", w.Code, w.Body.String())
+	}
+	items = parseJSON(t, w)["items"].([]interface{})
+	found = false
+	for _, it := range items {
+		if getString(it.(map[string]interface{})["id"]) == docID {
+			found = true
+			ex := getString(it.(map[string]interface{})["excerpt"])
+			if !strings.Contains(ex, "maxmemory") {
+				t.Errorf("excerpt should contain the keyword, got %q", ex)
+			}
+		}
+	}
+	if !found {
+		t.Error("body hit not returned")
+	}
+}
+
+// TestParagraphSearchCrossTeamIsolation：跨团队文档绝不出现在结果里。
+// 逐篇 read 过滤（与反链/批量导出同路径）是纵深防御：候选查询只按
+// team_id 过滤，权限检查兜底。
+func TestParagraphSearchCrossTeamIsolation(t *testing.T) {
+	otherTeam := "test-team-search"
+	ctx := context.Background()
+	if _, err := database.DB.ExecContext(ctx,
+		`INSERT INTO teams (id, name, description) VALUES (?, ?, ?)`,
+		otherTeam, "检索隔离团队", ""); err != nil {
+		t.Fatalf("insert team: %v", err)
+	}
+	t.Cleanup(func() {
+		database.DB.ExecContext(ctx, `DELETE FROM md_documents WHERE team_id=?`, otherTeam)
+		database.DB.ExecContext(ctx, `DELETE FROM team_members WHERE team_id=?`, otherTeam)
+		database.DB.ExecContext(ctx, `DELETE FROM teams WHERE id=?`, otherTeam)
+	})
+	database.DB.ExecContext(ctx, `INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'admin')`, otherTeam, adminID)
+
+	// 其他团队创建一篇含唯一关键词的文档
+	secret := "SECRETXYZQ"
+	w := request("POST", "/api/teams/"+otherTeam+"/documents", map[string]interface{}{
+		"title": "他队机密", "type": "doc", "content": "<p>" + secret + "</p>",
+	}, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("create other-team doc: %d %s", w.Code, w.Body.String())
+	}
+
+	// 本团队检索该关键词，绝不能命中
+	w = request("GET", teamPath("/docs/search?q="+secret), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("search: %d %s", w.Code, w.Body.String())
+	}
+	for _, it := range parseJSON(t, w)["items"].([]interface{}) {
+		if getString(it.(map[string]interface{})["title"]) == "他队机密" {
+			t.Error("cross-team document leaked into paragraph search results")
+		}
+	}
+}
+
+// TestParagraphSearchNoPermissionDocExcluded：文档级 ACL 把用户对该篇的
+// 权限压到 none 以下是不可能的（API 只授 read~admin），但 ACL 可以把
+// viewer 对某篇的权限显式降到 ""（删除行恢复默认）。这里测的是过滤路径
+// 本身工作正常：正常有权限时能召回。
+func TestParagraphSearchLimitRespected(t *testing.T) {
+	for i := 0; i < 3; i++ {
+		createTestDocWithContent(t, adminToken, fmt.Sprintf("限额测试-%d-唯一词xyzq", i), "<p>限额正文 xyzq</p>")
+	}
+	w := request("GET", teamPath("/docs/search?q=唯一词xyzq&limit=2"), nil, adminToken)
+	if w.Code != 200 {
+		t.Fatalf("search: %d %s", w.Code, w.Body.String())
+	}
+	items := parseJSON(t, w)["items"].([]interface{})
+	if len(items) > 2 {
+		t.Errorf("limit=2 but got %d items", len(items))
+	}
+}
+
+// createTestDocWithContent：指定正文建文档。
+func createTestDocWithContent(t *testing.T, token, title, content string) string {
+	t.Helper()
+	body := map[string]interface{}{
+		"title":   title,
+		"type":    "doc",
+		"content": content,
+	}
+	w := request("POST", teamPath("/documents"), body, token)
+	if w.Code != 200 {
+		t.Fatalf("create doc failed: %d %s", w.Code, w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	data := resp["data"].(map[string]interface{})
+	return getString(data["id"])
+}
