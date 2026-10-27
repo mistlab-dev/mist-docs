@@ -18,7 +18,7 @@ func RegisterAPI(r gin.IRouter) {
 		api.GET("/openapi.json", handler.APIDocs)
 		// MCP endpoint for AI agents. Same JWT and team-membership model as the
 		// REST API; tools are scoped per-call by team_id in the request.
-		api.POST("/mcp", middleware.JWTAuth(), handler.MCPServe)
+		api.POST("/mcp", middleware.MCPAuth(), middleware.AgentScopeGate(), handler.MCPServe)
 		// 文档内图片：带签名的公开地址（<img> 与分享页无法带登录头）
 		api.GET("/media/:team_id/:filename", handler.PublicGetMedia)
 
@@ -41,6 +41,11 @@ func RegisterAPI(r gin.IRouter) {
 			teams.Use(middleware.TeamAuth())
 			{
 				// 文件夹树
+				// Agent 身份管理（#76，team admin only）
+				teams.POST("/agents", handler.TeamCreateAgent)
+				teams.GET("/agents", handler.TeamListAgents)
+				teams.DELETE("/agents/:id", handler.TeamRevokeAgent)
+
 				teams.GET("/folders/tree", handler.TeamFolderTree)
 				teams.POST("/folders", handler.CreateTeamFolder)
 				teams.PUT("/folders/:id", handler.UpdateTeamFolder)

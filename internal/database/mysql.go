@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -390,6 +391,35 @@ func migrateDeadlines() error {
 		PRIMARY KEY (team_id, effective_from)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
 		return fmt.Errorf("create md_team_capacity: %w", err)
+	}
+
+	// 5.5 md_agents — team-scoped agent identities (#76, design #68 §1).
+	// token_hash is SHA-256 of the bearer token; plaintext is shown once at
+	// creation. revoked_at non-null or expires_at past disables the agent.
+	if _, err := DB.Exec(`CREATE TABLE IF NOT EXISTS md_agents (
+		id VARCHAR(36) PRIMARY KEY,
+		team_id VARCHAR(64) NOT NULL,
+		name VARCHAR(64) NOT NULL,
+		creator_user_id VARCHAR(64) NOT NULL,
+		token_hash CHAR(64) NOT NULL,
+		scopes TEXT NOT NULL,
+		expires_at DATETIME NOT NULL,
+		revoked_at DATETIME DEFAULT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE KEY uq_token (token_hash),
+		INDEX idx_team (team_id)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`); err != nil {
+		return fmt.Errorf("create md_agents: %w", err)
+	}
+
+	// 5.6 md_audits.actor_type — distinguish human vs agent rows (#68 §3).
+	// Existing rows default to 'user'; no backfill needed.
+	if _, err := DB.Exec(`ALTER TABLE md_audits
+		ADD COLUMN actor_type VARCHAR(8) NOT NULL DEFAULT 'user'`); err != nil {
+		// Duplicate column means a previous run already migrated; ignore.
+		if !strings.Contains(err.Error(), "Duplicate column") {
+			return fmt.Errorf("add md_audits.actor_type: %w", err)
+		}
 	}
 
 	// 6. md_proposals — two-step "preview, then confirm" for schedule changes
