@@ -279,6 +279,7 @@ func docBucketOf(docID string) string {
 // newest first, with the total across all filters. Every row passes the same
 // per-document ACL check the REST list applies, so unreadable rows never appear.
 func (MCPStore) ListDocuments(teamID, userID, folderID, docType, tag string, limit, offset int) ([]MCPStoreMeta, int, error) {
+	agentDocs, isAgent := AgentDocsWhitelist(context.Background(), userID)
 	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
 		if s == "" {
 			return nil, 0, fmt.Errorf("agent disabled")
@@ -332,7 +333,6 @@ func (MCPStore) ListDocuments(teamID, userID, folderID, docType, tag string, lim
 	defer rows.Close()
 
 	ctx := context.Background()
-	agentDocs, isAgent := AgentDocsWhitelist(ctx, userID)
 	var out []MCPStoreMeta
 	for rows.Next() {
 		var d MCPStoreMeta
@@ -495,6 +495,9 @@ func collapseSpace(s string) string {
 // --- internal row helpers ---
 
 func mcpSearch(teamID, userID, keyword string, limit int) ([]MCPStoreHit, error) {
+	// Capture the agent docs whitelist BEFORE swapping to the creator
+	// subject; after the swap userID no longer carries the agent: prefix.
+	agentDocs, isAgent := AgentDocsWhitelist(context.Background(), userID)
 	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
 		if s == "" {
 			return nil, fmt.Errorf("agent disabled")
@@ -524,7 +527,6 @@ func mcpSearch(teamID, userID, keyword string, limit int) ([]MCPStoreHit, error)
 	defer rows.Close()
 
 	ctx := context.Background()
-	agentDocs, isAgent := AgentDocsWhitelist(ctx, userID)
 	var out []MCPStoreHit
 	for rows.Next() {
 		var d MCPStoreHit
@@ -550,6 +552,7 @@ func mcpSearch(teamID, userID, keyword string, limit int) ([]MCPStoreHit, error)
 }
 
 func mcpRecent(teamID, userID string, limit int) ([]MCPStoreMeta, error) {
+	agentDocs, isAgent := AgentDocsWhitelist(context.Background(), userID)
 	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
 		if s == "" {
 			return nil, fmt.Errorf("agent disabled")
@@ -577,7 +580,6 @@ func mcpRecent(teamID, userID string, limit int) ([]MCPStoreMeta, error) {
 	defer rows.Close()
 
 	ctx := context.Background()
-	agentDocs, isAgent := AgentDocsWhitelist(ctx, userID)
 	var out []MCPStoreMeta
 	for rows.Next() {
 		var d MCPStoreMeta
