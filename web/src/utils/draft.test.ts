@@ -142,8 +142,10 @@ describe('isDraftRecoverable', () => {
   })
 
   it('rejects a draft saved before the server write', () => {
-    const stale = record({ savedAt: new Date(2026, 9, 19, 9, 0, 0).getTime() })
-    expect(isDraftRecoverable(stale, server)).toBe(false)
+    // Server wrote one minute AFTER the draft: draft is stale.
+    const stale = record({ savedAt: Date.now() - 60_000 })
+    const newerServer = { ...server, updated_at: serverClock(0) }
+    expect(isDraftRecoverable(stale, newerServer)).toBe(false)
   })
 
   it('accepts a draft written after the server write even when base moved on', () => {
@@ -152,8 +154,9 @@ describe('isDraftRecoverable', () => {
   })
 
   it('compares Z-suffixed server timestamps too', () => {
-    const s = { content: '<p>server</p>', version: 1, updated_at: '2026-10-19T10:00:00Z' }
-    const stale = record({ savedAt: Date.parse('2026-10-19T09:00:00Z') })
+    // Server (Z-form) wrote one minute after the draft: stale.
+    const s = { content: '<p>server</p>', version: 1, updated_at: new Date(Date.now() + 60_000).toISOString() }
+    const stale = record({ savedAt: Date.now() })
     expect(isDraftRecoverable(stale, s)).toBe(false)
   })
 
