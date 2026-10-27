@@ -154,9 +154,13 @@ describe('isDraftRecoverable', () => {
   })
 
   it('compares Z-suffixed server timestamps too', () => {
-    // Server (Z-form) wrote one minute after the draft: stale.
+    // Server (Z-form) wrote one minute after the draft: stale. Timestamps
+    // are relative to Date.now(): a fixed "now + 60s" ISO string crossed
+    // the local-date boundary against the draft's wall-clock base for ~8h
+    // every day (string compare said base > server and skipped the stale
+    // check) — that was the intermittent master-CI red.
     const s = { content: '<p>server</p>', version: 1, updated_at: new Date(Date.now() + 60_000).toISOString() }
-    const stale = record({ savedAt: Date.now() })
+    const stale = record({ baseUpdatedAt: serverClock(0), savedAt: Date.now() })
     expect(isDraftRecoverable(stale, s)).toBe(false)
   })
 
