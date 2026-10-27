@@ -41,6 +41,9 @@ func RegisterAPI(r gin.IRouter) {
 			teams.Use(middleware.TeamAuth())
 			{
 				// 文件夹树
+				// 跨产品事件汇入（#77 T2，agent token only）
+				teams.POST("/events/ingest", handler.TeamIngestEvent)
+
 				// Agent 身份管理（#76，team admin only）
 				teams.POST("/agents", handler.TeamCreateAgent)
 				teams.GET("/agents", handler.TeamListAgents)

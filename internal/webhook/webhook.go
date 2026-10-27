@@ -104,6 +104,10 @@ var Events = []string{
 	"document.restored",
 	"deadline.reminder",
 	"deadline.proposal_applied",
+	// Cross-product inbox events (#77 T2): MistTerm terminal events and
+	// audit alerts land in the same inbox / webhook fan-out.
+	"term.attention",
+	"audit.alert",
 }
 
 // DefaultEvents is what a new webhook gets when none are chosen.

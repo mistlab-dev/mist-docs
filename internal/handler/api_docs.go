@@ -53,6 +53,7 @@ func buildPaths() map[string]interface{} {
 	add("/s/{token}/info", "get", "分享信息", "返回标题、是否过期、是否需要密码。")
 
 	const team = "/teams/{team_id}"
+	add(team+"/events/ingest", "post", "跨产品事件汇入（#77）", "仅 agent token（agt_ bearer）。MistTerm 把终端注意力事件（term.attention）与审计告警（audit.alert）推入统一收件箱：全员站内通知 + webhook 出站。请求体 {event, title(1..200), source_session?, document_id?, related_id?}；agent 只能写入自己绑定的团队。")
 	add(team+"/agents", "post", "创建 Agent 身份", "仅团队管理员。创建团队内 AI agent（独立 principal，#76）：name + tools 白名单（只允许 search_docs/read_doc/list_docs/search_doc_content）+ 可选 docs 白名单（空 = 团队语义）+ 可选 expires_at（默认 30 天，可缩短不可延长）。返回的 Bearer token 仅此一次展示，之后不可再取。agent 只能调用 /mcp，所有调用（含被拒绝的）写审计（actor_type=agent）。")
 	add(team+"/agents", "get", "列出 Agent 身份", "仅团队管理员。返回本团队全部 agent（含已吊销），不含 token。")
 	add(team+"/agents/{id}", "delete", "吊销 Agent 身份", "仅团队管理员。置 revoked_at，立即失效（幂等）。")
