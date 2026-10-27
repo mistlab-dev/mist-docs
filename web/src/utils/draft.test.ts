@@ -26,13 +26,28 @@ afterAll(() => {
 })
 
 function record(overrides: Partial<DraftRecord> = {}): DraftRecord {
+  // Times must be relative to Date.now(): readDraft drops drafts older than
+  // DRAFT_MAX_AGE_MS (7 days). Hardcoded 2026-10-19 dates made every round-
+  // trip test start failing once real time passed that mark. The absolute-
+  // timestamp cases below use explicit overrides and are unaffected.
   return {
     content: '<p>draft body</p>',
     baseVersion: 3,
-    baseUpdatedAt: '2026-10-19 10:00:00',
-    savedAt: new Date(2026, 9, 19, 10, 5).getTime(),
+    baseUpdatedAt: serverClock(5 * 60 * 1000),
+    savedAt: Date.now(),
     ...overrides,
   }
+}
+
+// serverClock formats a moment `agoMs` in the past as the API's offset-less
+// "YYYY-MM-DD HH:MM:SS" local wall-clock string.
+function serverClock(agoMs: number): string {
+  const d = new Date(Date.now() - agoMs)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  )
 }
 
 beforeEach(() => {
@@ -127,8 +142,10 @@ describe('isDraftRecoverable', () => {
   })
 
   it('rejects a draft saved before the server write', () => {
-    const stale = record({ savedAt: new Date(2026, 9, 19, 9, 0, 0).getTime() })
-    expect(isDraftRecoverable(stale, server)).toBe(false)
+    // Server wrote one minute AFTER the draft: draft is stale.
+    const stale = record({ savedAt: Date.now() - 60_000 })
+    const newerServer = { ...server, updated_at: serverClock(0) }
+    expect(isDraftRecoverable(stale, newerServer)).toBe(false)
   })
 
   it('accepts a draft written after the server write even when base moved on', () => {
@@ -137,8 +154,9 @@ describe('isDraftRecoverable', () => {
   })
 
   it('compares Z-suffixed server timestamps too', () => {
-    const s = { content: '<p>server</p>', version: 1, updated_at: '2026-10-19T10:00:00Z' }
-    const stale = record({ savedAt: Date.parse('2026-10-19T09:00:00Z') })
+    // Server (Z-form) wrote one minute after the draft: stale.
+    const s = { content: '<p>server</p>', version: 1, updated_at: new Date(Date.now() + 60_000).toISOString() }
+    const stale = record({ savedAt: Date.now() })
     expect(isDraftRecoverable(stale, s)).toBe(false)
   })
 
