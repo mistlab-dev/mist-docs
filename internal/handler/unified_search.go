@@ -29,8 +29,10 @@ func TeamUnifiedSearch(c *gin.Context) {
 		})
 		return
 	}
-	if len(keyword) > 200 {
-		keyword = keyword[:200]
+	// Truncate by runes, not bytes: CJK keywords would otherwise be cut
+	// mid-character (review 应改 2).
+	if runes := []rune(keyword); len(runes) > 200 {
+		keyword = string(runes[:200])
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	if limit < 1 || limit > 20 {
