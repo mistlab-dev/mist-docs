@@ -128,6 +128,10 @@ func RegisterAPI(r gin.IRouter) {
 				teams.GET("/audits/export", handler.TeamExportAudits)
 				teams.GET("/audits/stats", handler.TeamAuditStats)
 
+				// 合规时间线（#79 T5）：md_audits ∪ term 汇入事件，admin 只读
+				teams.GET("/timeline", handler.TeamAuditTimeline)
+				teams.GET("/timeline/export", handler.TeamAuditTimelineExport)
+
 				// 收藏
 				teams.GET("/favorites", handler.TeamListFavorites)
 				teams.POST("/favorites/:id", handler.TeamAddFavorite)
