@@ -16,9 +16,9 @@ package handler
 // "recipients 0 but 200 + webhook" case must be diagnosable in logs).
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -31,6 +31,9 @@ var ingestableEvents = map[string]bool{
 	"term.attention": true,
 	"audit.alert":    true,
 }
+
+// docIDPattern 限制 document_id 形态（UUID / hex / 常见 id 字符）。
+var docIDPattern = regexp.MustCompile(`^[0-9a-zA-Z-_/.:]{1,64}$`)
 
 // TeamIngestEvent POST /teams/:team_id/events/ingest (agent token only).
 func TeamIngestEvent(c *gin.Context) {
@@ -73,6 +76,14 @@ func TeamIngestEvent(c *gin.Context) {
 	}
 	if len(req.SessionID) > 128 || len(req.DocID) > 64 || len(req.RelatedID) > 128 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id fields too long"})
+		return
+	}
+	// document_id 白名单（#85 review 中2）：timeline 会把它组进 detail
+	// JSON 并进合规导出，只放行 UUID / 十六进制 / 常见 id 字符，杜绝
+	// " 与 \ 破坏 JSON 结构。related_id/session_id 走参数化 SQL 且
+	// 不进 JSON，只限长度即可。
+	if req.DocID != "" && !docIDPattern.MatchString(req.DocID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "document_id must match [0-9a-zA-Z-_/.:]{1,64}"})
 		return
 	}
 
@@ -123,18 +134,9 @@ func TeamIngestEvent(c *gin.Context) {
 	}
 
 	// Webhook fan-out for subscribers of this event.
-	fireWebhooks(teamID, req.Event, "event", req.RelatedID, title, mustJSON(detail))
+	fireWebhooks(teamID, req.Event, "event", req.RelatedID, title, auditDetail(detail))
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok": true, "event": req.Event, "recipients": inserted,
 	})
 }
-
-func mustJSON(v any) string {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return "{}"
-	}
-	return string(b)
-}
-

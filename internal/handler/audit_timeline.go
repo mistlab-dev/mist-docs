@@ -148,6 +148,10 @@ func timelineUnion(teamID string, f timelineFilter) (string, []interface{}) {
 
 	// 统一列形：source, event, actor_type, actor_name, resource_type,
 	// resource_id, resource_name, detail, created_at
+	// ⚠️ term 臂的 detail 只吐原始 document_id（可能为空串），由
+	// scanTimelineRows 在 Go 侧用 json.Marshal 组 JSON——不要在 SQL 里
+	// CONCAT 拼 JSON：document_id 来自 ingest 仅做长度校验，含 " 或 \
+	// 时拼出的会是非法 JSON（#85 review 中1）。
 	// ⚠️ 每个字符串输出列都显式 CONVERT 到同一 collation：库里 users /
 	// md_documents 与 md_audits / md_notifications 的默认 collation 不一致
 	//（auditFromClause 里的 COLLATE utf8mb4_unicode_ci 是同款坑的先例），
@@ -167,7 +171,7 @@ func timelineUnion(teamID string, f timelineFilter) (string, []interface{}) {
 		 CONVERT(CASE WHEN n.title LIKE '[%]%' THEN SUBSTRING_INDEX(SUBSTRING_INDEX(n.title,']',1),'[',-1) ELSE '' END USING utf8mb4) COLLATE utf8mb4_unicode_ci,
 		 'event', CONVERT(IFNULL(n.related_id,'') USING utf8mb4) COLLATE utf8mb4_unicode_ci,
 		 CONVERT(n.title USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-		 CONVERT(CASE WHEN IFNULL(n.document_id,'')<>'' THEN CONCAT('{"document_id":"', n.document_id, '"}') ELSE '' END USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+		 CONVERT(IFNULL(n.document_id,'') USING utf8mb4) COLLATE utf8mb4_unicode_ci,
 		 n.created_at
 		FROM md_notifications n
 		WHERE n.team_id=? AND n.type IN ('term.attention','audit.alert')` + termWhere + `
@@ -199,6 +203,11 @@ func scanTimelineRows(rows interface {
 		var source, event, actorType, actorName, resType, resID, resName, detail, createdAt string
 		if rows.Scan(&source, &event, &actorType, &actorName, &resType, &resID, &resName, &detail, &createdAt) != nil {
 			continue
+		}
+		if source == "term" && detail != "" {
+			// term 臂 detail 列是原始 document_id，这里统一组成 JSON，
+			// 保证前端拿到的 detail 永远是合法 JSON 字符串。
+			detail = auditDetail(gin.H{"document_id": detail})
 		}
 		events = append(events, map[string]interface{}{
 			"source": source, "event": event,

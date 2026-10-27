@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/c-wind/mist-docs/internal/database"
 )
@@ -206,5 +205,3 @@ func TestTimelineExportBadFormat(t *testing.T) {
 		t.Fatalf("bad format must be 400, got %d", w.Code)
 	}
 }
-
-var _ = time.Now // 保留 import 位置
