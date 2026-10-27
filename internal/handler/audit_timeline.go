@@ -148,20 +148,26 @@ func timelineUnion(teamID string, f timelineFilter) (string, []interface{}) {
 
 	// 统一列形：source, event, actor_type, actor_name, resource_type,
 	// resource_id, resource_name, detail, created_at
-	// term 臂：event=n.type；actor_name 从 "[agent] 标题" 前缀解析（无前
-	// 缀则为空）；resource_name=标题本体；detail 里放 document_id（前端
-	// 可链文档）。
+	// ⚠️ 每个字符串输出列都显式 CONVERT 到同一 collation：库里 users /
+	// md_documents 与 md_audits / md_notifications 的默认 collation 不一致
+	//（auditFromClause 里的 COLLATE utf8mb4_unicode_ci 是同款坑的先例），
+	// UNION 两臂列 collation 不同会直接 Error 1271 Illegal mix of
+	// collations for operation 'UNION'（CI 实证）。
 	union := `SELECT * FROM (
-		SELECT 'docs' AS source, a.action AS event, a.actor_type AS actor_type,
-		 COALESCE(NULLIF(u.display_name,''), NULLIF(a.user_name,''), '') AS actor_name,
-		 a.resource_type, a.resource_id, ` + auditNameExpr + ` AS resource_name,
-		 IFNULL(a.detail,'') AS detail, a.created_at
+		SELECT 'docs' AS source, CONVERT(a.action USING utf8mb4) COLLATE utf8mb4_unicode_ci AS event,
+		 CONVERT(a.actor_type USING utf8mb4) COLLATE utf8mb4_unicode_ci AS actor_type,
+		 CONVERT(COALESCE(NULLIF(u.display_name,''), NULLIF(a.user_name,''), '') USING utf8mb4) COLLATE utf8mb4_unicode_ci AS actor_name,
+		 CONVERT(a.resource_type USING utf8mb4) COLLATE utf8mb4_unicode_ci AS resource_type,
+		 CONVERT(a.resource_id USING utf8mb4) COLLATE utf8mb4_unicode_ci AS resource_id,
+		 CONVERT(` + auditNameExpr + ` USING utf8mb4) COLLATE utf8mb4_unicode_ci AS resource_name,
+		 CONVERT(IFNULL(a.detail,'') USING utf8mb4) COLLATE utf8mb4_unicode_ci AS detail, a.created_at
 		` + auditFromClause() + auditWhere + `
 		UNION ALL
-		SELECT 'term', n.type, 'agent',
-		 CASE WHEN n.title LIKE '[%]%' THEN SUBSTRING_INDEX(SUBSTRING_INDEX(n.title,']',1),'[',-1) ELSE '' END,
-		 'event', IFNULL(n.related_id,''), n.title,
-		 CASE WHEN IFNULL(n.document_id,'')<>'' THEN CONCAT('{"document_id":"', n.document_id, '"}') ELSE '' END,
+		SELECT 'term', CONVERT(n.type USING utf8mb4) COLLATE utf8mb4_unicode_ci, 'agent',
+		 CONVERT(CASE WHEN n.title LIKE '[%]%' THEN SUBSTRING_INDEX(SUBSTRING_INDEX(n.title,']',1),'[',-1) ELSE '' END USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+		 'event', CONVERT(IFNULL(n.related_id,'') USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+		 CONVERT(n.title USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+		 CONVERT(CASE WHEN IFNULL(n.document_id,'')<>'' THEN CONCAT('{"document_id":"', n.document_id, '"}') ELSE '' END USING utf8mb4) COLLATE utf8mb4_unicode_ci,
 		 n.created_at
 		FROM md_notifications n
 		WHERE n.team_id=? AND n.type IN ('term.attention','audit.alert')` + termWhere + `
