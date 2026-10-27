@@ -148,3 +148,39 @@ func abortAgentDenied(c *gin.Context, agentID, teamID, tool, reason string) {
 		"error":   gin.H{"code": -32002, "message": "agent scope denied: " + reason},
 	})
 }
+
+// AgentTeamAuth guards agent-only team endpoints (event ingest #77):
+// requires a valid agt_ bearer, then enforces agent_team_id == :team_id
+// WITHOUT consulting team_members (agents have no row there — same root
+// cause as #80 review blocker 2). Human JWTs are rejected: terminal events
+// can only enter through the agent channel, so a stolen user JWT cannot
+// fabricate them.
+func AgentTeamAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		auth := c.GetHeader("Authorization")
+		if !strings.HasPrefix(auth, "Bearer agt_") {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "agent token required"})
+			return
+		}
+		res, err := service.AuthenticateAgent(c.Request.Context(), auth)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			return
+		}
+		a := res.Agent
+		teamID := c.Param("team_id")
+		// Empty team binding or mismatch both deny (review 中4).
+		if a.TeamID == "" || teamID != a.TeamID {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "agent team mismatch"})
+			return
+		}
+		c.Set("user_id", "agent:"+a.ID)
+		c.Set("username", a.Name)
+		c.Set("actor_type", "agent")
+		c.Set("agent_id", a.ID)
+		c.Set("agent_team_id", a.TeamID)
+		c.Set("agent_creator", a.CreatorUserID)
+		c.Set("current_team_id", teamID)
+		c.Next()
+	}
+}

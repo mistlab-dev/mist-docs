@@ -37,13 +37,19 @@ func RegisterAPI(r gin.IRouter) {
 			auth.GET("/files/:filename", handler.GetFile)
 
 			// 团队级 API
+			// 跨产品事件汇入（#77 T2）：仅 agent token，独立于 JWTAuth 链——
+			// agt_ bearer 会被 JWTAuth 401、team_members 也无 agent 行
+			//（与 #80 review 阻塞同根因）。AgentTeamAuth 校验绑定团队。
+			agentTeams := auth.Group("/teams/:team_id")
+			agentTeams.Use(middleware.AgentTeamAuth())
+			{
+				agentTeams.POST("/events/ingest", handler.TeamIngestEvent)
+			}
+
 			teams := auth.Group("/teams/:team_id")
 			teams.Use(middleware.TeamAuth())
 			{
 				// 文件夹树
-				// 跨产品事件汇入（#77 T2，agent token only）
-				teams.POST("/events/ingest", handler.TeamIngestEvent)
-
 				// Agent 身份管理（#76，team admin only）
 				teams.POST("/agents", handler.TeamCreateAgent)
 				teams.GET("/agents", handler.TeamListAgents)
