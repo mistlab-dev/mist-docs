@@ -61,6 +61,9 @@ func RegisterAPI(r gin.IRouter) {
 				teams.DELETE("/folders/:id", handler.DeleteTeamFolder)
 
 				// 文档
+				// 统一跨产品搜索（#78 T3）：docs + term 恒在，audits 按权限省略
+				teams.GET("/search/all", handler.TeamUnifiedSearch)
+
 				teams.GET("/documents", handler.TeamListDocuments)
 				teams.GET("/documents/search", handler.TeamSearchDocuments)
 				teams.GET("/docs/search", handler.TeamDocParagraphSearch)
