@@ -26,13 +26,28 @@ afterAll(() => {
 })
 
 function record(overrides: Partial<DraftRecord> = {}): DraftRecord {
+  // Times must be relative to Date.now(): readDraft drops drafts older than
+  // DRAFT_MAX_AGE_MS (7 days). Hardcoded 2026-10-19 dates made every round-
+  // trip test start failing once real time passed that mark. The absolute-
+  // timestamp cases below use explicit overrides and are unaffected.
   return {
     content: '<p>draft body</p>',
     baseVersion: 3,
-    baseUpdatedAt: '2026-10-19 10:00:00',
-    savedAt: new Date(2026, 9, 19, 10, 5).getTime(),
+    baseUpdatedAt: serverClock(5 * 60 * 1000),
+    savedAt: Date.now(),
     ...overrides,
   }
+}
+
+// serverClock formats a moment `agoMs` in the past as the API's offset-less
+// "YYYY-MM-DD HH:MM:SS" local wall-clock string.
+function serverClock(agoMs: number): string {
+  const d = new Date(Date.now() - agoMs)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  )
 }
 
 beforeEach(() => {
