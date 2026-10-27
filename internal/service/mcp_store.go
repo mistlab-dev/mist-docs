@@ -45,6 +45,14 @@ func (MCPStore) CreateDocument(teamID, title, folderID, content, userID string) 
 
 // CanCreate checks if the user has editor/admin role in teamID and has not exceeded document limit.
 func (MCPStore) CanCreate(teamID, userID string) (bool, string, error) {
+	// #76 review: agents have no team_members row; their creator is the
+	// permission subject (design §1). Audit stays agent:<id>.
+	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
+		if s == "" {
+			return false, "agent disabled", nil
+		}
+		userID = s
+	}
 	var role string
 	err := database.DB.QueryRow(
 		`SELECT role FROM team_members WHERE team_id=? AND user_id=?`, teamID, userID,
@@ -78,6 +86,12 @@ func (MCPStore) CanCreate(teamID, userID string) (bool, string, error) {
 // CanRead mirrors the REST requireDoc permission check through the same
 // service.CheckTeamPermission path.
 func (MCPStore) CanRead(teamID, docID, userID string) (bool, error) {
+	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
+		if s == "" {
+			return false, nil
+		}
+		userID = s
+	}
 	var role string
 	err := database.DB.QueryRow(
 		`SELECT role FROM team_members WHERE team_id=? AND user_id=?`, teamID, userID,
@@ -102,6 +116,12 @@ func (MCPStore) CanRead(teamID, docID, userID string) (bool, error) {
 
 // IsMember reports whether the user belongs to the team.
 func (MCPStore) IsMember(teamID, userID string) (bool, error) {
+	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
+		if s == "" {
+			return false, nil
+		}
+		userID = s
+	}
 	var n int
 	err := database.DB.QueryRow(
 		`SELECT COUNT(*) FROM team_members WHERE team_id=? AND user_id=?`, teamID, userID,
@@ -123,6 +143,14 @@ var ErrDocLocked = errors.New("document is locked by another user")
 // belong to teamID, be active, and the user's ACL (or team role fallback) must
 // reach write level. The string explains a denial to the agent.
 func (MCPStore) CanWrite(teamID, docID, userID string) (bool, string, error) {
+	// Write tools are never grantable to agents (gate denies first); if one
+	// still arrives, resolve to creator so the check is at least coherent.
+	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
+		if s == "" {
+			return false, "agent disabled", nil
+		}
+		userID = s
+	}
 	var role string
 	err := database.DB.QueryRow(
 		`SELECT role FROM team_members WHERE team_id=? AND user_id=?`, teamID, userID,
@@ -251,6 +279,12 @@ func docBucketOf(docID string) string {
 // newest first, with the total across all filters. Every row passes the same
 // per-document ACL check the REST list applies, so unreadable rows never appear.
 func (MCPStore) ListDocuments(teamID, userID, folderID, docType, tag string, limit, offset int) ([]MCPStoreMeta, int, error) {
+	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
+		if s == "" {
+			return nil, 0, fmt.Errorf("agent disabled")
+		}
+		userID = s
+	}
 	var role string
 	if err := database.DB.QueryRow(
 		`SELECT role FROM team_members WHERE team_id=? AND user_id=?`, teamID, userID,
@@ -298,6 +332,7 @@ func (MCPStore) ListDocuments(teamID, userID, folderID, docType, tag string, lim
 	defer rows.Close()
 
 	ctx := context.Background()
+	agentDocs, isAgent := AgentDocsWhitelist(ctx, userID)
 	var out []MCPStoreMeta
 	for rows.Next() {
 		var d MCPStoreMeta
@@ -305,6 +340,9 @@ func (MCPStore) ListDocuments(teamID, userID, folderID, docType, tag string, lim
 			continue
 		}
 		if !HasTeamPermission(ctx, userID, teamID, role, "document", d.ID, "read") {
+			continue
+		}
+		if !AgentDocVisible(agentDocs, isAgent, d.ID) {
 			continue
 		}
 		out = append(out, d)
@@ -326,6 +364,12 @@ func (MCPStore) ListDocuments(teamID, userID, folderID, docType, tag string, lim
 // HTML is stripped (content_text stores editor HTML) and every row is
 // ACL-filtered, so an agent only ever sees documents it may read.
 func (MCPStore) SearchDocContent(teamID, userID, keyword string, limit int) ([]MCPStoreHit, error) {
+	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
+		if s == "" {
+			return nil, fmt.Errorf("agent disabled")
+		}
+		userID = s
+	}
 	var role string
 	if err := database.DB.QueryRow(
 		`SELECT role FROM team_members WHERE team_id=? AND user_id=?`, teamID, userID,
@@ -451,6 +495,12 @@ func collapseSpace(s string) string {
 // --- internal row helpers ---
 
 func mcpSearch(teamID, userID, keyword string, limit int) ([]MCPStoreHit, error) {
+	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
+		if s == "" {
+			return nil, fmt.Errorf("agent disabled")
+		}
+		userID = s
+	}
 	var role string
 	err := database.DB.QueryRow(
 		`SELECT role FROM team_members WHERE team_id=? AND user_id=?`, teamID, userID,
@@ -474,6 +524,7 @@ func mcpSearch(teamID, userID, keyword string, limit int) ([]MCPStoreHit, error)
 	defer rows.Close()
 
 	ctx := context.Background()
+	agentDocs, isAgent := AgentDocsWhitelist(ctx, userID)
 	var out []MCPStoreHit
 	for rows.Next() {
 		var d MCPStoreHit
@@ -482,6 +533,11 @@ func mcpSearch(teamID, userID, keyword string, limit int) ([]MCPStoreHit, error)
 			continue
 		}
 		if !HasTeamPermission(ctx, userID, teamID, role, "document", d.ID, "read") {
+			continue
+		}
+		// #76 review 中项: a non-empty docs whitelist must bound doc-less
+		// search tools too, else full-text search leaks unauthorized bodies.
+		if !AgentDocVisible(agentDocs, isAgent, d.ID) {
 			continue
 		}
 		d.Excerpt = excerptAround(body, keyword, 200)
@@ -494,6 +550,12 @@ func mcpSearch(teamID, userID, keyword string, limit int) ([]MCPStoreHit, error)
 }
 
 func mcpRecent(teamID, userID string, limit int) ([]MCPStoreMeta, error) {
+	if s, _, ok := ResolvePermissionSubject(context.Background(), userID); ok {
+		if s == "" {
+			return nil, fmt.Errorf("agent disabled")
+		}
+		userID = s
+	}
 	var role string
 	err := database.DB.QueryRow(
 		`SELECT role FROM team_members WHERE team_id=? AND user_id=?`, teamID, userID,
@@ -515,6 +577,7 @@ func mcpRecent(teamID, userID string, limit int) ([]MCPStoreMeta, error) {
 	defer rows.Close()
 
 	ctx := context.Background()
+	agentDocs, isAgent := AgentDocsWhitelist(ctx, userID)
 	var out []MCPStoreMeta
 	for rows.Next() {
 		var d MCPStoreMeta
@@ -522,6 +585,9 @@ func mcpRecent(teamID, userID string, limit int) ([]MCPStoreMeta, error) {
 			continue
 		}
 		if !HasTeamPermission(ctx, userID, teamID, role, "document", d.ID, "read") {
+			continue
+		}
+		if !AgentDocVisible(agentDocs, isAgent, d.ID) {
 			continue
 		}
 		out = append(out, d)

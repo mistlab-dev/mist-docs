@@ -5,6 +5,7 @@ package handler
 // creation (design #68 §1); never listed afterwards.
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -51,7 +52,8 @@ func TeamCreateAgent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	audit(c, "agent.created", "agent", a.ID, a.Name, `{"tools":`+jsonStringList(a.Scopes.Tools)+"}")
+	toolsJSON, _ := json.Marshal(a.Scopes.Tools)
+	audit(c, "agent.created", "agent", a.ID, a.Name, `{"tools":`+string(toolsJSON)+"}")
 	c.JSON(http.StatusOK, gin.H{"agent": a, "token": token})
 }
 
@@ -86,13 +88,3 @@ func TeamRevokeAgent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
-func jsonStringList(list []string) string {
-	out := ""
-	for i, s := range list {
-		if i > 0 {
-			out += ","
-		}
-		out += `"` + s + `"`
-	}
-	return "[" + out + "]"
-}

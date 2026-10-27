@@ -272,3 +272,49 @@ func CreateAgentDeniedAudit(ctx context.Context, agentID, teamID, tool, reason, 
 		uuid.New().String(), teamID, "agent:"+agentID, "agent", string(b), ip)
 	return err
 }
+
+// ResolvePermissionSubject maps an MCP caller identity to the user whose
+// team_members row decides permissions (review blocker 2): agents have no
+// team_members row, so per design §1「绑定创建者」their creator is the
+// permission subject. Audit subject stays agent:<id>.
+// Returns (subjectUserID, agent, isAgent).
+func ResolvePermissionSubject(ctx context.Context, userID string) (string, *Agent, bool) {
+	if !strings.HasPrefix(userID, "agent:") {
+		return userID, nil, false
+	}
+	a, err := ScopesForAgent(ctx, userID)
+	if err != nil {
+		return "", nil, true
+	}
+	return a.CreatorUserID, a, true
+}
+
+// AgentDocsWhitelist returns the docs whitelist for an agent caller
+// (userID "agent:<id>"). ok=false when the caller is not an agent.
+// Empty list = no whitelist (team semantics), non-empty = results must
+// be filtered to these doc IDs (review 中项: search/list must honor it).
+func AgentDocsWhitelist(ctx context.Context, userID string) ([]string, bool) {
+	if !strings.HasPrefix(userID, "agent:") {
+		return nil, false
+	}
+	a, err := ScopesForAgent(ctx, userID)
+	if err != nil {
+		// Disabled/corrupt agent: fail closed with an impossible whitelist.
+		return []string{"\x00none"}, true
+	}
+	return a.Scopes.Docs, true
+}
+
+// AgentDocVisible applies the docs whitelist to one result row.
+// agent=false or empty whitelist => visible (team semantics).
+func AgentDocVisible(docs []string, isAgent bool, docID string) bool {
+	if !isAgent || len(docs) == 0 {
+		return true
+	}
+	for _, d := range docs {
+		if d == docID {
+			return true
+		}
+	}
+	return false
+}

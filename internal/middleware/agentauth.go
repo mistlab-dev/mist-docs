@@ -1,21 +1,19 @@
 package middleware
 
-// Agent auth for the MCP single entry (#76, design #68).
+// MCP auth for the single /mcp entry (#76, design #68), replacing the
+// JWTAuth+AgentAuth chain: JWTAuth would 401 an agt_ bearer before the
+// agent path ever ran (review blocker 1).
 //
-// Order matters: JWTAuth runs first (human path). If it authenticated a
-// human, AgentAuth passes through untouched. Only when there is no user_id
-// (and an `agt_` bearer is present) do we authenticate as an agent and
-// inject agent identity into the gin context:
+// MCPAuth branches on the bearer prefix:
+//   - "Bearer agt_..."  -> agent path: resolve the agent, inject
+//     user_id="agent:<id>" / username / actor_type=agent / agent_id /
+//     agent_creator; permission subject resolution happens in the store
+//     (review blocker 2: team_members has no agent rows, so store helpers
+//     map agent: users to their creator for role checks).
+//   - anything else     -> human path: JWTAuth verbatim.
 //
-//	user_id        = agent id (agent:<uuid> prefix keeps audits readable)
-//	username       = agent name
-//	actor_type     = "agent"
-//	agent_id       = agent id
-//	agent_creator  = creator_user_id
-//	agent_scopes   = JSON scopes
-//
-// MCP handler code paths stay unchanged: they read user_id as before, while
-// the scopes gate (AgentScopeGate) runs before tools/call dispatch.
+// No user and no agt_ token => 401 here (MCPServe would 401 anyway, but an
+// explicit message keeps logs clear).
 
 import (
 	"bytes"
@@ -28,31 +26,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AgentAuth tries agent-token auth when JWTAuth did not set a user.
-func AgentAuth() gin.HandlerFunc {
+// MCPAuth is the /mcp auth entry: agent token or human JWT.
+func MCPAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.GetString("user_id") != "" {
-			c.Next()
-			return
-		}
 		auth := c.GetHeader("Authorization")
-		if !strings.HasPrefix(auth, "Bearer agt_") {
+		if strings.HasPrefix(auth, "Bearer agt_") {
+			res, err := service.AuthenticateAgent(c.Request.Context(), auth)
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+				return
+			}
+			a := res.Agent
+			c.Set("user_id", "agent:"+a.ID)
+			c.Set("username", a.Name)
+			c.Set("actor_type", "agent")
+			c.Set("agent_id", a.ID)
+			c.Set("agent_team_id", a.TeamID)
+			c.Set("agent_creator", a.CreatorUserID)
 			c.Next()
 			return
 		}
-		res, err := service.AuthenticateAgent(c.Request.Context(), auth)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-			return
-		}
-		a := res.Agent
-		c.Set("user_id", "agent:"+a.ID)
-		c.Set("username", a.Name)
-		c.Set("actor_type", "agent")
-		c.Set("agent_id", a.ID)
-		c.Set("agent_team_id", a.TeamID)
-		c.Set("agent_creator", a.CreatorUserID)
-		c.Next()
+		JWTAuth()(c)
 	}
 }
 
@@ -84,7 +78,7 @@ func AgentScopeGate() gin.HandlerFunc {
 			abortAgentDenied(c, agentID, "", "", "unreadable body")
 			return
 		}
-		c.Request.Body = http.MaxBytesReader(c.Writer, io.NopCloser(bytes.NewReader(body)), int64(len(body)))
+		c.Request.Body = io.NopCloser(bytes.NewReader(body))
 
 		var req struct {
 			Method string          `json:"method"`
