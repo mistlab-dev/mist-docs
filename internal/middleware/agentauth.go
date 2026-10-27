@@ -105,25 +105,25 @@ func AgentScopeGate() gin.HandlerFunc {
 		}
 
 		if req.Method == "tools/call" {
+			// req.Params IS the {name, arguments} object (JSON-RPC request
+			// shape); do not wrap another "params" layer (review blocker A).
 			var call struct {
-				Params struct {
-					Name      string          `json:"name"`
-					Arguments json.RawMessage `json:"arguments"`
-				} `json:"params"`
+				Name      string          `json:"name"`
+				Arguments json.RawMessage `json:"arguments"`
 			}
 			if err := json.Unmarshal(req.Params, &call); err != nil {
 				c.Next()
 				return
 			}
-			docKey, known := agentReadTools[call.Params.Name]
+			docKey, known := agentReadTools[call.Name]
 			if !known {
-				abortAgentDenied(c, agentID, teamID, call.Params.Name, "tool not grantable to agents")
+				abortAgentDenied(c, agentID, teamID, call.Name, "tool not grantable to agents")
 				return
 			}
 			var callArgs map[string]any
-			_ = json.Unmarshal(call.Params.Arguments, &callArgs)
+			_ = json.Unmarshal(call.Arguments, &callArgs)
 			tool := service.ToolGrant{
-				Name: call.Params.Name,
+				Name: call.Name,
 			}
 			if docKey != "" {
 				if docID, _ := callArgs[docKey].(string); docID != "" {
@@ -132,7 +132,7 @@ func AgentScopeGate() gin.HandlerFunc {
 			}
 			scopes, err := service.ScopesForAgent(c.Request.Context(), agentID)
 			if err != nil || !service.AgentAllowed(scopes, tool.Name, tool.DocID) {
-				abortAgentDenied(c, agentID, teamID, call.Params.Name, "outside agent scopes")
+				abortAgentDenied(c, agentID, teamID, call.Name, "outside agent scopes")
 				return
 			}
 		}

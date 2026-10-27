@@ -62,18 +62,16 @@ func seedAgentDoc(t *testing.T, title, body string) string {
 	if w.Code != http.StatusOK {
 		t.Fatalf("seed doc: %d %s", w.Code, w.Body.String())
 	}
-	var out map[string]any
+	var out struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
 	_ = json.Unmarshal(w.Body.Bytes(), &out)
-	id, _ := out["id"].(string)
-	if id == "" {
-		if d, ok := out["document"].(map[string]any); ok {
-			id, _ = d["id"].(string)
-		}
+	if out.Data.ID == "" {
+		t.Fatalf("seed doc: no data.id in response %s", w.Body.String())
 	}
-	if id == "" {
-		t.Fatalf("seed doc: no id in response %s", w.Body.String())
-	}
-	return id
+	return out.Data.ID
 }
 
 // 阻塞 1：agt_ token 打 /mcp 不得先被 JWTAuth 401（「token 无效」）。
