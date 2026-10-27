@@ -26,6 +26,15 @@ func RegisterAPI(r gin.IRouter) {
 		api.GET("/s/:token", handler.AccessShare)
 		api.GET("/s/:token/info", handler.AccessShareInfo)
 
+		// 跨产品事件汇入（#77 T2）：仅 agent token。必须在 auth（JWTAuth）
+		// 组之外——agt_ bearer 不是 JWT，进 JWTAuth 会被 401（集成测试
+		// TestIngestAcceptsAgentEvent 实证）；team_members 也无 agent 行。
+		agentTeams := api.Group("/teams/:team_id")
+		agentTeams.Use(middleware.AgentTeamAuth())
+		{
+			agentTeams.POST("/events/ingest", handler.TeamIngestEvent)
+		}
+
 		// 需认证
 		auth := api.Group("")
 		auth.Use(middleware.JWTAuth())
@@ -37,15 +46,6 @@ func RegisterAPI(r gin.IRouter) {
 			auth.GET("/files/:filename", handler.GetFile)
 
 			// 团队级 API
-			// 跨产品事件汇入（#77 T2）：仅 agent token，独立于 JWTAuth 链——
-			// agt_ bearer 会被 JWTAuth 401、team_members 也无 agent 行
-			//（与 #80 review 阻塞同根因）。AgentTeamAuth 校验绑定团队。
-			agentTeams := auth.Group("/teams/:team_id")
-			agentTeams.Use(middleware.AgentTeamAuth())
-			{
-				agentTeams.POST("/events/ingest", handler.TeamIngestEvent)
-			}
-
 			teams := auth.Group("/teams/:team_id")
 			teams.Use(middleware.TeamAuth())
 			{
