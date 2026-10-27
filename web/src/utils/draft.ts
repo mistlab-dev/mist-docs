@@ -124,7 +124,18 @@ export function isDraftRecoverable(
     // Server has moved past the draft's base AND the draft was made after
     // that base — both sides changed; still offer recovery but the user
     // decides. Server-newer-only cases fall through to savedAt comparison.
-    if (draft.baseUpdatedAt > server.updated_at) return true
+    //
+    // Compare as instants, not strings: baseUpdatedAt comes from a previous
+    // server response (offset-less local wall clock) while updated_at may be
+    // Z-suffixed ISO. "2026-10-28 00:25" (Shanghai midnight) vs
+    // "2026-10-27T16:25Z" is the SAME instant, but string comparison calls
+    // the base newer and skips the stale check — which broke this test for
+    // ~8h every day once the CI runner's UTC afternoon rolled over to a
+    // greater local date. parseServerTime handles both forms; an
+    // unparseable pair falls through to the savedAt comparison below.
+    const baseMs = parseServerTime(draft.baseUpdatedAt)
+    const serverMsHere = parseServerTime(server.updated_at)
+    if (!Number.isNaN(baseMs) && !Number.isNaN(serverMsHere) && baseMs > serverMsHere) return true
   }
   if (server.updated_at && draft.savedAt) {
     // Compare against the server timestamp only when we can parse it; a draft
