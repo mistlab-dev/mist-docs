@@ -8,7 +8,11 @@ import (
 	"testing"
 )
 
-func createIngestAgent(t *testing.T) string {
+// createSearchAgent: a dedicated agent for the search tests (#78). Ingest
+// tests keep their own helper (createIngestAgent in event_ingest_test.go,
+// landed with #83); the two differ only in name, but separate helpers keep
+// each suite's fixture intent explicit.
+func createSearchAgent(t *testing.T) string {
 	t.Helper()
 	w := request("POST", teamPath("/agents"),
 		map[string]any{"name": "search-bot", "tools": []string{"search_docs", "read_doc"}}, adminToken)
@@ -50,7 +54,7 @@ func sectionIDs(t *testing.T, res map[string]any, key string) []any {
 func TestUnifiedSearchHitsDocsAndTerm(t *testing.T) {
 	// seed: one doc + one ingested term event sharing a unique keyword.
 	seedAgentDoc(t, "Unified needle doc", "<p>unifiedneedle content</p>")
-	token := createIngestAgent(t)
+	token := createSearchAgent(t)
 	w := request("POST", teamPath("/events/ingest"),
 		map[string]any{"event": "term.attention", "title": "unifiedneedle in terminal", "source_session": "s-9"}, token)
 	if w.Code != http.StatusOK {
