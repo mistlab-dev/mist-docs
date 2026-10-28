@@ -62,6 +62,7 @@ func buildPaths() map[string]interface{} {
 	add(team+"/folders/{id}", "put", "更新文件夹", "仅管理员。")
 	add(team+"/folders/{id}", "delete", "删除文件夹", "仅管理员。")
 
+	add(team+"/search/all", "get", "统一跨产品搜索（#78）", "一个关键词同时召回三个分区：docs（文档标题/正文，逐篇 ACL 过滤）、term（MistTerm 汇入的 term.attention/audit.alert 事件，#77）、audits（审计 action/资源/详情，仅团队 admin 且 plan 含审计时返回，无权限则整个分区省略）。参数 q（可空，空返回空分区；最长 200 字符）、limit（1..20，默认 10）。单源失败降级为该分区 error 字段，不影响其余分区。")
 	add(team+"/documents", "get", "文档列表", "类型只有 doc 和 sheet。")
 	add(team+"/documents", "post", "创建文档", "type 为 doc 或 sheet。计费打开且套餐缺失时会检查文档篇数。")
 	add(team+"/documents/search", "get", "搜索文档", "参数 q。")
