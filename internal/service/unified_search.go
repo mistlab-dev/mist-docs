@@ -36,9 +36,9 @@ type UnifiedSearchSection struct {
 }
 
 type UnifiedSearchResult struct {
-	Query  string               `json:"query"`
-	Docs   UnifiedSearchSection `json:"docs"`
-	Term   UnifiedSearchSection `json:"term"`
+	Query  string                `json:"query"`
+	Docs   UnifiedSearchSection  `json:"docs"`
+	Term   UnifiedSearchSection  `json:"term"`
 	Audits *UnifiedSearchSection `json:"audits,omitempty"`
 }
 
