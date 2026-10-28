@@ -30,19 +30,13 @@ import (
 func MCPAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		auth := c.GetHeader("Authorization")
-		if strings.HasPrefix(auth, "Bearer agt_") {
+		if strings.HasPrefix(auth, bearerAgentPrefix) {
 			res, err := service.AuthenticateAgent(c.Request.Context(), auth)
 			if err != nil {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 				return
 			}
-			a := res.Agent
-			c.Set("user_id", "agent:"+a.ID)
-			c.Set("username", a.Name)
-			c.Set("actor_type", "agent")
-			c.Set("agent_id", a.ID)
-			c.Set("agent_team_id", a.TeamID)
-			c.Set("agent_creator", a.CreatorUserID)
+			setAgentContext(c, res.Agent)
 			c.Next()
 			return
 		}
