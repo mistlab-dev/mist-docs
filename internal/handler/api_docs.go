@@ -119,6 +119,8 @@ func buildPaths() map[string]interface{} {
 	add(team+"/audits", "get", "审计日志", "团队管理员。计费打开且套餐不含 audit 时返回 402。")
 	add(team+"/audits/export", "get", "导出审计", "")
 	add(team+"/audits/stats", "get", "审计统计", "")
+	add(team+"/timeline", "get", "合规时间线（#79）", "md_audits ∪ MistTerm 汇入事件（term.attention/audit.alert，来自 ingest 端点）按时间合并。团队管理员 + plan 含 audit，同 /audits 口径。参数 source(docs|term)/actor(user|agent)/action/user_name/start_date/end_date/page/page_size(≤200)。响应带 coverage_note 说明覆盖边界（term 分区仅含已汇入事件，交互式手输不在其中）。")
+	add(team+"/timeline/export", "get", "导出时间线", "format=csv|json，默认 csv（带 BOM），同 /timeline 过滤参数，上限 10000 行。")
 
 	add(team+"/favorites", "get", "收藏", "")
 	add(team+"/favorites/{id}", "post", "添加收藏", "")
