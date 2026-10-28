@@ -44,22 +44,27 @@ type UnifiedSearchResult struct {
 
 func excerptOf(s, keyword string, width int) string {
 	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
+	// All slicing is rune-based: keyword/body are user content, byte cuts
+	// split CJK runes (and previously could panic on multi-byte edges).
+	r := []rune(s)
 	i := strings.Index(strings.ToLower(s), strings.ToLower(keyword))
 	if i < 0 {
-		if len(s) > width {
-			return s[:width]
+		if len(r) > width {
+			return string(r[:width])
 		}
 		return s
 	}
-	start := i - width/4
-	if start < 0 {
-		start = 0
+	// Byte offset -> rune offset for the keyword start.
+	startByte := i - width/4
+	if startByte < 0 {
+		startByte = 0
 	}
+	start := len([]rune(s[:startByte]))
 	end := start + width
-	if end > len(s) {
-		end = len(s)
+	if end > len(r) {
+		end = len(r)
 	}
-	return s[start:end]
+	return string(r[start:end])
 }
 
 // searchDocsSection mirrors the paragraph-search candidate pool: fetch
@@ -95,18 +100,20 @@ func searchDocsSection(ctx context.Context, teamID, userID, role, keyword string
 }
 
 // searchTermSection reads ingested cross-product events (#77) for the
-// team. Inbox rows are per-recipient; the team-wide view comes from the
-// audit-style filter on distinct titles, but MVP keeps it simple: match
-// any row (every member gets the same fan-out, so dedupe by related_id).
-func searchTermSection(ctx context.Context, teamID, keyword string, limit int) UnifiedSearchSection {
+// calling user. Inbox rows are per-recipient, so the query narrows to the
+// caller's own rows (review #84 item 3b) — no cross-member leakage and no
+// need to dedupe fan-out copies. Hits referencing a document go through
+// the same PermAtLeast(CheckTeamPermission) ACL as the docs section
+// (review #84 item 3a); rows without document_id pass as-is.
+func searchTermSection(ctx context.Context, teamID, userID, role, keyword string, limit int) UnifiedSearchSection {
 	sec := UnifiedSearchSection{Items: []UnifiedSearchHit{}}
 	pattern := "%" + keyword + "%"
 	rows, err := database.DB.QueryContext(ctx,
 		`SELECT id, title, IFNULL(document_id,''), IFNULL(related_id,''), created_at
 		 FROM md_notifications
-		 WHERE team_id=? AND type IN ('term.attention','audit.alert')
+		 WHERE team_id=? AND user_id=? AND type IN ('term.attention','audit.alert')
 		   AND (title LIKE ? OR IFNULL(related_id,'') LIKE ?)
-		 ORDER BY created_at DESC LIMIT ?`, teamID, pattern, pattern, limit*3)
+		 ORDER BY created_at DESC LIMIT ?`, teamID, userID, pattern, pattern, limit*3)
 	if err != nil {
 		sec.Error = "term source failed"
 		return sec
@@ -118,10 +125,21 @@ func searchTermSection(ctx context.Context, teamID, keyword string, limit int) U
 		if rows.Scan(&id, &title, &docID, &relatedID, &at) != nil {
 			continue
 		}
-		if seen[title] {
-			continue // same fan-out row per member; keep first occurrence
+		// Dedupe by related_id per the comment's contract (review #84
+		// item 2): same event re-pushed shares related_id, not title.
+		key := relatedID
+		if key == "" {
+			// No related_id: fall back to row id so distinct events with
+			// identical titles are not collapsed.
+			key = id
 		}
-		seen[title] = true
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if docID != "" && !PermAtLeast(CheckTeamPermission(ctx, userID, teamID, role, "document", docID), "read") {
+			continue
+		}
 		sec.Items = append(sec.Items, UnifiedSearchHit{
 			ID: id, Title: title, DocID: docID, Subtitle: relatedID, At: at,
 		})
@@ -172,7 +190,7 @@ func searchAuditsSection(ctx context.Context, teamID, keyword string, limit int)
 func UnifiedSearch(ctx context.Context, teamID, userID, role, keyword string, limit int, canSeeAudits bool) *UnifiedSearchResult {
 	res := &UnifiedSearchResult{Query: keyword}
 	res.Docs = searchDocsSection(ctx, teamID, userID, role, keyword, limit)
-	res.Term = searchTermSection(ctx, teamID, keyword, limit)
+	res.Term = searchTermSection(ctx, teamID, userID, role, keyword, limit)
 	if canSeeAudits {
 		s := searchAuditsSection(ctx, teamID, keyword, limit)
 		res.Audits = &s
