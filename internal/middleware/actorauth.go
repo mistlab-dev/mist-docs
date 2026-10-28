@@ -58,15 +58,18 @@ func ActorAuth() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		// Tag the human actor BEFORE delegating: JWTAuth calls c.Next()
+		// internally, so downstream (ActorTeamAuth, handler) runs while we
+		// are still inside human(c) — setting after would be too late
+		// (review blocker 1, CI TestActorAuthUserPath). On 401 the request
+		// is aborted, so the tag never leaks to a failed identity.
+		if c.GetString("actor_type") == "" {
+			c.Set("actor_type", "user")
+		}
 		human := JWTAuth()
 		human(c)
 		if c.IsAborted() {
 			return
-		}
-		// JWTAuth authenticated a human; tag the actor type explicitly so
-		// downstream gates can branch without sniffing context keys.
-		if c.GetString("actor_type") == "" {
-			c.Set("actor_type", "user")
 		}
 	}
 }
